@@ -12,10 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.auth import get_current_user
 from src.dependencies import get_db, failover_manager
 from src.models.plan import InterviewPlan
-from src.models.user import User
 from src.repositories.plan_repo import PlanRepository
 from src.schemas.plan import (
     CreatePlanRequest,
@@ -63,7 +61,6 @@ def _get_plan_service() -> PlanService:
 @router.post("/create", response_model=InterviewPlanSchema)
 async def create_plan(
     request: CreatePlanFullRequest,
-    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InterviewPlanSchema:
     """Generate a new interview plan for a session."""
@@ -128,7 +125,6 @@ async def create_plan(
 @router.get("/{plan_id}", response_model=InterviewPlanSchema)
 async def get_plan(
     plan_id: str,
-    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InterviewPlanSchema:
     """Get a plan by ID."""
@@ -178,7 +174,6 @@ async def get_plan(
 async def swap_question(
     plan_id: str,
     request: SwapQuestionRequest,
-    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InterviewPlanSchema:
     """Swap a question with one of its alternates."""
@@ -200,14 +195,13 @@ async def swap_question(
     await plan_repo.update(db_plan)
     await db.commit()
 
-    return await get_plan(plan_id, user, db)
+    return await get_plan(plan_id, db)
 
 
 @router.patch("/{plan_id}/reorder", response_model=InterviewPlanSchema)
 async def reorder_questions(
     plan_id: str,
     request: ReorderQuestionsRequest,
-    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InterviewPlanSchema:
     """Reorder questions within a phase."""
@@ -229,14 +223,13 @@ async def reorder_questions(
     await plan_repo.update(db_plan)
     await db.commit()
 
-    return await get_plan(plan_id, user, db)
+    return await get_plan(plan_id, db)
 
 
 @router.patch("/{plan_id}/remove", response_model=InterviewPlanSchema)
 async def remove_question(
     plan_id: str,
     request: RemoveQuestionRequest,
-    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InterviewPlanSchema:
     """Remove a question from a phase."""
@@ -258,14 +251,13 @@ async def remove_question(
     await plan_repo.update(db_plan)
     await db.commit()
 
-    return await get_plan(plan_id, user, db)
+    return await get_plan(plan_id, db)
 
 
 @router.patch("/{plan_id}/add", response_model=InterviewPlanSchema)
 async def add_question(
     plan_id: str,
     request: AddQuestionRequest,
-    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InterviewPlanSchema:
     """Add a question to a phase."""
@@ -297,14 +289,13 @@ async def add_question(
     await plan_repo.update(db_plan)
     await db.commit()
 
-    return await get_plan(plan_id, user, db)
+    return await get_plan(plan_id, db)
 
 
 @router.post("/{plan_id}/regenerate-hints", response_model=InterviewPlanSchema)
 async def regenerate_hints(
     plan_id: str,
     request: RegenerateHintsRequest,
-    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InterviewPlanSchema:
     """Regenerate hints for a specific question."""
@@ -331,4 +322,4 @@ async def regenerate_hints(
     await plan_repo.update(db_plan)
     await db.commit()
 
-    return await get_plan(plan_id, user, db)
+    return await get_plan(plan_id, db)

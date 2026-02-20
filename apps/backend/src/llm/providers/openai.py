@@ -19,6 +19,17 @@ from src.utils.logging import get_logger
 logger = get_logger("llm.openai")
 
 
+def _strip_code_fences(text: str) -> str:
+    """Strip markdown code fences (```json ... ```) from LLM output."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        first_newline = stripped.index("\n")
+        stripped = stripped[first_newline + 1:]
+    if stripped.endswith("```"):
+        stripped = stripped[:-3]
+    return stripped.strip()
+
+
 class OpenAIProvider(ILLMProvider):
     """GPT implementation of ILLMProvider."""
 
@@ -73,7 +84,7 @@ class OpenAIProvider(ILLMProvider):
             parsed = None
             if config.response_format == "json":
                 try:
-                    parsed = json.loads(content)
+                    parsed = json.loads(_strip_code_fences(content))
                 except json.JSONDecodeError:
                     logger.warning("llm_json_parse_failed", provider="openai", content=content[:200])
 

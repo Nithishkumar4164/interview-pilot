@@ -19,6 +19,18 @@ from src.utils.logging import get_logger
 logger = get_logger("llm.anthropic")
 
 
+def _strip_code_fences(text: str) -> str:
+    """Strip markdown code fences (```json ... ```) from LLM output."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        # Remove opening fence (```json or ```)
+        first_newline = stripped.index("\n")
+        stripped = stripped[first_newline + 1:]
+    if stripped.endswith("```"):
+        stripped = stripped[:-3]
+    return stripped.strip()
+
+
 class AnthropicProvider(ILLMProvider):
     """Claude implementation of ILLMProvider."""
 
@@ -69,7 +81,7 @@ class AnthropicProvider(ILLMProvider):
             parsed = None
             if config.response_format == "json":
                 try:
-                    parsed = json.loads(content)
+                    parsed = json.loads(_strip_code_fences(content))
                 except json.JSONDecodeError:
                     logger.warning("llm_json_parse_failed", provider="anthropic", content=content[:200])
 

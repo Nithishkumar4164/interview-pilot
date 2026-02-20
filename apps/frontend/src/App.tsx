@@ -1,8 +1,15 @@
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { DashboardPage } from '@/pages/DashboardPage';
+import { LiveSessionPage } from '@/pages/LiveSessionPage';
+import { ReportPage } from '@/pages/ReportPage';
+
 export function App() {
   return (
-    <div>
-      <h1>InterviewPilot</h1>
-      <p>AI-Powered Real-Time Interview Assistant</p>
-    </div>
+    <Routes>
+      <Route path="/" element={<DashboardPage />} />
+      <Route path="/session/:sessionId" element={<LiveSessionPage />} />
+      <Route path="/reports/:reportId" element={<ReportPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

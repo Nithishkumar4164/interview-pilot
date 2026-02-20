@@ -6,17 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import settings
 from src.api.router import api_router
-from src.dependencies import async_session_factory
+from src.dependencies import async_session_factory, health_monitor, failover_manager
 from src.websocket.audio_handler import router as audio_ws_router
 from src.websocket.code_handler import router as code_ws_router
 from src.websocket.dashboard_handler import router as dashboard_ws_router
-from src.llm import FailoverManager, HealthMonitor
 from src.services.session_state_service import SessionStateService
 from src.utils.logging import setup_logging
 
-# Global singletons (initialized in lifespan)
-health_monitor = HealthMonitor()
-failover_manager = FailoverManager(health_monitor)
 session_state_service = SessionStateService()
 
 

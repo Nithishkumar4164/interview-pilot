@@ -42,6 +42,7 @@ export function Popup() {
   const [state, setState] = useState<ExtensionState>(DEFAULT_STATE);
   const [sessionId, setSessionId] = useState('');
   const [backendUrl, setBackendUrl] = useState('ws://localhost:8000');
+  const [frontendUrl, setFrontendUrl] = useState('http://localhost:5173');
 
   // Fetch initial state from service worker
   useEffect(() => {
@@ -50,6 +51,7 @@ export function Popup() {
         setState(response);
         if (response.sessionId) setSessionId(response.sessionId);
         if (response.backendUrl) setBackendUrl(response.backendUrl);
+        if (response.frontendUrl) setFrontendUrl(response.frontendUrl);
       }
     });
 
@@ -67,13 +69,48 @@ export function Popup() {
     if (!sessionId.trim()) return;
     chrome.runtime.sendMessage({
       type: 'connect',
-      config: { sessionId: sessionId.trim(), backendUrl },
+      config: { sessionId: sessionId.trim(), backendUrl, frontendUrl },
     });
-  }, [sessionId, backendUrl]);
+  }, [sessionId, backendUrl, frontendUrl]);
 
   const handleDisconnect = useCallback(() => {
     chrome.runtime.sendMessage({ type: 'disconnect' });
   }, []);
+
+  const handleToggleTabCapture = useCallback(async () => {
+    if (state.tabCaptureActive) {
+      chrome.runtime.sendMessage({ type: 'stop-tab-capture' });
+      return;
+    }
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return;
+      // getMediaStreamId may be callback-based — wrap to ensure promise
+      const streamId = await new Promise<string>((resolve, reject) => {
+        (chrome.tabCapture as any).getMediaStreamId(
+          { targetTabId: tab.id },
+          (id: string) => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+            } else {
+              resolve(id);
+            }
+          },
+        );
+      });
+      chrome.runtime.sendMessage({ type: 'start-tab-capture', streamId });
+    } catch (err) {
+      console.error('[Popup] Tab capture failed:', err);
+    }
+  }, [state.tabCaptureActive]);
+
+  const handleToggleMicCapture = useCallback(() => {
+    if (state.micCaptureActive) {
+      chrome.runtime.sendMessage({ type: 'stop-mic-capture' });
+    } else {
+      chrome.runtime.sendMessage({ type: 'start-mic-capture' });
+    }
+  }, [state.micCaptureActive]);
 
   const isConnected = state.connectionState === 'connected';
   const hasBuffer = state.bufferStats.audioChunks > 0 || state.bufferStats.codeSnapshots > 0;
@@ -115,6 +152,13 @@ export function Popup() {
             onChange={(e) => setBackendUrl(e.target.value)}
             style={styles.input}
           />
+          <label style={styles.label}>Dashboard URL</label>
+          <input
+            type="text"
+            value={frontendUrl}
+            onChange={(e) => setFrontendUrl(e.target.value)}
+            style={styles.input}
+          />
           <button
             onClick={handleConnect}
             disabled={!sessionId.trim()}
@@ -141,28 +185,32 @@ export function Popup() {
           {/* Capture Toggles */}
           <div style={styles.section}>
             <div style={styles.sectionTitle}>Capture</div>
-            <div style={styles.toggleRow}>
-              <span style={styles.toggleLabel}>Tab Audio</span>
-              <span
-                style={{
-                  ...styles.toggleIndicator,
-                  backgroundColor: state.tabCaptureActive ? '#22c55e' : '#94a3b8',
-                }}
-              >
-                {state.tabCaptureActive ? 'ON' : 'OFF'}
-              </span>
-            </div>
-            <div style={styles.toggleRow}>
-              <span style={styles.toggleLabel}>Microphone</span>
-              <span
-                style={{
-                  ...styles.toggleIndicator,
-                  backgroundColor: state.micCaptureActive ? '#22c55e' : '#94a3b8',
-                }}
-              >
-                {state.micCaptureActive ? 'ON' : 'OFF'}
-              </span>
-            </div>
+            <button
+              onClick={handleToggleTabCapture}
+              disabled={state.connectionState !== 'connected'}
+              style={{
+                ...styles.button,
+                ...styles.captureButton,
+                backgroundColor: state.tabCaptureActive ? '#22c55e' : '#3b82f6',
+                opacity: state.connectionState !== 'connected' ? 0.5 : 1,
+                marginBottom: 6,
+              }}
+            >
+              {state.tabCaptureActive ? 'Stop Tab Audio' : 'Start Tab Audio'}
+            </button>
+            <button
+              onClick={handleToggleMicCapture}
+              disabled={state.connectionState !== 'connected'}
+              style={{
+                ...styles.button,
+                ...styles.captureButton,
+                backgroundColor: state.micCaptureActive ? '#22c55e' : '#3b82f6',
+                opacity: state.connectionState !== 'connected' ? 0.5 : 1,
+                marginBottom: 6,
+              }}
+            >
+              {state.micCaptureActive ? 'Stop Microphone' : 'Start Microphone'}
+            </button>
             <div style={styles.toggleRow}>
               <span style={styles.toggleLabel}>Code Scraping</span>
               <span
@@ -285,6 +333,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   buttonDanger: {
     backgroundColor: '#ef4444',
+    color: 'white',
+  },
+  captureButton: {
     color: 'white',
   },
   sessionInfo: {

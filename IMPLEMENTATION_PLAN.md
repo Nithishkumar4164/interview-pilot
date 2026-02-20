@@ -216,6 +216,10 @@ interview_pilot/
 │       │   ├── popup/
 │       │   │   ├── Popup.tsx
 │       │   │   └── popup.css
+│       │   ├── sidepanel/
+│       │   │   ├── index.html
+│       │   │   ├── main.tsx
+│       │   │   └── SidePanel.tsx
 │       │   ├── audio/
 │       │   │   ├── tab-capture.ts
 │       │   │   ├── mic-capture.ts
@@ -535,14 +539,22 @@ type WSMessage = {
 
 ### Phase 3: Chrome Extension (Week 3) — M3
 
-- Manifest V3 with permissions: `tabCapture`, `activeTab`, `scripting`, `storage`
+- Manifest V3 with permissions: `tabCapture`, `activeTab`, `scripting`, `storage`, `sidePanel`
 - Host permissions: `meet.google.com`, `zoom.us`, `teams.microsoft.com`
 - **Tab audio**: `chrome.tabCapture.capture()` → `AudioContext` at 16kHz → 250ms PCM chunks
 - **Mic audio**: `getUserMedia()` with echo cancellation → separate `AudioContext` → 250ms chunks
 - **WebSocket client**: binary audio frames with channel metadata header, exponential backoff reconnect
 - **Code scraper**: content script detecting CodeMirror 5/6 (`.CodeMirror`, `.cm-editor`), Monaco (`.monaco-editor`), Ace (`.ace_editor`), textarea fallback. `MutationObserver` + change listeners, 500ms debounce
-- **Popup UI**: React, shows connection status, capture toggles, buffer level
+- **Popup UI**: React, shows connection status, capture toggles, buffer level, Dashboard URL input
 - **Offline buffer** [v2]: IndexedDB ring buffer via `idb` library. 10 min audio (~9.6MB), 100 code snapshots. Chronological drain on reconnect with `buffered: true` flag and original timestamps
+- **Side Panel** (Chrome `sidePanel` API): renders full interview dashboard alongside Google Meet tab
+  - **Approach**: iframe-based — side panel embeds the frontend's `LiveSessionPage` at `{frontendUrl}/session/{sessionId}?panel=1`, giving zero code duplication and full feature parity
+  - **Manifest**: `"side_panel": { "default_path": "dist/sidepanel/index.html" }` with `sidePanel` permission
+  - **Entry point**: `src/sidepanel/` — React app that queries service worker for `sessionId` + `frontendUrl`, renders iframe when session active, shows placeholder when disconnected
+  - **Service worker**: stores `frontendUrl` in state (default `http://localhost:5173`), persists to `chrome.storage.local`, auto-enables side panel on Google Meet tabs via `chrome.sidePanel.setOptions({ tabId, enabled: true })`
+  - **Popup**: adds "Dashboard URL" input field alongside existing backend URL, includes `frontendUrl` in connect message
+  - **Frontend compact mode**: detects `?panel=1` query param, adds `panel-mode` CSS class to `<html>`, renders single-column stacked layout (transcript → plan → scores/hints) optimized for ~400px side panel width
+  - **Build**: new Vite entry point `sidepanel/index` in `apps/extension/vite.config.ts`
 
 ### Phase 4: STT & Analysis (Weeks 4-5) — M4, M5
 
@@ -681,7 +693,7 @@ type WSMessage = {
 ### Per-Module Verification
 - **M0**: `pnpm install && pnpm build && pnpm test` from root succeeds. Docker Compose brings up all services. Auth flow works. LLM mock responds.
 - **M1-M2**: Upload sample resume → get structured plan with hints. Test 3 different levels.
-- **M3**: Extension loads, captures audio on Google Meet, scrapes CoderPad code, buffers during disconnect.
+- **M3**: Extension loads, captures audio on Google Meet, scrapes CoderPad code, buffers during disconnect. Side panel opens alongside Meet tab showing full dashboard in compact layout with real-time transcript, plan navigation, scores, and hints.
 - **M4**: Pre-recorded audio → transcript events appear in Redis Stream with correct speaker labels.
 - **M5**: Feed transcript events → verify memory tier updates, contradiction detection, analysis output.
 - **M6**: Submit code snapshots → verify approach detection, stuck detection, hint generation.

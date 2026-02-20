@@ -8,6 +8,7 @@ from src.config import settings
 from src.api.router import api_router
 from src.dependencies import async_session_factory
 from src.websocket.audio_handler import router as audio_ws_router
+from src.websocket.code_handler import router as code_ws_router
 from src.websocket.dashboard_handler import router as dashboard_ws_router
 from src.llm import FailoverManager, HealthMonitor
 from src.services.session_state_service import SessionStateService
@@ -54,6 +55,7 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api")
 app.include_router(audio_ws_router)
+app.include_router(code_ws_router)
 app.include_router(dashboard_ws_router)
 
 

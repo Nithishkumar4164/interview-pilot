@@ -17,7 +17,7 @@ const LEVELS = [
   { value: 'principal', label: 'Principal Engineer' },
 ];
 
-const FOCUS_OPTIONS = ['coding', 'system_design', 'behavioral', 'debugging', 'api_design'];
+const FOCUS_OPTIONS = ['coding', 'system_design', 'behavioral', 'debugging', 'api_design', 'dsa', 'aptitude'];
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -25,6 +25,7 @@ export function DashboardPage() {
   const setPlan = usePlanStore((s) => s.setPlan);
   const setPlanStatus = usePlanStore((s) => s.setPlanStatus);
   const setPlanError = usePlanStore((s) => s.setPlanError);
+  const resumeStatus = usePlanStore((s) => s.resume.status);
 
   const [level, setLevel] = useState('sde2');
   const [duration, setDuration] = useState(45);
@@ -46,6 +47,27 @@ export function DashboardPage() {
     [],
   );
 
+  /** Wait for an in-progress resume upload/extraction to settle. */
+  const waitForResume = useCallback((): Promise<Record<string, unknown> | null> => {
+    const snap = usePlanStore.getState().resume;
+    if (snap.status === 'idle' || snap.status === 'failed') return Promise.resolve(null);
+    if (snap.status === 'completed') return Promise.resolve(snap.structuredData);
+
+    // uploading or processing — wait for it to finish
+    return new Promise((resolve) => {
+      const unsub = usePlanStore.subscribe((state) => {
+        const s = state.resume.status;
+        if (s === 'completed') {
+          unsub();
+          resolve(state.resume.structuredData);
+        } else if (s === 'failed' || s === 'idle') {
+          unsub();
+          resolve(null);
+        }
+      });
+    });
+  }, []);
+
   const handleGeneratePlan = useCallback(async () => {
     if (focusAreas.length === 0) {
       setError('Select at least one focus area');
@@ -56,6 +78,9 @@ export function DashboardPage() {
     setPlanStatus('generating');
 
     try {
+      // Wait for any in-progress resume upload/extraction before proceeding
+      const resolvedResumeData = await waitForResume();
+
       // 1. Create session (starts in PLANNING status)
       const sessionResult = await api.startSession({
         level,
@@ -75,7 +100,7 @@ export function DashboardPage() {
         level,
         duration_minutes: duration,
         focus_areas: focusAreas,
-        resume_data: resumeData,
+        resume_data: resolvedResumeData,
       });
       setPlan(planResult as unknown as InterviewPlan);
     } catch (err) {
@@ -85,7 +110,7 @@ export function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [level, duration, focusAreas, resumeData, navigate, setSession, setPlan, setPlanStatus, setPlanError]);
+  }, [level, duration, focusAreas, navigate, setSession, setPlan, setPlanStatus, setPlanError, waitForResume]);
 
   return (
     <div className="dashboard-page">
@@ -156,7 +181,11 @@ export function DashboardPage() {
           onClick={handleGeneratePlan}
           disabled={loading}
         >
-          {loading ? 'Generating Plan...' : 'Generate Interview Plan'}
+          {loading
+            ? (resumeStatus === 'uploading' || resumeStatus === 'processing')
+              ? 'Waiting for resume...'
+              : 'Generating Plan...'
+            : 'Generate Interview Plan'}
         </button>
       </section>
     </div>

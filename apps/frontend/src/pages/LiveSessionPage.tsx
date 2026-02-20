@@ -8,6 +8,7 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import { useTimer } from '@/hooks/useTimer';
 import { useSessionStore } from '@/stores/session-store';
 import { useHintStore } from '@/stores/hint-store';
+import { usePlanStore } from '@/stores/plan-store';
 import { useTranscriptStore } from '@/stores/transcript-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useOfflineStore } from '@/stores/offline-store';
@@ -92,7 +93,31 @@ export function LiveSessionPage() {
   const handleRequestHint = useCallback(async () => {
     if (!sessionId) return;
     try {
-      await api.triggerNextHint(sessionId, '');
+      // Get current question ID from the plan
+      const planState = usePlanStore.getState().plan;
+      let questionId = '';
+      if (planState) {
+        const { currentQuestionIndex } = useSessionStore.getState();
+        const allQuestions = planState.phases.flatMap((p) => p.questions);
+        if (currentQuestionIndex < allQuestions.length) {
+          questionId = allQuestions[currentQuestionIndex].id;
+        }
+      }
+
+      const result = await api.triggerNextHint(sessionId, questionId);
+      // Update hint store with real hint data
+      if (result.id && result.level > 0) {
+        useHintStore.getState().setActiveHint({
+          id: result.id,
+          questionId: result.question_id,
+          level: result.level as 1 | 2 | 3,
+          text: result.text,
+          displayedAt: new Date().toISOString(),
+          interviewerUsed: false,
+          candidateResponseQuality: 'none',
+          timeToRespondMs: null,
+        });
+      }
     } catch (err) {
       console.error('Failed to request hint:', err);
     }

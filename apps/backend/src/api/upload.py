@@ -1,29 +1,38 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
-from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
+import json
+import uuid
+from collections.abc import AsyncGenerator
 
-from src.api.auth import get_current_user
-from src.dependencies import get_db
+from fastapi import APIRouter, HTTPException, UploadFile, status
+from starlette.responses import StreamingResponse
+
 from src.dependencies import failover_manager
-from src.models.user import User
 from src.schemas.upload import ExtractionStatusResponse, UploadResponse
 from src.services.resume_service import ResumeService
 from src.services.storage_service import ALLOWED_CONTENT_TYPES, MAX_FILE_SIZE_BYTES, StorageService
+from src.utils.logging import get_logger
 
 router = APIRouter(prefix="/upload", tags=["upload"])
+logger = get_logger("upload")
 
 # In-memory extraction cache (production would use Redis or DB)
 _extraction_cache: dict[str, dict] = {}
 
 
 def _get_resume_service() -> ResumeService:
-    storage = StorageService()
-    return ResumeService(storage=storage, llm=failover_manager)
+    """Create a ResumeService. Uses local-only storage when S3 is unavailable."""
+    try:
+        storage = StorageService()
+        storage.ensure_bucket()
+        return ResumeService(storage=storage, llm=failover_manager)
+    except Exception:
+        logger.warning("s3_unavailable", detail="Using local-only mode for resume processing")
+        return ResumeService(storage=None, llm=failover_manager)
 
 
 @router.post("/resume", response_model=UploadResponse)
 async def upload_resume(
     file: UploadFile,
-    user: User = Depends(get_current_user),
 ) -> UploadResponse:
     """Upload a resume (PDF or DOCX, max 10MB) and start extraction."""
     if file.content_type not in ALLOWED_CONTENT_TYPES:
@@ -42,18 +51,26 @@ async def upload_resume(
 
     service = _get_resume_service()
 
-    try:
-        reference_id = service.upload_resume(content, file.content_type, file.filename or "resume")
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    # Generate reference ID locally (skip S3 if unavailable)
+    reference_id = str(uuid.uuid4())
+    if service.storage is not None:
+        try:
+            reference_id = service.upload_resume(content, file.content_type, file.filename or "resume")
+        except Exception as e:
+            logger.warning("s3_upload_failed", error=str(e), detail="Continuing with local extraction only")
 
-    # Start extraction asynchronously
+    # Start extraction in background so the upload returns immediately
     _extraction_cache[reference_id] = {"status": "processing"}
-    try:
-        structured = await service.process_resume(content)
-        _extraction_cache[reference_id] = {"status": "completed", "data": structured}
-    except Exception as e:
-        _extraction_cache[reference_id] = {"status": "failed", "error": str(e)}
+
+    async def _run_extraction() -> None:
+        try:
+            structured = await service.process_resume(content)
+            _extraction_cache[reference_id] = {"status": "completed", "data": structured}
+        except Exception as e:
+            logger.error("extraction_failed", error=str(e))
+            _extraction_cache[reference_id] = {"status": "failed", "error": str(e)}
+
+    asyncio.create_task(_run_extraction())
 
     return UploadResponse(
         reference_id=reference_id,
@@ -66,7 +83,6 @@ async def upload_resume(
 @router.get("/{reference_id}/status", response_model=ExtractionStatusResponse)
 async def get_extraction_status(
     reference_id: str,
-    user: User = Depends(get_current_user),
 ) -> ExtractionStatusResponse:
     """Check the status of resume extraction."""
     cache_entry = _extraction_cache.get(reference_id)
@@ -82,4 +98,56 @@ async def get_extraction_status(
         status=cache_entry["status"],
         structured_data=cache_entry.get("data"),
         error=cache_entry.get("error"),
+    )
+
+
+SSE_TIMEOUT_SECONDS = 120
+
+
+async def _sse_event_generator(reference_id: str) -> AsyncGenerator[str, None]:
+    """Yield SSE events for extraction progress."""
+    elapsed = 0
+    while elapsed < SSE_TIMEOUT_SECONDS:
+        cache_entry = _extraction_cache.get(reference_id)
+
+        if cache_entry is None:
+            yield f"event: error\ndata: {json.dumps({'status': 'failed', 'error': 'Reference ID not found'})}\n\n"
+            return
+
+        entry_status = cache_entry["status"]
+
+        if entry_status == "completed":
+            yield f"event: completed\ndata: {json.dumps({'status': 'completed', 'structured_data': cache_entry.get('data')})}\n\n"
+            return
+
+        if entry_status == "failed":
+            yield f"event: error\ndata: {json.dumps({'status': 'failed', 'error': cache_entry.get('error', 'Unknown error')})}\n\n"
+            return
+
+        # Still processing
+        yield f"event: status\ndata: {json.dumps({'status': 'processing'})}\n\n"
+        await asyncio.sleep(1)
+        elapsed += 1
+
+    # Timeout
+    yield f"event: error\ndata: {json.dumps({'status': 'failed', 'error': 'Extraction timed out'})}\n\n"
+
+
+@router.get("/{reference_id}/stream")
+async def stream_extraction_status(reference_id: str) -> StreamingResponse:
+    """Stream extraction status via Server-Sent Events."""
+    if reference_id not in _extraction_cache:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reference ID not found",
+        )
+
+    return StreamingResponse(
+        _sse_event_generator(reference_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )

@@ -8,6 +8,25 @@ from dataclasses import dataclass, field
 
 from src.schemas.session import InterviewLevel
 
+# ── Focus-area → section mapping ────────────────────────────────────────────
+
+FOCUS_AREA_TO_SECTION: dict[str, str] = {
+    "coding":        "coding",
+    "dsa":           "coding",
+    "debugging":     "coding",
+    "system_design": "system_design",
+    "api_design":    "system_design",
+    "behavioral":    "behavioral",
+    "aptitude":      "aptitude",
+}
+
+SECTION_DEFAULTS: dict[str, dict] = {
+    "coding":        {"categories": ["coding"],        "min_q": 1, "max_q": 3},
+    "system_design": {"categories": ["system_design"], "min_q": 1, "max_q": 2},
+    "behavioral":    {"categories": ["behavioral"],    "min_q": 1, "max_q": 2},
+    "aptitude":      {"categories": ["aptitude"],      "min_q": 1, "max_q": 3},
+}
+
 
 @dataclass(frozen=True)
 class PhaseAllocation:
@@ -218,6 +237,27 @@ def get_calibration_profile(level: InterviewLevel) -> CalibrationProfile:
     return profile
 
 
+def build_phases_from_focus_areas(focus_areas: list[str]) -> list[PhaseAllocation]:
+    """Map focus areas to sections, deduplicate, build PhaseAllocations."""
+    seen: dict[str, list[str]] = {}  # section → list of focus areas that map to it
+    for area in focus_areas:
+        section = FOCUS_AREA_TO_SECTION.get(area, area)
+        seen.setdefault(section, []).append(area)
+
+    fraction = 1.0 / len(seen) if seen else 1.0
+    phases = []
+    for section, areas in seen.items():
+        defaults = SECTION_DEFAULTS.get(section, {"categories": [section], "min_q": 1, "max_q": 2})
+        phases.append(PhaseAllocation(
+            phase=section,
+            fraction=fraction,
+            categories=defaults["categories"],
+            min_questions=defaults["min_q"],
+            max_questions=defaults["max_q"],
+        ))
+    return phases
+
+
 @dataclass
 class TimeAllocation:
     """Computed time allocation for a specific interview session."""
@@ -233,8 +273,13 @@ class TimeAllocation:
 def compute_time_allocation(
     profile: CalibrationProfile,
     total_minutes: int,
+    phases_override: list[PhaseAllocation] | None = None,
 ) -> TimeAllocation:
-    """Compute per-phase time allocation given a calibration profile and session duration."""
+    """Compute per-phase time allocation given a calibration profile and session duration.
+
+    If *phases_override* is provided, those phases are used for time distribution
+    instead of ``profile.phases``.
+    """
     buffer_minutes = int(total_minutes * profile.buffer_fraction)
     available = total_minutes - profile.intro_minutes - profile.wrap_up_minutes - buffer_minutes
 
@@ -245,10 +290,12 @@ def compute_time_allocation(
             f"for intro/wrap-up alone."
         )
 
+    phases = phases_override if phases_override is not None else profile.phases
+
     phase_minutes: dict[str, int] = {}
     allocated = 0
-    for i, phase in enumerate(profile.phases):
-        if i == len(profile.phases) - 1:
+    for i, phase in enumerate(phases):
+        if i == len(phases) - 1:
             # Last phase gets the remainder to avoid rounding loss
             minutes = available - allocated
         else:

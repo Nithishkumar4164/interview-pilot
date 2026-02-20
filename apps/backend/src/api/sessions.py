@@ -7,9 +7,13 @@ Also handles hint registration from plans and hint progression during interviews
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.dependencies import get_db
+from src.models.session import InterviewSession
+from src.repositories.session_repo import SessionRepository
 from src.schemas.session import (
     CreateSessionRequest,
     SessionResponse,
@@ -20,11 +24,10 @@ from src.services.hint_service import HintService
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
+# Default dev user UUID — matches the seeded row in the users table.
+_DEV_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
 
-# In-memory session store (replaced by DB in production)
-_sessions: dict[str, dict] = {}
-
-# Per-session HintService instances
+# Per-session HintService instances (kept in-memory; stateless across restarts)
 _hint_services: dict[str, HintService] = {}
 
 
@@ -39,50 +42,85 @@ class RegisterPlanHintsRequest(BaseModel):
 
 
 @router.post("/start")
-async def start_session(req: CreateSessionRequest) -> dict:
-    session_id = str(uuid.uuid4())
-    now = datetime.now(UTC).isoformat()
-    _sessions[session_id] = {
-        "id": session_id,
-        "user_id": "user-placeholder",
-        "status": SessionStatus.PLANNING,
-        "level": req.level,
-        "duration_minutes": req.duration_minutes,
-        "focus_areas": req.focus_areas,
-        "job_description": req.job_description,
-        "resume_reference_id": req.resume_reference_id,
-        "plan_id": None,
-        "started_at": None,
-        "ended_at": None,
-        "created_at": now,
-        "updated_at": now,
-    }
-    return {"session_id": session_id}
+async def start_session(
+    req: CreateSessionRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    session_repo = SessionRepository(db)
+
+    db_session = InterviewSession(
+        user_id=_DEV_USER_ID,
+        status=SessionStatus.PLANNING,
+        level=req.level,
+        duration_minutes=req.duration_minutes,
+        focus_areas=req.focus_areas,
+        job_description=req.job_description,
+        custom_notes=req.custom_notes,
+    )
+    await session_repo.create(db_session)
+    await db.commit()
+
+    return {"session_id": str(db_session.id)}
 
 
 @router.get("/{session_id}")
-async def get_session(session_id: str) -> dict:
-    session = _sessions.get(session_id)
-    if session is None:
-        return {"error": "Session not found"}
-    return session
+async def get_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    session_repo = SessionRepository(db)
+    db_session = await session_repo.get_by_id(uuid.UUID(session_id))
+
+    if db_session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        )
+
+    return {
+        "id": str(db_session.id),
+        "user_id": str(db_session.user_id),
+        "status": db_session.status,
+        "level": db_session.level,
+        "duration_minutes": db_session.duration_minutes,
+        "focus_areas": db_session.focus_areas,
+        "job_description": db_session.job_description,
+        "plan_id": None,
+        "started_at": db_session.started_at.isoformat() if db_session.started_at else None,
+        "ended_at": db_session.ended_at.isoformat() if db_session.ended_at else None,
+        "created_at": db_session.created_at.isoformat() if db_session.created_at else "",
+        "updated_at": db_session.updated_at.isoformat() if db_session.updated_at else "",
+    }
 
 
 @router.post("/{session_id}/go-live")
-async def go_live(session_id: str) -> dict:
+async def go_live(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     """Transition session from PLANNING to LIVE."""
-    session = _sessions.get(session_id)
-    if session is None:
-        return {"error": "Session not found"}
+    session_repo = SessionRepository(db)
+    db_session = await session_repo.get_by_id(uuid.UUID(session_id))
 
-    if session["status"] not in (SessionStatus.PLANNING, SessionStatus.READY):
-        return {"error": f"Session must be in PLANNING or READY status, currently: {session['status']}"}
+    if db_session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        )
 
-    now = datetime.now(UTC).isoformat()
-    session["status"] = SessionStatus.LIVE
-    session["started_at"] = now
-    session["updated_at"] = now
-    return {"status": "live", "session_id": session_id, "started_at": now}
+    if db_session.status not in (SessionStatus.PLANNING, SessionStatus.READY):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Session must be in PLANNING or READY status, currently: {db_session.status}",
+        )
+
+    now = datetime.now(UTC)
+    db_session.status = SessionStatus.LIVE
+    db_session.started_at = now
+    await session_repo.update(db_session)
+    await db.commit()
+
+    return {"status": "live", "session_id": session_id, "started_at": now.isoformat()}
 
 
 @router.post("/{session_id}/register-plan-hints")
@@ -107,38 +145,54 @@ async def register_plan_hints(session_id: str, req: RegisterPlanHintsRequest) ->
     if first_question_id:
         service.activate_question(first_question_id)
 
-    # Store plan_id link on session
-    session = _sessions.get(session_id)
-    if session:
-        session["updated_at"] = datetime.now(UTC).isoformat()
-
     return {"registered_questions": count}
 
 
 @router.patch("/{session_id}/pause")
-async def pause_session(session_id: str) -> dict:
-    session = _sessions.get(session_id)
-    if session is None:
-        return {"error": "Session not found"}
+async def pause_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    session_repo = SessionRepository(db)
+    db_session = await session_repo.get_by_id(uuid.UUID(session_id))
 
-    if session["status"] == SessionStatus.LIVE:
-        session["status"] = SessionStatus.PAUSED
-    elif session["status"] == SessionStatus.PAUSED:
-        session["status"] = SessionStatus.LIVE
+    if db_session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        )
 
-    session["updated_at"] = datetime.now(UTC).isoformat()
-    return {"status": session["status"]}
+    if db_session.status == SessionStatus.LIVE:
+        db_session.status = SessionStatus.PAUSED
+    elif db_session.status == SessionStatus.PAUSED:
+        db_session.status = SessionStatus.LIVE
+
+    await session_repo.update(db_session)
+    await db.commit()
+
+    return {"status": db_session.status}
 
 
 @router.post("/{session_id}/end")
-async def end_session(session_id: str) -> dict:
-    session = _sessions.get(session_id)
-    if session is None:
-        return {"error": "Session not found"}
+async def end_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    session_repo = SessionRepository(db)
+    db_session = await session_repo.get_by_id(uuid.UUID(session_id))
 
-    session["status"] = SessionStatus.ENDED
-    session["ended_at"] = datetime.now(UTC).isoformat()
-    session["updated_at"] = session["ended_at"]
+    if db_session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        )
+
+    now = datetime.now(UTC)
+    db_session.status = SessionStatus.ENDED
+    db_session.ended_at = now
+    await session_repo.update(db_session)
+    await db.commit()
+
     return {"status": "ended", "session_id": session_id}
 
 

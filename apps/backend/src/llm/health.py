@@ -85,7 +85,8 @@ class HealthMonitor:
 
     def is_available(self, provider_name: str) -> bool:
         circuit = self._circuits.get(provider_name)
-        return circuit.is_available if circuit else False
+        # Unknown provider = not yet registered = assume available
+        return circuit.is_available if circuit else True
 
     def get_status(self, provider_name: str) -> ProviderStatus | None:
         circuit = self._circuits.get(provider_name)

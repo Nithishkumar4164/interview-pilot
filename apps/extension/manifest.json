@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "InterviewPilot",
+  "version": "0.1.0",
+  "description": "AI-Powered Real-Time Interview Assistant — Audio & Code Capture",
+  "permissions": [
+    "tabCapture",
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://meet.google.com/*",
+    "https://*.zoom.us/*",
+    "https://teams.microsoft.com/*",
+    "https://*.coderpad.io/*",
+    "https://*.hackerrank.com/*",
+    "https://*.leetcode.com/*"
+  ],
+  "background": {
+    "service_worker": "dist/background/service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "dist/popup/index.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.coderpad.io/*",
+        "https://*.hackerrank.com/*",
+        "https://*.leetcode.com/*"
+      ],
+      "js": ["dist/content/code-scraper.js"]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

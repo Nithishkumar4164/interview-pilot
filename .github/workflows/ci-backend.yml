@@ -1,0 +1,72 @@
+name: CI — Backend
+
+on:
+  push:
+    branches: [main]
+    paths: ["apps/backend/**"]
+  pull_request:
+    paths: ["apps/backend/**"]
+
+defaults:
+  run:
+    working-directory: apps/backend
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: copilot
+          POSTGRES_PASSWORD: copilot
+          POSTGRES_DB: interview_pilot
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Lint
+        run: |
+          ruff check src/
+          ruff format --check src/
+
+      - name: Type check
+        run: mypy src/ || true  # Non-blocking initially
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://copilot:copilot@localhost:5432/interview_pilot
+          DATABASE_URL_SYNC: postgresql://copilot:copilot@localhost:5432/interview_pilot
+          REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: test
+        run: pytest tests/ -v --cov=src --cov-report=xml
+
+      - name: Run migrations
+        env:
+          DATABASE_URL_SYNC: postgresql://copilot:copilot@localhost:5432/interview_pilot
+        run: alembic upgrade head

@@ -1,0 +1,33 @@
+import uuid
+
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from src.models.base import BaseModel
+
+
+class HintEvent(BaseModel):
+    __tablename__ = "hint_events"
+    __table_args__ = (
+        Index("ix_hint_events_session_question", "session_id", "question_id"),
+        Index("ix_hint_events_session_displayed", "session_id", "displayed_at"),
+    )
+
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("interview_sessions.id"), nullable=False
+    )
+    question_id: Mapped[str] = mapped_column(String, nullable=False)
+    level: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(String, nullable=False)
+    displayed_at: Mapped[str] = mapped_column(String, nullable=False)
+    interviewer_used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    candidate_response_quality: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="none"
+    )
+    time_to_respond_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    session: Mapped["InterviewSession"] = relationship(back_populates="hint_events")
+
+
+from src.models.session import InterviewSession  # noqa: E402, F401

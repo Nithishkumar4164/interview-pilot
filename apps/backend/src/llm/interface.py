@@ -79,8 +79,8 @@ class ILLMProvider(ABC):
         """Check if the provider is healthy and responsive."""
         ...
 
-    @abstractmethod
     @property
+    @abstractmethod
     def provider_name(self) -> str:
         """Return the provider identifier (e.g., 'anthropic', 'openai')."""
         ...

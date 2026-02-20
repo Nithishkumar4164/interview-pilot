@@ -378,6 +378,20 @@ ul, ol {
 .provider-badge--degraded { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
 .provider-badge--down { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
 
+/* Session Bar — Question Context */
+.session-bar__question-context {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.session-bar__question-progress {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+}
+
 /* ══════════════════════════════════════════════════════════════════════
  * LIVE SESSION LAYOUT
  * ══════════════════════════════════════════════════════════════════════ */
@@ -402,8 +416,17 @@ ul, ol {
   border-right: 1px solid var(--color-border);
 }
 
+.live-session__center {
+  width: 440px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+
 .live-session__right {
-  width: 380px;
+  width: 340px;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -1668,6 +1691,309 @@ ul, ol {
 }
 
 /* ======================================================================
+ * INTERVIEW PLAN PANEL (Live Session)
+ * ====================================================================== */
+.interview-plan-panel {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4);
+  gap: var(--space-4);
+  height: 100%;
+}
+
+.interview-plan-panel--empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.interview-plan-panel__placeholder {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* Phase Progress Bar */
+.phase-progress-bar {
+  display: flex;
+  height: 32px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-bg-tertiary);
+}
+
+.phase-progress-bar__segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  opacity: 0.5;
+  transition: opacity var(--transition-fast);
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+
+.phase-progress-bar__segment:hover {
+  opacity: 0.8;
+}
+
+.phase-progress-bar__segment--current {
+  opacity: 1;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.3);
+}
+
+.phase-progress-bar__segment--current:hover {
+  opacity: 1;
+}
+
+/* Plan Panel Nav */
+.plan-panel__nav-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.plan-panel__nav-toggle {
+  font-size: var(--text-xs);
+  color: var(--color-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.plan-panel__nav-toggle:hover {
+  text-decoration: underline;
+}
+
+.plan-panel__position {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+}
+
+/* Question Navigator */
+.question-navigator {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 200px;
+  overflow-y: auto;
+  padding: var(--space-3);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.question-navigator__phase {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.question-navigator__phase-label {
+  margin-bottom: var(--space-1);
+}
+
+.question-navigator__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.question-navigator__item:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary);
+}
+
+.question-navigator__item--current {
+  background: var(--color-surface);
+  border-color: var(--color-primary);
+  color: var(--color-text);
+}
+
+.question-navigator__num {
+  font-weight: 700;
+  font-family: var(--font-mono);
+  min-width: 24px;
+  flex-shrink: 0;
+}
+
+.question-navigator__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Current Question Card */
+.current-question-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+}
+
+.current-question-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.current-question-card__text {
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--color-text);
+}
+
+.current-question-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.current-question-card__sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Section Toggles */
+.plan-panel__section-toggle {
+  font-size: var(--text-xs);
+  color: var(--color-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: var(--space-1) 0;
+  text-align: left;
+}
+
+.plan-panel__section-toggle:hover {
+  text-decoration: underline;
+}
+
+/* Approach Block */
+.approach-block {
+  padding: var(--space-3);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.approach-block__name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.approach-block__complexity {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.question-card__complexity-badge {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  padding: 2px var(--space-2);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  color: var(--color-info);
+}
+
+.approach-block__steps {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  padding-left: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.approach-block__code {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  padding: var(--space-3);
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  border: 1px solid var(--color-border);
+}
+
+/* Pitfalls */
+.plan-panel__pitfalls {
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+  padding: var(--space-3);
+  padding-left: calc(var(--space-3) + var(--space-5));
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* Navigation Controls */
+.navigation-controls {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Question Timer */
+.question-timer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.question-timer--overtime {
+  color: var(--color-danger);
+}
+
+.question-timer--overtime .question-timer__value {
+  animation: pulse-overtime 1s ease infinite;
+}
+
+.question-timer__label {
+  font-size: var(--text-xs);
+  font-family: var(--font-sans);
+  color: var(--color-text-muted);
+}
+
+.question-timer__value {
+  font-weight: 600;
+}
+
+/* Aptitude phase color (missing from original) */
+.plan-timeline__segment--aptitude { background: #ec4899; }
+.phase-section__badge--aptitude { background: #ec4899; }
+
+/* ======================================================================
  * RESPONSIVE — PLANNING
  * ====================================================================== */
 @media (max-width: 768px) {
@@ -1681,5 +2007,41 @@ ul, ol {
 
   .question-card__actions {
     flex-wrap: wrap;
+  }
+}
+
+/* ======================================================================
+ * RESPONSIVE — LIVE SESSION
+ * ====================================================================== */
+@media (max-width: 1280px) {
+  .live-session__center {
+    width: 360px;
+  }
+
+  .live-session__right {
+    width: 300px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .live-session__body {
+    flex-wrap: wrap;
+  }
+
+  .live-session__center {
+    width: 100%;
+    order: -1;
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .live-session__left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .live-session__right {
+    width: 320px;
   }
 }

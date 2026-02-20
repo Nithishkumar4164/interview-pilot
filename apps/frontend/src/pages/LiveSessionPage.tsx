@@ -6,7 +6,7 @@ import { useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useTimer } from '@/hooks/useTimer';
-import { useSessionStore } from '@/stores/session-store';
+import { useSessionStore, getAllPlanQuestions } from '@/stores/session-store';
 import { useHintStore } from '@/stores/hint-store';
 import { usePlanStore } from '@/stores/plan-store';
 import { useTranscriptStore } from '@/stores/transcript-store';
@@ -17,6 +17,7 @@ import { TranscriptPanel } from '@/components/dashboard/TranscriptPanel';
 import { CodePanel } from '@/components/dashboard/CodePanel';
 import { HintPanel } from '@/components/dashboard/HintPanel';
 import { ScoreRings } from '@/components/dashboard/ScoreRings';
+import { InterviewPlanPanel } from '@/components/dashboard/InterviewPlanPanel';
 import * as api from '@/api/client';
 
 export function LiveSessionPage() {
@@ -140,6 +141,63 @@ export function LiveSessionPage() {
     [sessionId],
   );
 
+  // ── Question navigation ────────────────────────────────────────────
+
+  const navigateToQuestion = useCallback(
+    async (newIndex: number) => {
+      const allQ = getAllPlanQuestions();
+      const q = allQ[newIndex];
+      if (!q || !sessionId) return;
+
+      useSessionStore.getState().goToQuestion(newIndex);
+      useHintStore.getState().clear();
+
+      try {
+        await api.triggerNextHint(sessionId, q.id);
+      } catch {
+        // non-critical — hints will still work via manual trigger
+      }
+    },
+    [sessionId],
+  );
+
+  const handleAdvanceQuestion = useCallback(
+    (delta: number) => {
+      const { currentQuestionIndex } = useSessionStore.getState();
+      const allQ = getAllPlanQuestions();
+      const newIndex = currentQuestionIndex + delta;
+      if (newIndex < 0 || newIndex >= allQ.length) return;
+      navigateToQuestion(newIndex);
+    },
+    [navigateToQuestion],
+  );
+
+  const handleGoToQuestion = useCallback(
+    (index: number) => {
+      navigateToQuestion(index);
+    },
+    [navigateToQuestion],
+  );
+
+  // Keyboard shortcuts: N/ArrowRight = next, P/ArrowLeft = prev
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+      if (e.key === 'n' || e.key === 'N' || e.key === 'ArrowRight') {
+        handleAdvanceQuestion(1);
+      } else if (e.key === 'p' || e.key === 'P' || e.key === 'ArrowLeft') {
+        handleAdvanceQuestion(-1);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [handleAdvanceQuestion]);
+
   if (!sessionId) {
     return (
       <div className="live-session live-session--error">
@@ -162,6 +220,13 @@ export function LiveSessionPage() {
       <main className="live-session__body">
         <div className="live-session__left">
           <TranscriptPanel />
+        </div>
+
+        <div className="live-session__center">
+          <InterviewPlanPanel
+            onAdvanceQuestion={handleAdvanceQuestion}
+            onGoToQuestion={handleGoToQuestion}
+          />
         </div>
 
         <div className="live-session__right">

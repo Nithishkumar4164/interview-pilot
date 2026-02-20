@@ -109,6 +109,7 @@ async def create_plan(
                         "time_minutes": q["time_minutes"],
                         "alternates": q.get("alternates", []),
                         "hints": q.get("hints", []),
+                        "brute_force_approach": q.get("brute_force_approach"),
                         "optimal_approaches": q.get("optimal_approaches"),
                         "common_pitfalls": q.get("common_pitfalls"),
                     }
@@ -157,6 +158,7 @@ async def get_plan(
                         "time_minutes": q["time_minutes"],
                         "alternates": q.get("alternates", []),
                         "hints": q.get("hints", []),
+                        "brute_force_approach": q.get("brute_force_approach"),
                         "optimal_approaches": q.get("optimal_approaches"),
                         "common_pitfalls": q.get("common_pitfalls"),
                     }

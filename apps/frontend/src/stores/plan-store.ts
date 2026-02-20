@@ -15,6 +15,7 @@ export interface ApproachPattern {
   data_structures: string[];
   expected_complexity: Record<string, string>;
   key_steps: string[];
+  code_snippet?: string;
 }
 
 export interface PlannedQuestion {
@@ -25,6 +26,7 @@ export interface PlannedQuestion {
   time_minutes: number;
   alternates: string[];
   hints: QuestionHint[];
+  brute_force_approach: ApproachPattern | null;
   optimal_approaches: ApproachPattern[] | null;
   common_pitfalls: string[] | null;
 }

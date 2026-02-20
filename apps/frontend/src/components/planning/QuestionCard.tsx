@@ -22,6 +22,8 @@ export function QuestionCard({
 }: QuestionCardProps) {
   const [showAlternates, setShowAlternates] = useState(false);
   const [showHints, setShowHints] = useState(false);
+  const [showBruteForce, setShowBruteForce] = useState(false);
+  const [showOptimal, setShowOptimal] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSwap = useCallback(
@@ -129,6 +131,84 @@ export function QuestionCard({
                       L{hint.level}
                     </span>
                     <span className="question-card__hint-text">{hint.text}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {question.brute_force_approach && (
+          <>
+            <button
+              className="question-card__expand-btn"
+              onClick={() => setShowBruteForce(!showBruteForce)}
+            >
+              {showBruteForce ? 'Hide' : 'Show'} Brute Force
+            </button>
+            {showBruteForce && (
+              <div className="question-card__approach">
+                <div className="question-card__approach-name">
+                  {question.brute_force_approach.name}
+                </div>
+                <div className="question-card__approach-complexity">
+                  {Object.entries(question.brute_force_approach.expected_complexity).map(
+                    ([key, val]) => (
+                      <span key={key} className="question-card__complexity-badge">
+                        {key}: {val}
+                      </span>
+                    ),
+                  )}
+                </div>
+                {question.brute_force_approach.key_steps.length > 0 && (
+                  <ol className="question-card__approach-steps">
+                    {question.brute_force_approach.key_steps.map((step, i) => (
+                      <li key={i}>{step}</li>
+                    ))}
+                  </ol>
+                )}
+                {question.brute_force_approach.code_snippet && (
+                  <pre className="question-card__code-snippet">
+                    {question.brute_force_approach.code_snippet}
+                  </pre>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {question.optimal_approaches && question.optimal_approaches.length > 0 && (
+          <>
+            <button
+              className="question-card__expand-btn"
+              onClick={() => setShowOptimal(!showOptimal)}
+            >
+              {showOptimal ? 'Hide' : 'Show'} Optimal Solution
+              {question.optimal_approaches.length > 1 ? 's' : ''} (
+              {question.optimal_approaches.length})
+            </button>
+            {showOptimal && (
+              <div className="question-card__approaches">
+                {question.optimal_approaches.map((approach, i) => (
+                  <div key={i} className="question-card__approach">
+                    <div className="question-card__approach-name">{approach.name}</div>
+                    <div className="question-card__approach-complexity">
+                      {Object.entries(approach.expected_complexity).map(([key, val]) => (
+                        <span key={key} className="question-card__complexity-badge">
+                          {key}: {val}
+                        </span>
+                      ))}
+                    </div>
+                    {approach.key_steps.length > 0 && (
+                      <ol className="question-card__approach-steps">
+                        {approach.key_steps.map((step, j) => (
+                          <li key={j}>{step}</li>
+                        ))}
+                      </ol>
+                    )}
+                    {approach.code_snippet && (
+                      <pre className="question-card__code-snippet">{approach.code_snippet}</pre>
+                    )}
                   </div>
                 ))}
               </div>

@@ -11,6 +11,7 @@ class ApproachPatternSchema(BaseModel):
     data_structures: list[str]
     expected_complexity: dict[str, str]
     key_steps: list[str]
+    code_snippet: str | None = None
 
 
 class PlannedQuestionSchema(BaseModel):
@@ -21,6 +22,7 @@ class PlannedQuestionSchema(BaseModel):
     time_minutes: int
     alternates: list[str]
     hints: list[QuestionHintSchema]
+    brute_force_approach: ApproachPatternSchema | None = None
     optimal_approaches: list[ApproachPatternSchema] | None = None
     common_pitfalls: list[str] | None = None
 

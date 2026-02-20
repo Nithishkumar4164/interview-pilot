@@ -14,6 +14,7 @@ from src.services.calibration_service import (
     CalibrationProfile,
     PhaseAllocation,
     TimeAllocation,
+    build_phases_from_focus_areas,
     compute_time_allocation,
     get_calibration_profile,
 )
@@ -30,7 +31,7 @@ You will be given:
 - The interview level (intern, sde1, sde2, senior, staff, principal)
 - Focus areas specified by the interviewer
 - Resume context (if available)
-- Category of question to generate (coding, system_design, behavioral)
+- Category of question to generate (coding, system_design, behavioral, aptitude, dsa, debugging, api_design)
 - Difficulty range (1-5 scale)
 
 Return a JSON object with the following structure:
@@ -38,16 +39,24 @@ Return a JSON object with the following structure:
   "questions": [
     {
       "text": "The question text",
-      "category": "coding|system_design|behavioral",
+      "category": "coding|system_design|behavioral|aptitude",
       "difficulty": 1-5,
       "time_minutes": estimated minutes,
       "tags": ["tag1", "tag2"],
+      "brute_force_approach": {
+        "name": "Brute Force",
+        "data_structures": ["ds1"],
+        "expected_complexity": {"time": "O(n^2)", "space": "O(1)"},
+        "key_steps": ["step1", "step2"],
+        "code_snippet": "optional pseudocode or short code"
+      },
       "optimal_approaches": [
         {
-          "name": "Approach name",
+          "name": "Optimal: ...",
           "data_structures": ["ds1"],
           "expected_complexity": {"time": "O(n)", "space": "O(1)"},
-          "key_steps": ["step1", "step2"]
+          "key_steps": ["step1", "step2"],
+          "code_snippet": "optional pseudocode or short code"
         }
       ],
       "common_pitfalls": ["pitfall1"],
@@ -60,6 +69,10 @@ Return a JSON object with the following structure:
     }
   ]
 }
+
+For coding/dsa/debugging questions, always provide both a brute_force_approach and at least one optimal_approaches entry with complexity analysis, key steps, and an optional code_snippet.
+For system_design/api_design questions, provide optimal_approaches describing key design decisions.
+For behavioral/aptitude questions, brute_force_approach and optimal_approaches may be omitted.
 
 Generate questions that are:
 - Appropriate for the specified level
@@ -97,6 +110,7 @@ class QuestionData:
     time_minutes: int
     tags: list[str] = field(default_factory=list)
     hints: list[dict] = field(default_factory=list)
+    brute_force_approach: dict | None = None
     optimal_approaches: list[dict] | None = None
     common_pitfalls: list[str] | None = None
     alternates: list[str] = field(default_factory=list)
@@ -154,7 +168,10 @@ class PlanService:
         """
         # 1. Get calibration profile
         profile = get_calibration_profile(level)
-        time_alloc = compute_time_allocation(profile, duration_minutes)
+
+        # Build phases from focus areas instead of using hardcoded profile phases
+        focus_phases = build_phases_from_focus_areas(focus_areas)
+        time_alloc = compute_time_allocation(profile, duration_minutes, phases_override=focus_phases)
 
         logger.info(
             "plan_generation_started",
@@ -164,11 +181,11 @@ class PlanService:
             phases=list(time_alloc.phase_minutes.keys()),
         )
 
-        # 2. Build phases
+        # 2. Build phases using focus-area-driven allocations
         phases: list[PlanPhaseData] = []
         current_minute = time_alloc.intro_minutes
 
-        for phase_alloc in profile.phases:
+        for phase_alloc in focus_phases:
             phase_minutes = time_alloc.phase_minutes.get(phase_alloc.phase, 0)
             if phase_minutes <= 0:
                 continue
@@ -183,9 +200,9 @@ class PlanService:
                 bank_questions=bank_questions,
             )
 
-            # Ensure hints exist for coding questions
+            # Ensure hints exist for technical questions (coding, system_design, aptitude)
             for q in questions:
-                if q.category == "coding" and len(q.hints) < 3:
+                if q.category in ("coding", "system_design", "aptitude") and len(q.hints) < 3:
                     q.hints = await self._generate_hints(q)
 
             phases.append(PlanPhaseData(
@@ -250,6 +267,7 @@ class PlanService:
                     time_minutes=q_time,
                     tags=bq.get("tags", []),
                     hints=bq.get("hints", []),
+                    brute_force_approach=bq.get("brute_force_approach"),
                     optimal_approaches=bq.get("optimal_approaches"),
                     common_pitfalls=bq.get("common_pitfalls"),
                     alternates=bq.get("alternates", []),
@@ -342,6 +360,7 @@ class PlanService:
                     time_minutes=q_data.get("time_minutes", per_q_time),
                     tags=q_data.get("tags", []),
                     hints=q_data.get("hints", []),
+                    brute_force_approach=q_data.get("brute_force_approach"),
                     optimal_approaches=q_data.get("optimal_approaches"),
                     common_pitfalls=q_data.get("common_pitfalls"),
                     alternates=q_data.get("alternates", []),
@@ -431,6 +450,7 @@ class PlanService:
 
         # Clear pre-computed hints (need regeneration for the new question)
         question.hints = []
+        question.brute_force_approach = None
         question.optimal_approaches = None
         question.common_pitfalls = None
 
@@ -515,6 +535,7 @@ class PlanService:
                             "time_minutes": q.time_minutes,
                             "tags": q.tags,
                             "hints": q.hints,
+                            "brute_force_approach": q.brute_force_approach,
                             "optimal_approaches": q.optimal_approaches,
                             "common_pitfalls": q.common_pitfalls,
                             "alternates": q.alternates,
@@ -542,6 +563,7 @@ class PlanService:
                     time_minutes=q_data["time_minutes"],
                     tags=q_data.get("tags", []),
                     hints=q_data.get("hints", []),
+                    brute_force_approach=q_data.get("brute_force_approach"),
                     optimal_approaches=q_data.get("optimal_approaches"),
                     common_pitfalls=q_data.get("common_pitfalls"),
                     alternates=q_data.get("alternates", []),

@@ -13,6 +13,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from src.config import settings
 from src.schemas.transcript import SpeakerRole, TranscriptEventSchema
 from src.services.speaker_service import SpeakerService
 from src.workers.deepgram_worker import (
@@ -20,6 +21,7 @@ from src.workers.deepgram_worker import (
     TranscriptResult,
     UtteranceEnd,
 )
+from src.workers.mock_deepgram_worker import MockDeepgramWorker
 from src.utils.logging import get_logger
 
 logger = get_logger("transcription_service")
@@ -61,7 +63,7 @@ class TranscriptionService:
     def __init__(self, session_id: str) -> None:
         self.session_id = session_id
         self.speaker_service = SpeakerService(session_id)
-        self._deepgram_worker: DeepgramWorker | None = None
+        self._deepgram_worker: DeepgramWorker | MockDeepgramWorker | None = None
         self._processor_task: asyncio.Task | None = None
         self._event_callbacks: list[Any] = []
         self._running = False
@@ -83,7 +85,11 @@ class TranscriptionService:
         if self._running:
             return
 
-        self._deepgram_worker = DeepgramWorker(self.session_id)
+        if settings.deepgram_api_key:
+            self._deepgram_worker = DeepgramWorker(self.session_id)
+        else:
+            logger.warning("deepgram_mock_mode", session_id=self.session_id)
+            self._deepgram_worker = MockDeepgramWorker(self.session_id)
         await self._deepgram_worker.start(channels=["tab", "mic"])
         self._running = True
         self._processor_task = asyncio.create_task(self._process_results())

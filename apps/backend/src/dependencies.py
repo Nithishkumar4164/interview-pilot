@@ -12,11 +12,12 @@ async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 _has_anthropic = bool(settings.anthropic_api_key)
 _has_openai = bool(settings.openai_api_key)
 
-# Validate that at least one LLM API key is configured
+# If no LLM keys, fall back to mock provider for development
 if not _has_anthropic and not _has_openai:
-    raise RuntimeError(
-        "No LLM API keys configured. Set INTERVIEW_PILOT_ANTHROPIC_API_KEY and/or "
-        "INTERVIEW_PILOT_OPENAI_API_KEY environment variables."
+    import logging
+    logging.getLogger("dependencies").warning(
+        "No LLM API keys configured — activating mock provider mode. "
+        "Set INTERVIEW_PILOT_ANTHROPIC_API_KEY and/or INTERVIEW_PILOT_OPENAI_API_KEY for real analysis."
     )
 
 # Global singletons — avoids circular import from main.py
@@ -24,8 +25,19 @@ health_monitor = HealthMonitor()
 failover_manager = FailoverManager(health_monitor)
 
 # Override mappings so only providers with valid keys are used.
-# If only one key is provided, use that provider for both primary and fallback.
-if not _has_anthropic or not _has_openai:
+# If no keys at all, use mock provider. If only one key, use that provider for both.
+if not _has_anthropic and not _has_openai:
+    for task_type in DEFAULT_TASK_MAPPINGS:
+        failover_manager.update_mapping(
+            TaskProviderMapping(
+                task_type=task_type,
+                primary_provider="mock",
+                primary_model="mock-v1",
+                fallback_provider="mock",
+                fallback_model="mock-v1",
+            )
+        )
+elif not _has_anthropic or not _has_openai:
     for task_type, mapping in DEFAULT_TASK_MAPPINGS.items():
         if _has_anthropic:
             provider, model = mapping.primary_provider, mapping.primary_model

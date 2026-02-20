@@ -23,6 +23,7 @@ interface SessionConfig {
 interface ExtensionState {
   sessionId: string | null;
   backendUrl: string;
+  frontendUrl: string;
   connectionState: ConnectionState;
   tabCaptureActive: boolean;
   micCaptureActive: boolean;
@@ -44,6 +45,7 @@ const drainQueue = new ChunkQueue();
 const state: ExtensionState = {
   sessionId: null,
   backendUrl: 'ws://localhost:8000',
+  frontendUrl: 'http://localhost:5173',
   connectionState: 'disconnected',
   tabCaptureActive: false,
   micCaptureActive: false,
@@ -60,6 +62,12 @@ chrome.runtime.onInstalled.addListener(() => {
 // Initialize offline buffer on startup
 offlineBuffer.open().catch((err) => {
   console.error('[InterviewPilot] Failed to open offline buffer:', err);
+});
+
+// Restore persisted URLs on startup
+chrome.storage.local.get(['backendUrl', 'frontendUrl'], (result) => {
+  if (result.backendUrl) state.backendUrl = result.backendUrl;
+  if (result.frontendUrl) state.frontendUrl = result.frontendUrl;
 });
 
 // ── WebSocket Management ──────────────────────────────────────────────────
@@ -299,17 +307,49 @@ async function updateBufferStats(): Promise<void> {
   }
 }
 
+// ── Offscreen Document Lifecycle ──────────────────────────────────────────
+
+async function ensureOffscreen(): Promise<void> {
+  const contexts = await (chrome.runtime as any).getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+  });
+  if (contexts.length > 0) return;
+  await (chrome.offscreen as any).createDocument({
+    url: 'dist/src/offscreen/offscreen.html',
+    reasons: ['USER_MEDIA'],
+    justification: 'Audio capture for interview transcription',
+  });
+}
+
 // ── Message Handler ───────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.type) {
     case 'get-state':
+      // Re-trigger reconnect if WSClients exist but are stuck in reconnecting
+      // (setTimeout timers are lost when MV3 service worker goes dormant)
+      if (state.connectionState === 'reconnecting' && audioWs) {
+        if (audioWs.connectionState !== 'connected' && audioWs.connectionState !== 'connecting') {
+          audioWs.connect();
+        }
+        if (codeWs && codeWs.connectionState !== 'connected' && codeWs.connectionState !== 'connecting') {
+          codeWs.connect();
+        }
+      }
       sendResponse(state);
       return true;
 
     case 'connect': {
       const config: SessionConfig = message.config;
+      if (message.config.frontendUrl) {
+        state.frontendUrl = message.config.frontendUrl;
+      }
       connectWebSockets(config);
+      // Persist URLs for restoration on restart
+      chrome.storage.local.set({
+        backendUrl: config.backendUrl,
+        frontendUrl: state.frontendUrl,
+      });
       sendResponse({ status: 'connecting' });
       return true;
     }
@@ -344,8 +384,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
 
     case 'audio-chunk': {
-      const { pcmData, channel, timestamp } = message;
-      handleAudioChunk(pcmData, channel, timestamp);
+      const { channel, timestamp } = message;
+      // pcmData arrives as a plain number array (Int16 values) from offscreen
+      // because chrome.runtime.sendMessage serializes via JSON.
+      // Reconstruct to ArrayBuffer for the audio frame builder.
+      const int16 = new Int16Array(message.pcmData);
+      handleAudioChunk(int16.buffer, channel, timestamp);
       sendResponse({ status: 'ok' });
       return true;
     }
@@ -368,7 +412,55 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .then(() => sendResponse({ status: 'cleared' }));
       return true;
 
+    case 'start-tab-capture':
+      ensureOffscreen()
+        .then(() => {
+          chrome.runtime.sendMessage({ type: 'offscreen:start-tab-capture', streamId: message.streamId });
+        })
+        .catch((err) => {
+          console.error('[InterviewPilot] Failed to start tab capture:', err);
+        });
+      sendResponse({ status: 'ok' });
+      return true;
+
+    case 'stop-tab-capture':
+      chrome.runtime.sendMessage({ type: 'offscreen:stop-tab-capture' }).catch(() => {});
+      sendResponse({ status: 'ok' });
+      return true;
+
+    case 'start-mic-capture':
+      ensureOffscreen()
+        .then(() => chrome.runtime.sendMessage({ type: 'offscreen:start-mic-capture' }))
+        .catch((err) => console.error('[InterviewPilot] Failed to start mic capture:', err));
+      sendResponse({ status: 'ok' });
+      return true;
+
+    case 'stop-mic-capture':
+      chrome.runtime.sendMessage({ type: 'offscreen:stop-mic-capture' }).catch(() => {});
+      sendResponse({ status: 'ok' });
+      return true;
+
     default:
       return false;
+  }
+});
+
+// ── Side Panel — auto-enable on Google Meet tabs ──────────────────────────
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (
+    changeInfo.status === 'complete' &&
+    tab.url?.match(/^https:\/\/meet\.google\.com\//) &&
+    state.sessionId
+  ) {
+    chrome.sidePanel
+      .setOptions({
+        tabId,
+        path: 'dist/src/sidepanel/index.html',
+        enabled: true,
+      })
+      .catch((err) => {
+        console.error('[InterviewPilot] Failed to enable side panel:', err);
+      });
   }
 });

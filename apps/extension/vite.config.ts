@@ -4,13 +4,16 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  base: './',
   build: {
     rollupOptions: {
       input: {
         'background/service-worker': resolve(__dirname, 'src/background/service-worker.ts'),
         'content/code-scraper': resolve(__dirname, 'src/content/code-scraper.ts'),
         'audio/audio-processor': resolve(__dirname, 'src/audio/audio-processor.ts'),
+        'offscreen/offscreen': resolve(__dirname, 'src/offscreen/offscreen.html'),
         'popup/index': resolve(__dirname, 'src/popup/index.html'),
+        'sidepanel/index': resolve(__dirname, 'src/sidepanel/index.html'),
       },
       output: {
         entryFileNames: (chunkInfo) => {

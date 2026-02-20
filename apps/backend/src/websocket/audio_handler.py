@@ -8,8 +8,10 @@ Endpoint: ws://{host}/ws/audio/{session_id}
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from src.dependencies import failover_manager
 from src.services.transcription_service import TranscriptionService
 from src.utils.logging import get_logger
+from src.workers.analysis_worker import AnalysisWorker
 
 logger = get_logger("ws.audio")
 
@@ -17,17 +19,26 @@ router = APIRouter()
 
 # Active transcription sessions (shared with other handlers)
 _active_sessions: dict[str, TranscriptionService] = {}
+_active_workers: dict[str, AnalysisWorker] = {}
 
 
 def get_transcription_service(session_id: str) -> TranscriptionService:
     """Get or create a TranscriptionService for a session."""
     if session_id not in _active_sessions:
-        _active_sessions[session_id] = TranscriptionService(session_id)
+        service = TranscriptionService(session_id)
+        worker = AnalysisWorker(session_id, failover_manager)
+        service.on_event(worker.on_transcript_event)
+        _active_sessions[session_id] = service
+        _active_workers[session_id] = worker
+        logger.info("analysis_worker_created", session_id=session_id)
     return _active_sessions[session_id]
 
 
 def remove_transcription_service(session_id: str) -> None:
     """Remove a TranscriptionService for a session."""
+    worker = _active_workers.pop(session_id, None)
+    if worker:
+        worker.stop()
     _active_sessions.pop(session_id, None)
 
 
@@ -60,12 +71,20 @@ async def audio_websocket(websocket: WebSocket, session_id: str) -> None:
         session_id=session_id,
     )
 
+    binary_frame_count = 0
     try:
         while True:
             data = await websocket.receive()
 
             if "bytes" in data:
                 # Binary audio frame
+                binary_frame_count += 1
+                if binary_frame_count == 1:
+                    logger.info(
+                        "audio_streaming_started",
+                        session_id=session_id,
+                        frame_size=len(data["bytes"]),
+                    )
                 await service.process_audio_frame(data["bytes"])
 
             elif "text" in data:
@@ -78,6 +97,7 @@ async def audio_websocket(websocket: WebSocket, session_id: str) -> None:
                     continue
 
                 msg_type = message.get("type")
+                logger.info("audio_ws_text_msg", session_id=session_id, msg_type=msg_type, detail=message.get("event") or message.get("error"))
 
                 if msg_type == "ping":
                     await websocket.send_json({

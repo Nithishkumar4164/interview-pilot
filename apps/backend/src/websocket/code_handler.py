@@ -56,10 +56,19 @@ async def code_websocket(websocket: WebSocket, session_id: str) -> None:
                         "timestamp": message.get("timestamp"),
                     })
 
-                elif msg_type == "code_snapshot":
-                    code = message.get("code", "")
-                    language = message.get("language", "unknown")
-                    source = message.get("source", "unknown")
+                elif msg_type in ("code_snapshot", "code_update"):
+                    # Extract from payload envelope (extension wraps in payload)
+                    payload = message.get("payload", message)
+                    code = payload.get("code", "")
+                    language = payload.get("language", "unknown")
+                    source = payload.get("source", "unknown")
+
+                    # Lazy-initialize CodeAnalysisService on first code message
+                    if session_id not in _active_analyzers:
+                        from src.dependencies import failover_manager
+                        from src.services.code_analysis_service import CodeAnalysisService
+                        _active_analyzers[session_id] = CodeAnalysisService(session_id, failover_manager)
+                        logger.info("code_analyzer_created", session_id=session_id)
 
                     # Get the analyzer for this session
                     analyzer = _active_analyzers.get(session_id)

@@ -73,9 +73,11 @@ export function LiveSessionPage() {
     }
   }, [sessionId, setStatus]);
 
+  const isPanel = new URLSearchParams(window.location.search).has('panel');
+
   const handleEnd = useCallback(async () => {
     if (!sessionId) return;
-    if (!window.confirm('Are you sure you want to end this interview?')) return;
+    if (!isPanel && !window.confirm('Are you sure you want to end this interview?')) return;
     try {
       const result = await api.endSession(sessionId) as { report_id?: string };
       setStatus('ended');
@@ -89,7 +91,7 @@ export function LiveSessionPage() {
       setStatus('ended');
       navigate('/');
     }
-  }, [sessionId, setStatus, navigate]);
+  }, [sessionId, isPanel, setStatus, navigate]);
 
   const handleRequestHint = useCallback(async () => {
     if (!sessionId) return;

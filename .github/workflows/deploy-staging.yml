@@ -1,0 +1,23 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker images
+        run: |
+          docker build -t interview-pilot-backend:staging -f apps/backend/Dockerfile apps/backend/
+          echo "Docker images built successfully"
+
+      # Deployment steps would be added here based on infrastructure choice
+      # (e.g., push to ECR, update ECS service, or kubectl apply)
+      - name: Deploy notification
+        run: echo "Staging deployment would be triggered here"

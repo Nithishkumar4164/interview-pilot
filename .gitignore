@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+.ruff_cache/
+.mypy_cache/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+coverage/
+htmlcov/
+.coverage
+.pytest_cache/
+
+# Docker
+*.log
+
+# OS
+Thumbs.db
+
+# Turbo
+.turbo/
+
+# Python virtual envs
+.venv/
+venv/
+
+# MinIO data
+minio-data/
+
+# Alembic
+alembic/versions/__pycache__/

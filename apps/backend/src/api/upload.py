@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.auth import get_current_user
 from src.dependencies import get_db
-from src.main import failover_manager
+from src.dependencies import failover_manager
 from src.models.user import User
 from src.schemas.upload import ExtractionStatusResponse, UploadResponse
 from src.services.resume_service import ResumeService

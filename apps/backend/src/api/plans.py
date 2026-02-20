@@ -13,8 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.auth import get_current_user
-from src.dependencies import get_db
-from src.main import failover_manager
+from src.dependencies import get_db, failover_manager
 from src.models.plan import InterviewPlan
 from src.models.user import User
 from src.repositories.plan_repo import PlanRepository

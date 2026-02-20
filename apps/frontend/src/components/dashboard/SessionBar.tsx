@@ -2,6 +2,7 @@
  * Session controls bar — top bar with status, timer, and controls.
  */
 import { useSessionStore } from '@/stores/session-store';
+import { usePlanStore } from '@/stores/plan-store';
 import { useOfflineStore } from '@/stores/offline-store';
 
 function formatTime(ms: number): string {
@@ -20,11 +21,13 @@ interface SessionBarProps {
 }
 
 export function SessionBar({ onPause, onResume, onEnd }: SessionBarProps) {
-  const { status, level, elapsedMs, durationMinutes } = useSessionStore();
+  const { status, level, elapsedMs, durationMinutes, currentQuestionIndex, totalQuestions, currentPhaseIndex } = useSessionStore();
+  const plan = usePlanStore((s) => s.plan);
   const { wsStatus, degradationLevel, providerStatuses } = useOfflineStore();
 
+  const currentPhaseName = plan?.phases[currentPhaseIndex]?.phase?.replace('_', ' ') ?? '';
+
   const totalMs = durationMinutes * 60 * 1000;
-  const remaining = Math.max(0, totalMs - elapsedMs);
   const pctElapsed = totalMs > 0 ? Math.min(100, (elapsedMs / totalMs) * 100) : 0;
   const isOvertime = elapsedMs > totalMs;
 
@@ -33,6 +36,18 @@ export function SessionBar({ onPause, onResume, onEnd }: SessionBarProps) {
       <div className="session-bar__left">
         <StatusIndicator status={wsStatus} degradation={degradationLevel} />
         <span className="session-bar__level">{level}</span>
+        {totalQuestions > 0 && (
+          <div className="session-bar__question-context">
+            {currentPhaseName && (
+              <span className={`phase-section__badge phase-section__badge--${plan?.phases[currentPhaseIndex]?.phase ?? ''}`}>
+                {currentPhaseName}
+              </span>
+            )}
+            <span className="session-bar__question-progress">
+              Q{currentQuestionIndex + 1}/{totalQuestions}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="session-bar__center">

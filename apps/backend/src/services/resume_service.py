@@ -57,7 +57,7 @@ class ResumeService:
     """Orchestrates resume upload, text extraction, and LLM-powered structured extraction."""
 
     def __init__(
-        self, storage: StorageService, llm: FailoverManager
+        self, storage: StorageService | None, llm: FailoverManager
     ) -> None:
         self.storage = storage
         self.llm = llm

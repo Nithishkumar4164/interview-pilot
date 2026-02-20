@@ -34,6 +34,12 @@
       "js": ["dist/content/code-scraper.js"]
     }
   ],
+  "web_accessible_resources": [
+    {
+      "resources": ["audio/audio-processor.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",

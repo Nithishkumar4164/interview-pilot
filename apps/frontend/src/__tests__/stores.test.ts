@@ -7,6 +7,7 @@ import { useTranscriptStore } from '@/stores/transcript-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useHintStore } from '@/stores/hint-store';
 import { useOfflineStore } from '@/stores/offline-store';
+import { useSpeakerStore } from '@/stores/speaker-store';
 
 // ── Session Store ─────────────────────────────────────────────────────
 
@@ -87,11 +88,15 @@ describe('useTranscriptStore', () => {
       timestamp: '2024-01-01T00:00:00Z',
       channel: 'tab',
       isRetroactive: false,
+      rootSpeakerId: 'rs-default-candidate',
+      speechVectorId: 'sv-dg-tab-0',
     });
 
     const state = useTranscriptStore.getState();
     expect(state.entries).toHaveLength(1);
     expect(state.entries[0].text).toBe('Hello');
+    expect(state.entries[0].rootSpeakerId).toBe('rs-default-candidate');
+    expect(state.entries[0].speechVectorId).toBe('sv-dg-tab-0');
     expect(state.interimEntry).toBeNull();
   });
 
@@ -105,6 +110,8 @@ describe('useTranscriptStore', () => {
       timestamp: '2024-01-01T00:00:00Z',
       channel: 'tab',
       isRetroactive: false,
+      rootSpeakerId: '',
+      speechVectorId: '',
     });
 
     const state = useTranscriptStore.getState();
@@ -123,6 +130,8 @@ describe('useTranscriptStore', () => {
       timestamp: '2024-01-01T00:01:00Z',
       channel: 'tab',
       isRetroactive: false,
+      rootSpeakerId: '',
+      speechVectorId: '',
     });
 
     useTranscriptStore.getState().addCatchupEntries([
@@ -135,6 +144,8 @@ describe('useTranscriptStore', () => {
         timestamp: '2024-01-01T00:00:00Z',
         channel: 'tab',
         isRetroactive: true,
+        rootSpeakerId: '',
+        speechVectorId: '',
       },
     ]);
 
@@ -155,9 +166,31 @@ describe('useTranscriptStore', () => {
         timestamp: '2024-01-01T00:00:00Z',
         channel: 'tab',
         isRetroactive: false,
+        rootSpeakerId: '',
+        speechVectorId: '',
       });
     }
     expect(useTranscriptStore.getState().entries.length).toBeLessThanOrEqual(500);
+  });
+
+  it('updateEntrySpeaker updates rootSpeakerId and speechVectorId', () => {
+    useTranscriptStore.getState().addEntry({
+      id: 't1',
+      speakerRole: 'candidate',
+      text: 'Some text',
+      isFinal: true,
+      confidence: 1,
+      timestamp: '2024-01-01T00:00:00Z',
+      channel: 'tab',
+      isRetroactive: false,
+      rootSpeakerId: 'rs-default-candidate',
+      speechVectorId: 'sv-dg-tab-0',
+    });
+
+    useTranscriptStore.getState().updateEntrySpeaker('t1', 'rs-custom-1', 'sv-virt-abc');
+    const entry = useTranscriptStore.getState().entries[0];
+    expect(entry.rootSpeakerId).toBe('rs-custom-1');
+    expect(entry.speechVectorId).toBe('sv-virt-abc');
   });
 });
 
@@ -348,5 +381,144 @@ describe('useOfflineStore', () => {
   it('setManualNotes stores notes', () => {
     useOfflineStore.getState().setManualNotes('Candidate seems nervous');
     expect(useOfflineStore.getState().manualNotes).toBe('Candidate seems nervous');
+  });
+});
+
+// ── Speaker Store ─────────────────────────────────────────────────────
+
+describe('useSpeakerStore', () => {
+  beforeEach(() => {
+    useSpeakerStore.getState().clear();
+  });
+
+  it('starts with default root speakers seeded', () => {
+    const state = useSpeakerStore.getState();
+    expect(Object.keys(state.rootSpeakers)).toHaveLength(2);
+    expect(state.rootSpeakers['rs-default-interviewer'].label).toBe('Interviewer');
+    expect(state.rootSpeakers['rs-default-candidate'].label).toBe('Candidate');
+    expect(Object.keys(state.speechVectors)).toHaveLength(0);
+  });
+
+  it('applySnapshot replaces root speakers and speech vectors', () => {
+    useSpeakerStore.getState().applySnapshot({
+      root_speakers: {
+        'rs-default-interviewer': {
+          id: 'rs-default-interviewer',
+          label: 'Interviewer',
+          color: '#818cf8',
+          is_default: true,
+          speech_vector_ids: ['sv-dg-mic-0'],
+        },
+        'rs-default-candidate': {
+          id: 'rs-default-candidate',
+          label: 'Candidate',
+          color: '#34d399',
+          is_default: true,
+          speech_vector_ids: ['sv-dg-tab-0'],
+        },
+      },
+      speech_vectors: {
+        'sv-dg-mic-0': {
+          id: 'sv-dg-mic-0',
+          root_speaker_id: 'rs-default-interviewer',
+          deepgram_speaker_id: 0,
+          channel: 'mic',
+          utterance_count: 5,
+          transcript_ids: [],
+          is_virtual: false,
+        },
+        'sv-dg-tab-0': {
+          id: 'sv-dg-tab-0',
+          root_speaker_id: 'rs-default-candidate',
+          deepgram_speaker_id: 0,
+          channel: 'tab',
+          utterance_count: 12,
+          transcript_ids: [],
+          is_virtual: false,
+        },
+      },
+    });
+
+    const state = useSpeakerStore.getState();
+    expect(Object.keys(state.rootSpeakers)).toHaveLength(2);
+    expect(state.rootSpeakers['rs-default-interviewer'].label).toBe('Interviewer');
+    expect(state.rootSpeakers['rs-default-candidate'].label).toBe('Candidate');
+    expect(Object.keys(state.speechVectors)).toHaveLength(2);
+    expect(state.speechVectors['sv-dg-mic-0'].utterance_count).toBe(5);
+  });
+
+  it('applySnapshot overwrites previous state', () => {
+    // Apply first snapshot
+    useSpeakerStore.getState().applySnapshot({
+      root_speakers: {
+        'rs-1': {
+          id: 'rs-1',
+          label: 'Speaker A',
+          color: '#ff0000',
+          is_default: false,
+          speech_vector_ids: [],
+        },
+      },
+      speech_vectors: {},
+    });
+    expect(Object.keys(useSpeakerStore.getState().rootSpeakers)).toHaveLength(1);
+
+    // Apply second snapshot — overwrites first
+    useSpeakerStore.getState().applySnapshot({
+      root_speakers: {
+        'rs-2': {
+          id: 'rs-2',
+          label: 'Speaker B',
+          color: '#00ff00',
+          is_default: false,
+          speech_vector_ids: [],
+        },
+        'rs-3': {
+          id: 'rs-3',
+          label: 'Speaker C',
+          color: '#0000ff',
+          is_default: false,
+          speech_vector_ids: [],
+        },
+      },
+      speech_vectors: {},
+    });
+
+    const state = useSpeakerStore.getState();
+    expect(Object.keys(state.rootSpeakers)).toHaveLength(2);
+    expect(state.rootSpeakers['rs-1']).toBeUndefined();
+    expect(state.rootSpeakers['rs-2'].label).toBe('Speaker B');
+  });
+
+  it('clear resets to default speakers', () => {
+    useSpeakerStore.getState().applySnapshot({
+      root_speakers: {
+        'rs-1': {
+          id: 'rs-1',
+          label: 'Test',
+          color: '#fff',
+          is_default: false,
+          speech_vector_ids: [],
+        },
+      },
+      speech_vectors: {
+        'sv-1': {
+          id: 'sv-1',
+          root_speaker_id: 'rs-1',
+          deepgram_speaker_id: 0,
+          channel: 'tab',
+          utterance_count: 3,
+          transcript_ids: [],
+          is_virtual: false,
+        },
+      },
+    });
+
+    useSpeakerStore.getState().clear();
+    const state = useSpeakerStore.getState();
+    expect(Object.keys(state.rootSpeakers)).toHaveLength(2);
+    expect(state.rootSpeakers['rs-default-interviewer']).toBeDefined();
+    expect(state.rootSpeakers['rs-default-candidate']).toBeDefined();
+    expect(Object.keys(state.speechVectors)).toHaveLength(0);
   });
 });

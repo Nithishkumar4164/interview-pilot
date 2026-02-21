@@ -3,10 +3,13 @@
  *
  * Shows real-time utterances with speaker color-coding,
  * inline AI insights, auto-scroll with manual scroll-back.
+ * Speaker labels are clickable for inline reassignment.
  */
 import { useEffect, useRef, useState } from 'react';
 import { useTranscriptStore, type TranscriptEntry } from '@/stores/transcript-store';
+import { useSpeakerStore } from '@/stores/speaker-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
+import { useWSSend } from '@/contexts/WebSocketContext';
 
 const SPEAKER_COLORS: Record<string, string> = {
   interviewer: 'var(--color-interviewer)',
@@ -83,7 +86,30 @@ function TranscriptRow({
   entry: TranscriptEntry;
   isInterim?: boolean;
 }) {
-  const speakerColor = SPEAKER_COLORS[entry.speakerRole] || SPEAKER_COLORS.unknown;
+  const rootSpeakers = useSpeakerStore((s) => s.rootSpeakers);
+  const send = useWSSend();
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  // Look up the root speaker for color and label
+  const rs = entry.rootSpeakerId ? rootSpeakers[entry.rootSpeakerId] : null;
+  const speakerColor = rs ? rs.color : (SPEAKER_COLORS[entry.speakerRole] || SPEAKER_COLORS.unknown);
+  const speakerLabel = rs
+    ? rs.label
+    : entry.speakerRole === 'interviewer'
+      ? 'You'
+      : entry.speakerRole;
+
+  const handleReassign = (targetRsId: string) => {
+    send({
+      type: 'reassign_transcript',
+      transcript_id: entry.id,
+      source_sv_id: entry.speechVectorId,
+      target_rs_id: targetRsId,
+    });
+    setShowDropdown(false);
+  };
+
+  const rsEntries = Object.values(rootSpeakers);
 
   return (
     <div
@@ -92,13 +118,72 @@ function TranscriptRow({
       <span
         className="transcript-row__speaker"
         style={{ color: speakerColor }}
+        onClick={() => !isInterim && setShowDropdown(!showDropdown)}
+        role={isInterim ? undefined : 'button'}
+        tabIndex={isInterim ? undefined : 0}
+        onKeyDown={(e) => !isInterim && e.key === 'Enter' && setShowDropdown(!showDropdown)}
       >
-        {entry.speakerRole === 'interviewer' ? 'You' : entry.speakerRole}
+        {speakerLabel}
       </span>
       <span className="transcript-row__text">{entry.text}</span>
       {entry.isRetroactive && (
         <span className="transcript-row__badge">catch-up</span>
       )}
+
+      {showDropdown && rsEntries.length > 0 && (
+        <TranscriptReassignDropdown
+          currentRsId={entry.rootSpeakerId}
+          rootSpeakers={rsEntries}
+          onSelect={handleReassign}
+          onClose={() => setShowDropdown(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function TranscriptReassignDropdown({
+  currentRsId,
+  rootSpeakers,
+  onSelect,
+  onClose,
+}: {
+  currentRsId: string;
+  rootSpeakers: Array<{ id: string; label: string; color: string }>;
+  onSelect: (rsId: string) => void;
+  onClose: () => void;
+}) {
+  const others = rootSpeakers.filter((rs) => rs.id !== currentRsId);
+
+  return (
+    <div className="transcript-row__reassign-dropdown" role="listbox">
+      {others.map((rs) => (
+        <button
+          key={rs.id}
+          className="transcript-row__reassign-option"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect(rs.id);
+          }}
+          role="option"
+          aria-selected={false}
+        >
+          <span
+            className="transcript-row__reassign-dot"
+            style={{ backgroundColor: rs.color }}
+          />
+          {rs.label}
+        </button>
+      ))}
+      <button
+        className="transcript-row__reassign-option transcript-row__reassign-option--cancel"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      >
+        Cancel
+      </button>
     </div>
   );
 }

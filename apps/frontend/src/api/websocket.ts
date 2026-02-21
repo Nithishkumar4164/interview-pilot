@@ -13,7 +13,10 @@ export type WSMessageType =
   | 'red_flag'
   | 'catchup'
   | 'provider_status'
-  | 'error';
+  | 'error'
+  | 'speaker_snapshot'
+  | 'speaker_transcript_assigned'
+  | 'sv_transcripts';
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;

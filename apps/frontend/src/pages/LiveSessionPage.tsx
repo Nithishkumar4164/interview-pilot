@@ -12,8 +12,11 @@ import { usePlanStore } from '@/stores/plan-store';
 import { useTranscriptStore } from '@/stores/transcript-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useOfflineStore } from '@/stores/offline-store';
+import { useSpeakerStore } from '@/stores/speaker-store';
+import { WebSocketProvider } from '@/contexts/WebSocketContext';
 import { SessionBar } from '@/components/dashboard/SessionBar';
 import { TranscriptPanel } from '@/components/dashboard/TranscriptPanel';
+import { SpeakersPanel } from '@/components/dashboard/SpeakersPanel';
 import { CodePanel } from '@/components/dashboard/CodePanel';
 import { HintPanel } from '@/components/dashboard/HintPanel';
 import { ScoreRings } from '@/components/dashboard/ScoreRings';
@@ -50,6 +53,7 @@ export function LiveSessionPage() {
       useAnalysisStore.getState().clear();
       useHintStore.getState().clear();
       useOfflineStore.getState().reset();
+      useSpeakerStore.getState().clear();
     };
   }, [reset]);
 
@@ -212,40 +216,43 @@ export function LiveSessionPage() {
   }
 
   return (
-    <div className={`live-session live-session--degradation-${degradationLevel}`}>
-      <SessionBar
-        onPause={handlePause}
-        onResume={handleResume}
-        onEnd={handleEnd}
-      />
+    <WebSocketProvider value={{ send }}>
+      <div className={`live-session live-session--degradation-${degradationLevel}`}>
+        <SessionBar
+          onPause={handlePause}
+          onResume={handleResume}
+          onEnd={handleEnd}
+        />
 
-      <main className="live-session__body">
-        <div className="live-session__left">
-          <TranscriptPanel />
-        </div>
+        <main className="live-session__body">
+          <div className="live-session__left">
+            <TranscriptPanel />
+          </div>
 
-        <div className="live-session__center">
-          <InterviewPlanPanel
-            onAdvanceQuestion={handleAdvanceQuestion}
-            onGoToQuestion={handleGoToQuestion}
-          />
-        </div>
+          <div className="live-session__center">
+            <InterviewPlanPanel
+              onAdvanceQuestion={handleAdvanceQuestion}
+              onGoToQuestion={handleGoToQuestion}
+            />
+          </div>
 
-        <div className="live-session__right">
-          <ScoreRings />
-          <CodePanel />
-          <HintPanel
-            onRequestHint={handleRequestHint}
-            onAcknowledge={handleAcknowledgeHint}
-          />
-        </div>
-      </main>
+          <div className="live-session__right">
+            <SpeakersPanel />
+            <ScoreRings />
+            <CodePanel />
+            <HintPanel
+              onRequestHint={handleRequestHint}
+              onAcknowledge={handleAcknowledgeHint}
+            />
+          </div>
+        </main>
 
-      {/* Offline mode manual notes */}
-      {degradationLevel >= 2 && (
-        <OfflineNotesPanel send={send} />
-      )}
-    </div>
+        {/* Offline mode manual notes */}
+        {degradationLevel >= 2 && (
+          <OfflineNotesPanel send={send} />
+        )}
+      </div>
+    </WebSocketProvider>
   );
 }
 

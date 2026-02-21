@@ -17,6 +17,8 @@ export interface TranscriptEntry {
   timestamp: string;
   channel: string;
   isRetroactive: boolean;
+  rootSpeakerId: string;
+  speechVectorId: string;
 }
 
 interface TranscriptState {
@@ -27,6 +29,7 @@ interface TranscriptState {
   addEntry: (entry: TranscriptEntry) => void;
   setInterim: (entry: TranscriptEntry | null) => void;
   addCatchupEntries: (entries: TranscriptEntry[]) => void;
+  updateEntrySpeaker: (transcriptId: string, newRootSpeakerId: string, newSpeechVectorId: string) => void;
   clear: () => void;
 }
 
@@ -55,6 +58,15 @@ export const useTranscriptStore = create<TranscriptState>((set) => ({
   addCatchupEntries: (entries) =>
     set((s) => ({
       entries: [...entries, ...s.entries].slice(0, MAX_ENTRIES),
+    })),
+
+  updateEntrySpeaker: (transcriptId, newRootSpeakerId, newSpeechVectorId) =>
+    set((s) => ({
+      entries: s.entries.map((e) =>
+        e.id === transcriptId
+          ? { ...e, rootSpeakerId: newRootSpeakerId, speechVectorId: newSpeechVectorId }
+          : e,
+      ),
     })),
 
   clear: () => set({ entries: [], interimEntry: null }),

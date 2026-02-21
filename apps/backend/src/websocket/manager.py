@@ -159,6 +159,34 @@ class ConnectionManager:
             "payload": {"message": error},
         })
 
+    async def send_speaker_snapshot(self, session_id: str, snapshot: dict) -> None:
+        """Send a full speaker snapshot to all dashboard connections."""
+        await self.broadcast(session_id, {
+            "type": "speaker_snapshot",
+            "session_id": session_id,
+            "payload": snapshot,
+        })
+
+    async def send_speaker_transcript_assigned(
+        self, session_id: str, assignment: dict,
+    ) -> None:
+        """Send a transcript reassignment notification."""
+        await self.broadcast(session_id, {
+            "type": "speaker_transcript_assigned",
+            "session_id": session_id,
+            "payload": assignment,
+        })
+
+    async def send_sv_transcripts(
+        self, session_id: str, sv_id: str, transcripts: list[dict],
+    ) -> None:
+        """Send recent transcript texts for a speech vector."""
+        await self.broadcast(session_id, {
+            "type": "sv_transcripts",
+            "session_id": session_id,
+            "payload": {"sv_id": sv_id, "transcripts": transcripts},
+        })
+
 
 # Global singleton
 dashboard_manager = ConnectionManager()

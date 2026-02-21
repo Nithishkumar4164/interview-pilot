@@ -8,14 +8,22 @@ import { TranscriptPanel } from '@/components/dashboard/TranscriptPanel';
 import { CodePanel } from '@/components/dashboard/CodePanel';
 import { HintPanel } from '@/components/dashboard/HintPanel';
 import { ScoreRings } from '@/components/dashboard/ScoreRings';
+import { SpeakersPanel } from '@/components/dashboard/SpeakersPanel';
 import { useSessionStore } from '@/stores/session-store';
 import { useTranscriptStore } from '@/stores/transcript-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useHintStore } from '@/stores/hint-store';
 import { useOfflineStore } from '@/stores/offline-store';
+import { useSpeakerStore } from '@/stores/speaker-store';
+import { WebSocketProvider } from '@/contexts/WebSocketContext';
 
 // jsdom doesn't have scrollIntoView
 Element.prototype.scrollIntoView = vi.fn();
+
+// Helper to wrap components that need WebSocket context
+function withWS(ui: React.ReactElement, send = vi.fn()) {
+  return <WebSocketProvider value={{ send }}>{ui}</WebSocketProvider>;
+}
 
 // ── SessionBar ────────────────────────────────────────────────────────
 
@@ -76,10 +84,11 @@ describe('TranscriptPanel', () => {
   beforeEach(() => {
     useTranscriptStore.getState().clear();
     useAnalysisStore.getState().clear();
+    useSpeakerStore.getState().clear();
   });
 
   it('renders transcript heading', () => {
-    render(<TranscriptPanel />);
+    render(withWS(<TranscriptPanel />));
     expect(screen.getByText('Transcript')).toBeInTheDocument();
   });
 
@@ -93,14 +102,47 @@ describe('TranscriptPanel', () => {
       timestamp: '2024-01-01T00:00:00Z',
       channel: 'tab',
       isRetroactive: false,
+      rootSpeakerId: '',
+      speechVectorId: '',
     });
 
-    render(<TranscriptPanel />);
+    render(withWS(<TranscriptPanel />));
     expect(screen.getByText('I would use a hash map')).toBeInTheDocument();
     expect(screen.getByText('candidate')).toBeInTheDocument();
   });
 
-  it('renders interviewer as "You"', () => {
+  it('renders speaker label from root speaker when available', () => {
+    useSpeakerStore.getState().applySnapshot({
+      root_speakers: {
+        'rs-default-interviewer': {
+          id: 'rs-default-interviewer',
+          label: 'Interviewer',
+          color: '#818cf8',
+          is_default: true,
+          speech_vector_ids: [],
+        },
+      },
+      speech_vectors: {},
+    });
+
+    useTranscriptStore.getState().addEntry({
+      id: '1',
+      speakerRole: 'interviewer',
+      text: 'Can you explain?',
+      isFinal: true,
+      confidence: 1,
+      timestamp: '2024-01-01T00:00:00Z',
+      channel: 'mic',
+      isRetroactive: false,
+      rootSpeakerId: 'rs-default-interviewer',
+      speechVectorId: 'sv-dg-mic-0',
+    });
+
+    render(withWS(<TranscriptPanel />));
+    expect(screen.getByText('Interviewer')).toBeInTheDocument();
+  });
+
+  it('falls back to "You" for interviewer without root speaker', () => {
     useTranscriptStore.getState().addEntry({
       id: '1',
       speakerRole: 'interviewer',
@@ -110,9 +152,11 @@ describe('TranscriptPanel', () => {
       timestamp: '2024-01-01T00:00:00Z',
       channel: 'mic',
       isRetroactive: false,
+      rootSpeakerId: '',
+      speechVectorId: '',
     });
 
-    render(<TranscriptPanel />);
+    render(withWS(<TranscriptPanel />));
     expect(screen.getByText('You')).toBeInTheDocument();
   });
 
@@ -126,9 +170,11 @@ describe('TranscriptPanel', () => {
       timestamp: '2024-01-01T00:00:00Z',
       channel: 'tab',
       isRetroactive: true,
+      rootSpeakerId: '',
+      speechVectorId: '',
     });
 
-    render(<TranscriptPanel />);
+    render(withWS(<TranscriptPanel />));
     expect(screen.getByText('catch-up')).toBeInTheDocument();
   });
 
@@ -144,7 +190,7 @@ describe('TranscriptPanel', () => {
       provider: 'mock',
     });
 
-    render(<TranscriptPanel />);
+    render(withWS(<TranscriptPanel />));
     expect(screen.getByText('Good use of data structures')).toBeInTheDocument();
     expect(screen.getByText('4/5')).toBeInTheDocument();
   });
@@ -363,5 +409,92 @@ describe('ScoreRings', () => {
     expect(screen.getByText('3.5')).toBeInTheDocument();
     expect(screen.getByText('4.0')).toBeInTheDocument();
     expect(screen.getByText('3.8')).toBeInTheDocument();
+  });
+});
+
+// ── SpeakersPanel ─────────────────────────────────────────────────────
+
+describe('SpeakersPanel', () => {
+  const mockSend = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useSpeakerStore.getState().clear();
+  });
+
+  it('renders the Speakers heading', () => {
+    render(withWS(<SpeakersPanel />, mockSend));
+    expect(screen.getByText('Speakers')).toBeInTheDocument();
+  });
+
+  it('renders root speakers from store', () => {
+    useSpeakerStore.getState().applySnapshot({
+      root_speakers: {
+        'rs-default-interviewer': {
+          id: 'rs-default-interviewer',
+          label: 'Interviewer',
+          color: '#818cf8',
+          is_default: true,
+          speech_vector_ids: [],
+        },
+        'rs-default-candidate': {
+          id: 'rs-default-candidate',
+          label: 'Candidate',
+          color: '#34d399',
+          is_default: true,
+          speech_vector_ids: [],
+        },
+      },
+      speech_vectors: {},
+    });
+
+    render(withWS(<SpeakersPanel />, mockSend));
+    expect(screen.getByText('Interviewer')).toBeInTheDocument();
+    expect(screen.getByText('Candidate')).toBeInTheDocument();
+  });
+
+  it('shows + Add button', () => {
+    render(withWS(<SpeakersPanel />, mockSend));
+    expect(screen.getByText('+ Add')).toBeInTheDocument();
+  });
+
+  it('shows create form when + Add clicked', () => {
+    render(withWS(<SpeakersPanel />, mockSend));
+    fireEvent.click(screen.getByText('+ Add'));
+    expect(screen.getByPlaceholderText('Speaker name')).toBeInTheDocument();
+  });
+
+  it('sends create_root_speaker message on form submit', () => {
+    render(withWS(<SpeakersPanel />, mockSend));
+    fireEvent.click(screen.getByText('+ Add'));
+
+    const input = screen.getByPlaceholderText('Speaker name');
+    fireEvent.change(input, { target: { value: 'John (PM)' } });
+    fireEvent.click(screen.getByText('Add'));
+
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'create_root_speaker',
+        label: 'John (PM)',
+      }),
+    );
+  });
+
+  it('does not show delete button on default speakers', () => {
+    useSpeakerStore.getState().applySnapshot({
+      root_speakers: {
+        'rs-default-interviewer': {
+          id: 'rs-default-interviewer',
+          label: 'Interviewer',
+          color: '#818cf8',
+          is_default: true,
+          speech_vector_ids: [],
+        },
+      },
+      speech_vectors: {},
+    });
+
+    render(withWS(<SpeakersPanel />, mockSend));
+    expect(screen.queryByTitle('Delete speaker')).not.toBeInTheDocument();
   });
 });

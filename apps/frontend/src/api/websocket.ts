@@ -10,6 +10,7 @@ export type WSMessageType =
   | 'analysis'
   | 'code_analysis'
   | 'hint'
+  | 'runtime_hint'
   | 'red_flag'
   | 'catchup'
   | 'provider_status'

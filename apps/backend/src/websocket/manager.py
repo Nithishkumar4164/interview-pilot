@@ -177,6 +177,14 @@ class ConnectionManager:
             "payload": assignment,
         })
 
+    async def send_runtime_hint(self, session_id: str, hint: dict) -> None:
+        """Send a runtime hint response to all dashboard connections."""
+        await self.broadcast(session_id, {
+            "type": "runtime_hint",
+            "session_id": session_id,
+            "payload": hint,
+        })
+
     async def send_sv_transcripts(
         self, session_id: str, sv_id: str, transcripts: list[dict],
     ) -> None:

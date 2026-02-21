@@ -2,13 +2,13 @@
  * Live transcript panel — left side of dashboard.
  *
  * Shows real-time utterances with speaker color-coding,
- * inline AI insights, auto-scroll with manual scroll-back.
+ * inline AI insights with dimension pills, auto-scroll with manual scroll-back.
  * Speaker labels are clickable for inline reassignment.
  */
 import { useEffect, useRef, useState } from 'react';
 import { useTranscriptStore, type TranscriptEntry } from '@/stores/transcript-store';
 import { useSpeakerStore } from '@/stores/speaker-store';
-import { useAnalysisStore } from '@/stores/analysis-store';
+import { useAnalysisStore, type DimensionScore, type InsightDimensions } from '@/stores/analysis-store';
 import { useWSSend } from '@/contexts/WebSocketContext';
 
 const SPEAKER_COLORS: Record<string, string> = {
@@ -188,7 +188,31 @@ function TranscriptReassignDropdown({
   );
 }
 
-function InsightBar({ analysis }: { analysis: { insight: string; answerQuality: number; onTrack: boolean } }) {
+function dimensionColor(score: DimensionScore): string {
+  switch (score) {
+    case 'excellent':
+    case 'good':
+      return 'green';
+    case 'adequate':
+      return 'amber';
+    case 'weak':
+    case 'poor':
+      return 'red';
+    default:
+      return 'amber';
+  }
+}
+
+const DIMENSION_LABELS: Array<{ key: keyof InsightDimensions; label: string }> = [
+  { key: 'relevance', label: 'Relevance' },
+  { key: 'behavioralSignal', label: 'Behavior' },
+  { key: 'contextualConsistency', label: 'Consistency' },
+  { key: 'hintReception', label: 'Hint' },
+  { key: 'depthCompleteness', label: 'Depth' },
+  { key: 'communicationQuality', label: 'Communication' },
+];
+
+function InsightBar({ analysis }: { analysis: { insight: string; answerQuality: number; onTrack: boolean; dimensions?: InsightDimensions | null } }) {
   const quality = analysis.answerQuality;
   const color = quality >= 4 ? 'green' : quality >= 3 ? 'amber' : 'red';
 
@@ -198,6 +222,24 @@ function InsightBar({ analysis }: { analysis: { insight: string; answerQuality: 
       <span className="insight-bar__text">{analysis.insight}</span>
       {!analysis.onTrack && (
         <span className="insight-bar__badge">off-track</span>
+      )}
+      {analysis.dimensions && (
+        <div className="insight-bar__dimensions">
+          {DIMENSION_LABELS.map(({ key, label }) => {
+            const dim = analysis.dimensions![key];
+            if (!dim) return null;
+            const score = (dim as { score: DimensionScore }).score;
+            return (
+              <span
+                key={key}
+                className={`dimension-pill dimension-pill--${dimensionColor(score)}`}
+                title={`${label}: ${score} — ${(dim as { justification: string }).justification}`}
+              >
+                {label}
+              </span>
+            );
+          })}
+        </div>
       )}
     </div>
   );

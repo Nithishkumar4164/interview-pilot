@@ -250,6 +250,25 @@ class HintService:
             for h in self._hint_events
         ]
 
+    def record_runtime_hint_feedback(
+        self,
+        hint_id: str,
+        question_id: str,
+        text: str,
+        quality: str,
+    ) -> None:
+        """Record runtime hint events alongside static ones for unified metrics."""
+        active = ActiveHint(
+            hint_id=hint_id,
+            question_id=question_id,
+            level=0,  # 0 indicates runtime hint
+            text=text,
+            displayed_at=datetime.now(UTC).isoformat(),
+            interviewer_used=True,
+            candidate_response_quality=HintResponseQuality(quality) if quality in ("none", "partial", "full") else HintResponseQuality.NONE,
+        )
+        self._hint_events.append(active)
+
     def to_dict(self) -> dict:
         return {
             "session_id": self.session_id,

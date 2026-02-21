@@ -1,9 +1,67 @@
 /**
  * Real-time analysis store.
  *
- * Stores analysis events, score updates, red flags, and code analysis.
+ * Stores analysis events, score updates, red flags, code analysis,
+ * and 6-dimension insight evaluations.
  */
 import { create } from 'zustand';
+
+// ── Dimension Types ──────────────────────────────────────────────────
+
+export type DimensionScore = 'excellent' | 'good' | 'adequate' | 'weak' | 'poor';
+
+export interface RelevanceDimension {
+  score: DimensionScore;
+  onTopic: boolean;
+  justification: string;
+}
+
+export interface BehavioralSignalDimension {
+  score: DimensionScore;
+  signalsDetected: string[];
+  flags: string[];
+  justification: string;
+}
+
+export interface ContextualConsistencyDimension {
+  score: DimensionScore;
+  consistent: boolean;
+  contradictions: string[];
+  justification: string;
+}
+
+export interface HintReceptionDimension {
+  score: DimensionScore;
+  actedOnHint: boolean;
+  incorporationLevel: 'full' | 'partial' | 'none';
+  justification: string;
+}
+
+export interface DepthCompletenessDimension {
+  score: DimensionScore;
+  keyPointsCovered: string[];
+  keyPointsMissed: string[];
+  justification: string;
+}
+
+export interface CommunicationQualityDimension {
+  score: DimensionScore;
+  clarity: 'high' | 'medium' | 'low';
+  structure: 'high' | 'medium' | 'low';
+  confidence: 'high' | 'medium' | 'low';
+  justification: string;
+}
+
+export interface InsightDimensions {
+  relevance: RelevanceDimension;
+  behavioralSignal: BehavioralSignalDimension;
+  contextualConsistency: ContextualConsistencyDimension;
+  hintReception: HintReceptionDimension | null;
+  depthCompleteness: DepthCompletenessDimension;
+  communicationQuality: CommunicationQualityDimension;
+}
+
+// ── Analysis Entry ───────────────────────────────────────────────────
 
 export interface AnalysisEntry {
   answerQuality: number;
@@ -14,6 +72,7 @@ export interface AnalysisEntry {
   hintSignal: string;
   timestamp: string;
   provider: string;
+  dimensions: InsightDimensions | null;
 }
 
 export interface CodeAnalysisState {
@@ -56,6 +115,77 @@ const DEFAULT_SCORES: ScoreState = {
   hintResponsiveness: 0,
 };
 
+/** Map a DimensionScore string to a 0-5 numeric value. */
+function dimensionScoreToNumber(score: DimensionScore): number {
+  const map: Record<DimensionScore, number> = {
+    excellent: 5,
+    good: 4,
+    adequate: 3,
+    weak: 2,
+    poor: 1,
+  };
+  return map[score] ?? 3;
+}
+
+/** Map snake_case dimension payload to camelCase InsightDimensions. */
+export function mapDimensions(raw: Record<string, unknown> | null | undefined): InsightDimensions | null {
+  if (!raw) return null;
+
+  try {
+    const rel = raw.relevance as Record<string, unknown> | undefined;
+    const beh = raw.behavioral_signal as Record<string, unknown> | undefined;
+    const con = raw.contextual_consistency as Record<string, unknown> | undefined;
+    const hint = raw.hint_reception as Record<string, unknown> | null | undefined;
+    const dep = raw.depth_completeness as Record<string, unknown> | undefined;
+    const comm = raw.communication_quality as Record<string, unknown> | undefined;
+
+    if (!rel || !beh || !con || !dep || !comm) return null;
+
+    return {
+      relevance: {
+        score: (rel.score as DimensionScore) || 'adequate',
+        onTopic: (rel.on_topic as boolean) ?? true,
+        justification: (rel.justification as string) || '',
+      },
+      behavioralSignal: {
+        score: (beh.score as DimensionScore) || 'adequate',
+        signalsDetected: (beh.signals_detected as string[]) || [],
+        flags: (beh.flags as string[]) || [],
+        justification: (beh.justification as string) || '',
+      },
+      contextualConsistency: {
+        score: (con.score as DimensionScore) || 'adequate',
+        consistent: (con.consistent as boolean) ?? true,
+        contradictions: (con.contradictions as string[]) || [],
+        justification: (con.justification as string) || '',
+      },
+      hintReception: hint
+        ? {
+            score: (hint.score as DimensionScore) || 'adequate',
+            actedOnHint: (hint.acted_on_hint as boolean) ?? false,
+            incorporationLevel: (hint.incorporation_level as 'full' | 'partial' | 'none') || 'none',
+            justification: (hint.justification as string) || '',
+          }
+        : null,
+      depthCompleteness: {
+        score: (dep.score as DimensionScore) || 'adequate',
+        keyPointsCovered: (dep.key_points_covered as string[]) || [],
+        keyPointsMissed: (dep.key_points_missed as string[]) || [],
+        justification: (dep.justification as string) || '',
+      },
+      communicationQuality: {
+        score: (comm.score as DimensionScore) || 'adequate',
+        clarity: (comm.clarity as 'high' | 'medium' | 'low') || 'medium',
+        structure: (comm.structure as 'high' | 'medium' | 'low') || 'medium',
+        confidence: (comm.confidence as 'high' | 'medium' | 'low') || 'medium',
+        justification: (comm.justification as string) || '',
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
   analyses: [],
   latestAnalysis: null,
@@ -72,12 +202,42 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
         ? scored.reduce((sum, a) => sum + a.answerQuality, 0) / scored.length
         : 0;
 
+      // Derive communication and hintResponsiveness from dimensions
+      const scoreUpdates: Partial<ScoreState> = {
+        problemSolving: Math.round(avg * 10) / 10,
+      };
+
+      if (entry.dimensions) {
+        const commScore = dimensionScoreToNumber(entry.dimensions.communicationQuality.score);
+        // Running average of communication scores
+        const withDims = analyses.filter((a) => a.dimensions);
+        if (withDims.length > 0) {
+          const commAvg = withDims.reduce(
+            (sum, a) => sum + (a.dimensions ? dimensionScoreToNumber(a.dimensions.communicationQuality.score) : 0),
+            0,
+          ) / withDims.length;
+          scoreUpdates.communication = Math.round(commAvg * 10) / 10;
+        } else {
+          scoreUpdates.communication = commScore;
+        }
+
+        // Hint responsiveness from hint_reception dimension
+        const hintEntries = analyses.filter((a) => a.dimensions?.hintReception);
+        if (hintEntries.length > 0) {
+          const hintAvg = hintEntries.reduce(
+            (sum, a) => sum + (a.dimensions?.hintReception ? dimensionScoreToNumber(a.dimensions.hintReception.score) : 0),
+            0,
+          ) / hintEntries.length;
+          scoreUpdates.hintResponsiveness = Math.round(hintAvg * 10) / 10;
+        }
+      }
+
       return {
         analyses,
         latestAnalysis: entry,
         scores: {
           ...s.scores,
-          problemSolving: Math.round(avg * 10) / 10,
+          ...scoreUpdates,
         },
       };
     }),

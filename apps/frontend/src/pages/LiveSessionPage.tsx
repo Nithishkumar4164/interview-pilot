@@ -147,6 +147,61 @@ export function LiveSessionPage() {
     [sessionId],
   );
 
+  // ── Runtime Hint Handlers ──────────────────────────────────────────
+
+  const handleRequestRuntimeHint = useCallback(() => {
+    if (!sessionId) return;
+    const planState = usePlanStore.getState().plan;
+    let questionId = '';
+    if (planState) {
+      const { currentQuestionIndex } = useSessionStore.getState();
+      const allQuestions = planState.phases.flatMap((p) => p.questions);
+      if (currentQuestionIndex < allQuestions.length) {
+        questionId = allQuestions[currentQuestionIndex].id;
+      }
+    }
+    useHintStore.getState().setRuntimeHintLoading(true);
+    send({ type: 'request_runtime_hint', question_id: questionId });
+  }, [sessionId, send]);
+
+  const handleRegenerateRuntimeHint = useCallback(
+    (reason: string) => {
+      if (!sessionId) return;
+      const planState = usePlanStore.getState().plan;
+      let questionId = '';
+      if (planState) {
+        const { currentQuestionIndex } = useSessionStore.getState();
+        const allQuestions = planState.phases.flatMap((p) => p.questions);
+        if (currentQuestionIndex < allQuestions.length) {
+          questionId = allQuestions[currentQuestionIndex].id;
+        }
+      }
+      useHintStore.getState().setRuntimeHintLoading(true);
+      send({
+        type: 'request_runtime_hint',
+        question_id: questionId,
+        regenerate: true,
+        regeneration_reason: reason,
+      });
+    },
+    [sessionId, send],
+  );
+
+  const handleAcknowledgeRuntimeHint = useCallback(
+    (hintId: string, quality: string) => {
+      useHintStore.getState().acknowledgeRuntimeHint(
+        hintId,
+        quality as 'well_received' | 'partially_received' | 'not_understood',
+      );
+      send({
+        type: 'acknowledge_runtime_hint',
+        hint_id: hintId,
+        quality,
+      });
+    },
+    [send],
+  );
+
   // ── Question navigation ────────────────────────────────────────────
 
   const navigateToQuestion = useCallback(
@@ -243,6 +298,9 @@ export function LiveSessionPage() {
             <HintPanel
               onRequestHint={handleRequestHint}
               onAcknowledge={handleAcknowledgeHint}
+              onRequestRuntimeHint={handleRequestRuntimeHint}
+              onRegenerateRuntimeHint={handleRegenerateRuntimeHint}
+              onAcknowledgeRuntimeHint={handleAcknowledgeRuntimeHint}
             />
           </div>
         </main>

@@ -189,6 +189,7 @@ describe('TranscriptPanel', () => {
       hintSignal: 'none',
       timestamp: '2024-01-01T00:00:00Z',
       provider: 'mock',
+      dimensions: null,
     });
 
     render(withWS(<TranscriptPanel />));
@@ -201,8 +202,9 @@ describe('TranscriptPanel', () => {
 
 describe('HintPanel', () => {
   const handlers = {
-    onRequestHint: vi.fn(),
-    onAcknowledge: vi.fn(),
+    onRequestRuntimeHint: vi.fn(),
+    onRegenerateRuntimeHint: vi.fn(),
+    onAcknowledgeRuntimeHint: vi.fn(),
   };
 
   beforeEach(() => {
@@ -210,102 +212,82 @@ describe('HintPanel', () => {
     useHintStore.getState().clear();
   });
 
-  it('shows "No active hint" when empty', () => {
+  it('shows Generate Smart Hint button', () => {
     render(<HintPanel {...handlers} />);
-    expect(screen.getByText('No active hint')).toBeInTheDocument();
+    expect(screen.getByText('Generate Smart Hint')).toBeInTheDocument();
   });
 
-  it('shows Show Hint button when level < 3', () => {
+  it('calls onRequestRuntimeHint when button clicked', () => {
     render(<HintPanel {...handlers} />);
-    expect(screen.getByText(/Show Hint/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Generate Smart Hint'));
+    expect(handlers.onRequestRuntimeHint).toHaveBeenCalledOnce();
   });
 
-  it('calls onRequestHint when button clicked', () => {
-    render(<HintPanel {...handlers} />);
-    fireEvent.click(screen.getByText(/Show Hint/));
-    expect(handlers.onRequestHint).toHaveBeenCalledOnce();
+  const makeRuntimeHint = (overrides: Partial<import('@/stores/hint-store').RuntimeHintEntry> = {}) => ({
+    hintId: 'rh1',
+    questionId: 'q1',
+    text: 'Consider using a hash map for O(1) lookups',
+    directness: 'moderate' as const,
+    isRegeneration: false,
+    regenerationReason: null,
+    generationNumber: 1,
+    latencyMs: 500,
+    provider: 'mock',
+    timestamp: '2024-01-01T00:00:00Z',
+    feedback: null,
+    ...overrides,
   });
 
-  it('renders active hint with level badge', () => {
-    useHintStore.getState().setActiveHint({
-      id: 'h1',
-      questionId: 'q1',
-      level: 2,
-      text: 'Consider using a hash map for O(1) lookups',
-      displayedAt: '2024-01-01T00:00:00Z',
-      interviewerUsed: false,
-      candidateResponseQuality: 'none',
-      timeToRespondMs: null,
-    });
+  it('renders active runtime hint with directness badge', () => {
+    useHintStore.getState().setActiveRuntimeHint(makeRuntimeHint());
 
     render(<HintPanel {...handlers} />);
-    expect(screen.getByText('Guide')).toBeInTheDocument();
-    // Text appears in both active hint card and timeline; use getAllByText
+    expect(screen.getByText('Moderate')).toBeInTheDocument();
     const matches = screen.getAllByText('Consider using a hash map for O(1) lookups');
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('shows quality feedback buttons for unused hints', () => {
-    useHintStore.getState().setActiveHint({
-      id: 'h1',
-      questionId: 'q1',
-      level: 1,
+  it('shows feedback buttons for hints without feedback', () => {
+    useHintStore.getState().setActiveRuntimeHint(makeRuntimeHint({
       text: 'Think about the data structure',
-      displayedAt: '2024-01-01T00:00:00Z',
-      interviewerUsed: false,
-      candidateResponseQuality: 'none',
-      timeToRespondMs: null,
-    });
+      directness: 'subtle',
+    }));
 
     render(<HintPanel {...handlers} />);
-    expect(screen.getByText('Got It')).toBeInTheDocument();
+    expect(screen.getByText('Well received')).toBeInTheDocument();
     expect(screen.getByText('Partially')).toBeInTheDocument();
-    expect(screen.getByText('No Response')).toBeInTheDocument();
+    expect(screen.getByText('Not understood')).toBeInTheDocument();
   });
 
-  it('calls onAcknowledge with correct quality', () => {
-    useHintStore.getState().setActiveHint({
-      id: 'h1',
-      questionId: 'q1',
-      level: 1,
+  it('calls onAcknowledgeRuntimeHint with correct quality', () => {
+    useHintStore.getState().setActiveRuntimeHint(makeRuntimeHint({
       text: 'Hint text',
-      displayedAt: '2024-01-01T00:00:00Z',
-      interviewerUsed: false,
-      candidateResponseQuality: 'none',
-      timeToRespondMs: null,
-    });
+      directness: 'direct',
+    }));
 
     render(<HintPanel {...handlers} />);
-    fireEvent.click(screen.getByText('Got It'));
-    expect(handlers.onAcknowledge).toHaveBeenCalledWith('h1', 'full');
+    fireEvent.click(screen.getByText('Well received'));
+    expect(handlers.onAcknowledgeRuntimeHint).toHaveBeenCalledWith('rh1', 'well_received');
   });
 
-  it('renders hint signal indicator', () => {
-    useHintStore.getState().setHintSignal('guide');
+  it('shows feedback badge after acknowledgement', () => {
+    useHintStore.getState().setActiveRuntimeHint(makeRuntimeHint({
+      text: 'Hint text',
+      feedback: 'well_received',
+    }));
+
     render(<HintPanel {...handlers} />);
-    expect(screen.getByRole('status')).toBeInTheDocument();
-    expect(screen.getByText(/hint recommended/i)).toBeInTheDocument();
+    expect(screen.getByText('well received')).toBeInTheDocument();
   });
 
-  it('responds to H keyboard shortcut', () => {
+  it('shows Regenerate button', () => {
+    useHintStore.getState().setActiveRuntimeHint(makeRuntimeHint({
+      text: 'Some hint',
+      directness: 'subtle',
+    }));
+
     render(<HintPanel {...handlers} />);
-    fireEvent.keyDown(document, { key: 'H' });
-    expect(handlers.onRequestHint).toHaveBeenCalledOnce();
-  });
-
-  it('does not trigger H shortcut in input fields', () => {
-    const { container } = render(
-      <div>
-        <input data-testid="input" />
-        <HintPanel {...handlers} />
-      </div>,
-    );
-    const input = container.querySelector('input')!;
-    // Dispatch native event with input as target
-    const event = new KeyboardEvent('keydown', { key: 'H', bubbles: true });
-    Object.defineProperty(event, 'target', { value: input });
-    document.dispatchEvent(event);
-    expect(handlers.onRequestHint).not.toHaveBeenCalled();
+    expect(screen.getByText('Regenerate')).toBeInTheDocument();
   });
 });
 

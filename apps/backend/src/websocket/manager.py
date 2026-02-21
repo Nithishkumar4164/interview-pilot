@@ -195,6 +195,14 @@ class ConnectionManager:
             "payload": {"sv_id": sv_id, "transcripts": transcripts},
         })
 
+    async def send_context_reloaded(self, session_id: str, data: dict) -> None:
+        """Send confirmation that question context has been reloaded."""
+        await self.broadcast(session_id, {
+            "type": "context_reloaded",
+            "session_id": session_id,
+            "payload": data,
+        })
+
 
 # Global singleton
 dashboard_manager = ConnectionManager()

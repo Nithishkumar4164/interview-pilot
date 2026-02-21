@@ -219,6 +219,11 @@ export function useWebSocket(sessionId: string | null) {
           break;
         }
 
+        case 'context_reloaded': {
+          useSessionStore.getState().setContextReloading(false);
+          break;
+        }
+
         case 'error': {
           const p = message.payload as Record<string, unknown>;
           console.error('[WS] Server error:', p.message || p);

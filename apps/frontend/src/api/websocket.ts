@@ -17,7 +17,8 @@ export type WSMessageType =
   | 'error'
   | 'speaker_snapshot'
   | 'speaker_transcript_assigned'
-  | 'sv_transcripts';
+  | 'sv_transcripts'
+  | 'context_reloaded';
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;

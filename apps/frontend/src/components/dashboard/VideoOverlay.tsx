@@ -38,7 +38,7 @@ export function VideoOverlay({ stream, cropRegion, onCropChange, onClone, onClos
   const offset = useRef({ x: 0, y: 0 });
 
   // Docked-mode vertical resize state
-  const [dockedHeight, setDockedHeight] = useState(200);
+  const [dockedHeight, setDockedHeight] = useState(360);
   const dockResizing = useRef(false);
   const dockResizeStart = useRef({ y: 0, h: 0 });
 

@@ -85,6 +85,8 @@ async def list_sessions(
                 "focus_areas": s.focus_areas,
                 "started_at": s.started_at.isoformat() if s.started_at else None,
                 "ended_at": s.ended_at.isoformat() if s.ended_at else None,
+                "candidate_name": s.candidate_name,
+                "candidate_email": s.candidate_email,
                 "created_at": s.created_at.isoformat() if s.created_at else "",
                 **_extract_report_fields(s.reports),
                 "plan_id": _extract_plan_id(s.plans),

@@ -39,6 +39,9 @@ export interface StartSessionRequest {
   level?: string;
   duration_minutes?: number;
   focus_areas?: string[];
+  candidate_name?: string;
+  candidate_email?: string;
+  resume_data?: Record<string, unknown> | null;
 }
 
 export async function startSession(data: StartSessionRequest) {
@@ -127,6 +130,8 @@ export interface SessionListItem {
   started_at: string | null;
   ended_at: string | null;
   created_at: string;
+  candidate_name: string | null;
+  candidate_email: string | null;
   report_id: string | null;
   report_status: string | null;
   recommendation: string | null;

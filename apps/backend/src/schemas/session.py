@@ -27,6 +27,9 @@ class CreateSessionRequest(BaseModel):
     job_description: str | None = None
     custom_notes: str | None = None
     resume_reference_id: str | None = None
+    candidate_name: str | None = None
+    candidate_email: str | None = None
+    resume_data: dict | None = None
 
 
 class SessionResponse(BaseModel):

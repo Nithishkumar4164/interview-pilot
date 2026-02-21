@@ -39,3 +39,38 @@ class TriggerHintRequest(BaseModel):
 class AcknowledgeHintRequest(BaseModel):
     interviewer_used: bool = True
     candidate_response_quality: HintResponseQuality = HintResponseQuality.NONE
+
+
+# ── Runtime Hint Schemas ─────────────────────────────────────────────
+
+
+class RuntimeHintDirectness(str, Enum):
+    SUBTLE = "subtle"
+    MODERATE = "moderate"
+    DIRECT = "direct"
+
+
+class RegenerationReason(str, Enum):
+    TOO_DIRECT = "too_direct"
+    NOT_USEFUL = "not_useful"
+    OFF_TOPIC = "off_topic"
+    OTHER = "other"
+
+
+class RuntimeHintRequest(BaseModel):
+    question_id: str
+    regenerate: bool = False
+    regeneration_reason: RegenerationReason | None = None
+    preferred_directness: RuntimeHintDirectness | None = None
+
+
+class RuntimeHintResponse(BaseModel):
+    hint_id: str
+    question_id: str
+    text: str
+    directness: RuntimeHintDirectness
+    is_regeneration: bool = False
+    regeneration_reason: RegenerationReason | None = None
+    generation_number: int = 1
+    latency_ms: float = 0
+    provider: str = ""

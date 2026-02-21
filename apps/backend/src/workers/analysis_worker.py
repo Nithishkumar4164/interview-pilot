@@ -15,9 +15,11 @@ from datetime import UTC, datetime
 
 from src.llm.failover import FailoverManager
 from src.schemas.transcript import SpeakerRole, TranscriptEventSchema
+from src.schemas.hint import RuntimeHintRequest
 from src.services.analysis_service import AnalysisService
 from src.services.contradiction_service import ContradictionService
 from src.services.memory_service import MemoryService
+from src.services.runtime_hint_service import RuntimeHintService
 from src.utils.logging import get_logger
 from src.websocket.manager import dashboard_manager
 
@@ -52,6 +54,7 @@ class AnalysisWorker:
         self.memory = MemoryService(session_id, failover_manager)
         self.analysis = AnalysisService(session_id, failover_manager, self.memory)
         self.contradictions = ContradictionService(session_id, failover_manager)
+        self.runtime_hints = RuntimeHintService(session_id, failover_manager, self.memory)
 
         # Rate limiting
         self._last_analysis_time: float = 0
@@ -147,8 +150,11 @@ class AnalysisWorker:
             # Run analysis
             result = await self.analysis.analyze_utterance(speaker, text)
 
+            # Feed insight to runtime hint service
+            self.runtime_hints.add_insight(result)
+
             # Push analysis to dashboard
-            await dashboard_manager.send_analysis(self.session_id, result.to_dict())
+            await dashboard_manager.send_analysis(self.session_id, result.model_dump())
 
             # Check for red flags
             if result.red_flags:
@@ -186,6 +192,32 @@ class AnalysisWorker:
     def set_active_hint(self, hint_text: str) -> None:
         """Update the active hint."""
         self.analysis.set_active_hint(hint_text)
+
+    def set_question_plan(self, question_data: dict) -> None:
+        """Propagate question plan to analysis and runtime hint services."""
+        self.analysis.set_question_plan(question_data)
+        self.runtime_hints.set_question(question_data)
+
+    async def handle_runtime_hint_request(self, request_data: dict) -> dict:
+        """Handle a runtime hint generation request."""
+        request = RuntimeHintRequest.model_validate(request_data)
+        response = await self.runtime_hints.generate_hint(request)
+        return response.model_dump()
+
+    async def handle_runtime_hint_ack(self, data: dict) -> None:
+        """Handle runtime hint acknowledgment for logging."""
+        hint_id = data.get("hint_id", "")
+        quality = data.get("quality", "none")
+        question_id = data.get("question_id", "")
+        text = data.get("text", "")
+
+        # Record in memory service
+        self.memory.add_hint_interaction({
+            "type": "runtime",
+            "hint_id": hint_id,
+            "question_id": question_id,
+            "quality": quality,
+        })
 
     def get_recent_transcripts(self, limit: int = 50) -> list[dict]:
         """Return recent transcript events for catch-up replay."""

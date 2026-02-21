@@ -8,8 +8,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { DashboardWSClient, type WSMessage } from '@/api/websocket';
 import { useTranscriptStore } from '@/stores/transcript-store';
 import { useSpeakerStore } from '@/stores/speaker-store';
-import { useAnalysisStore } from '@/stores/analysis-store';
-import { useHintStore } from '@/stores/hint-store';
+import { useAnalysisStore, mapDimensions } from '@/stores/analysis-store';
+import { useHintStore, type RuntimeHintEntry } from '@/stores/hint-store';
 import { useOfflineStore } from '@/stores/offline-store';
 import { useSessionStore } from '@/stores/session-store';
 
@@ -28,6 +28,8 @@ export function useWebSocket(sessionId: string | null) {
   const updateScores = useAnalysisStore((s) => s.updateScores);
   const setActiveHint = useHintStore((s) => s.setActiveHint);
   const setHintSignal = useHintStore((s) => s.setHintSignal);
+  const setActiveRuntimeHint = useHintStore((s) => s.setActiveRuntimeHint);
+  const setRuntimeHintLoading = useHintStore((s) => s.setRuntimeHintLoading);
   const setWSStatus = useOfflineStore((s) => s.setWSStatus);
   const setBackendStatus = useOfflineStore((s) => s.setBackendStatus);
   const setProviderStatus = useOfflineStore((s) => s.setProviderStatus);
@@ -63,10 +65,11 @@ export function useWebSocket(sessionId: string | null) {
             onTrack: (p.on_track as boolean) ?? true,
             insight: (p.insight as string) || '',
             redFlags: (p.red_flags as string[]) || [],
-            suggestionForInterviewer: (p.suggestion as string) || '',
+            suggestionForInterviewer: (p.suggestion_for_interviewer as string) || (p.suggestion as string) || '',
             hintSignal: (p.hint_signal as string) || 'none',
             timestamp: message.timestamp,
             provider: (p.provider as string) || 'unknown',
+            dimensions: mapDimensions(p.dimensions as Record<string, unknown> | null),
           });
 
           // Propagate hint signal
@@ -121,6 +124,26 @@ export function useWebSocket(sessionId: string | null) {
             candidateResponseQuality: 'none',
             timeToRespondMs: null,
           });
+          break;
+        }
+
+        case 'runtime_hint': {
+          const p = message.payload as Record<string, unknown>;
+          setRuntimeHintLoading(false);
+          const runtimeHint: RuntimeHintEntry = {
+            hintId: (p.hint_id as string) || crypto.randomUUID(),
+            questionId: (p.question_id as string) || '',
+            text: (p.text as string) || '',
+            directness: (p.directness as RuntimeHintEntry['directness']) || 'moderate',
+            isRegeneration: (p.is_regeneration as boolean) ?? false,
+            regenerationReason: (p.regeneration_reason as RuntimeHintEntry['regenerationReason']) || null,
+            generationNumber: (p.generation_number as number) ?? 1,
+            latencyMs: (p.latency_ms as number) ?? 0,
+            provider: (p.provider as string) || 'unknown',
+            timestamp: message.timestamp,
+            feedback: null,
+          };
+          setActiveRuntimeHint(runtimeHint);
           break;
         }
 
@@ -221,8 +244,8 @@ export function useWebSocket(sessionId: string | null) {
     [
       addEntry, addCatchupEntries, updateEntrySpeaker, applySnapshot, setSvTranscripts,
       addAnalysis, addRedFlag, setCodeAnalysis, updateScores,
-      setActiveHint, setHintSignal, setProviderStatus,
-      setSessionStatus, setCurrentQuestion,
+      setActiveHint, setHintSignal, setActiveRuntimeHint, setRuntimeHintLoading,
+      setProviderStatus, setSessionStatus, setCurrentQuestion,
     ],
   );
 

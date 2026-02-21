@@ -163,6 +163,37 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                         snap = svc.speaker_service.get_speaker_snapshot()
                         await dashboard_manager.send_speaker_snapshot(session_id, snap)
 
+                # ── Runtime hint handlers ─────────────────────────
+                elif msg_type == "request_runtime_hint":
+                    worker = _active_workers.get(session_id)
+                    if worker:
+                        try:
+                            hint_result = await worker.handle_runtime_hint_request(message)
+                            await dashboard_manager.send_runtime_hint(
+                                session_id, hint_result,
+                            )
+                        except Exception as e:
+                            logger.error(
+                                "runtime_hint_error",
+                                session_id=session_id,
+                                error=str(e),
+                            )
+                            await dashboard_manager.send_error(
+                                session_id, f"Runtime hint failed: {e}",
+                            )
+
+                elif msg_type == "acknowledge_runtime_hint":
+                    worker = _active_workers.get(session_id)
+                    if worker:
+                        try:
+                            await worker.handle_runtime_hint_ack(message)
+                        except Exception as e:
+                            logger.error(
+                                "runtime_hint_ack_error",
+                                session_id=session_id,
+                                error=str(e),
+                            )
+
                 elif msg_type == "get_sv_transcripts":
                     sv_id = message.get("sv_id", "")
                     svc = _active_sessions.get(session_id)

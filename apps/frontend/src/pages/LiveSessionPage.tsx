@@ -231,6 +231,7 @@ export function LiveSessionPage() {
         video: { displaySurface: 'browser' } as MediaTrackConstraints,
         audio: false,
       });
+      window.focus();
       setVideoStream(stream);
       setOverlays([{ id: crypto.randomUUID(), cropRegion: null, mode: 'floating' }]);
     } catch {

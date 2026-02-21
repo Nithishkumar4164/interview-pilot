@@ -288,6 +288,8 @@ export function LiveSessionPage() {
             <InterviewPlanPanel
               onAdvanceQuestion={handleAdvanceQuestion}
               onGoToQuestion={handleGoToQuestion}
+              onRequestHint={handleRequestHint}
+              onAcknowledgeHint={handleAcknowledgeHint}
             />
           </div>
 
@@ -296,8 +298,6 @@ export function LiveSessionPage() {
             <ScoreRings />
             <CodePanel />
             <HintPanel
-              onRequestHint={handleRequestHint}
-              onAcknowledge={handleAcknowledgeHint}
               onRequestRuntimeHint={handleRequestRuntimeHint}
               onRegenerateRuntimeHint={handleRegenerateRuntimeHint}
               onAcknowledgeRuntimeHint={handleAcknowledgeRuntimeHint}

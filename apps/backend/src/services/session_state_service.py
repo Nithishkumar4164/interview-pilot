@@ -100,6 +100,39 @@ class SessionStateService:
     def remove_state(self, session_id: str) -> None:
         self._states.pop(session_id, None)
 
+    def update_from_worker(self, session_id: str, worker_data: dict) -> None:
+        """Update session state from AnalysisWorker.to_dict() output.
+
+        Populates transcript_count, analysis_count, scores, rolling_summary,
+        and facts from the worker's current state.
+        """
+        state = self.get_state(session_id)
+
+        state.transcript_count = worker_data.get("events_processed", state.transcript_count)
+        state.analysis_count = worker_data.get("analyses_run", state.analysis_count)
+
+        # Extract memory data
+        memory = worker_data.get("memory", {})
+        if memory:
+            fact_store = memory.get("fact_store", {})
+            if fact_store:
+                state.facts = fact_store
+            rolling_summary = memory.get("rolling_summary", "")
+            if rolling_summary:
+                state.rolling_summary = rolling_summary
+
+        # Extract analysis scores
+        analysis = worker_data.get("analysis", {})
+        if analysis:
+            recent = analysis.get("recent_analyses", [])
+            if recent:
+                scored = [a for a in recent if a.get("answer_quality", 0) > 0]
+                if scored:
+                    avg = sum(a["answer_quality"] for a in scored) / len(scored)
+                    state.scores["problem_solving"] = round(avg, 1)
+
+        state.mark_dirty()
+
     async def save_snapshot(self, session_id: str, db: AsyncSession) -> None:
         """Persist current state as a snapshot to PostgreSQL."""
         state = self._states.get(session_id)

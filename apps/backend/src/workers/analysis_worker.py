@@ -112,6 +112,23 @@ class AnalysisWorker:
         if event.is_final:
             self._transcript_history.append(transcript_event)
 
+            # Persist final transcripts to DB
+            try:
+                from src.dependencies import get_persistence_service
+                persistence = get_persistence_service()
+                persistence.enqueue_transcript(
+                    self.session_id,
+                    speaker_role=speaker,
+                    text=event.text,
+                    is_final=True,
+                    confidence=event.confidence,
+                    timestamp=event.timestamp,
+                    channel=event.channel,
+                    is_retroactive=event.is_retroactive,
+                )
+            except Exception:
+                logger.warning("persistence_enqueue_failed", type="transcript")
+
         # 3. Only run analysis on final candidate utterances with rate limiting
         if (
             event.is_final
@@ -155,6 +172,30 @@ class AnalysisWorker:
 
             # Push analysis to dashboard
             await dashboard_manager.send_analysis(self.session_id, result.model_dump())
+
+            # Persist analysis event to DB
+            try:
+                from src.dependencies import get_persistence_service
+                persistence = get_persistence_service()
+                persistence.enqueue_analysis(
+                    self.session_id,
+                    answer_quality=result.answer_quality,
+                    on_track=result.on_track,
+                    insight=result.insight,
+                    red_flags=result.red_flags if result.red_flags else None,
+                    suggestion=result.suggestion_for_interviewer or None,
+                    hint_signal=result.hint_signal,
+                )
+            except Exception:
+                logger.warning("persistence_enqueue_failed", type="analysis")
+
+            # Update session state
+            try:
+                from src.dependencies import get_session_state_service
+                sss = get_session_state_service()
+                sss.update_from_worker(self.session_id, self.to_dict())
+            except Exception:
+                logger.warning("session_state_update_failed")
 
             # Check for red flags
             if result.red_flags:
@@ -222,6 +263,17 @@ class AnalysisWorker:
         self.runtime_hints._recent_insights.clear()
         # 4. Reset rate limiter so first utterance on new question is analyzed immediately
         self._last_analysis_time = 0
+
+        # 5. Update session state with new question context
+        try:
+            from src.dependencies import get_session_state_service
+            sss = get_session_state_service()
+            state = sss.get_state(self.session_id)
+            state.plan_progress["current_question_index"] = question_index
+            state.active_question_id = question_plan.get("id")
+            state.mark_dirty()
+        except Exception:
+            logger.warning("session_state_question_update_failed")
 
     async def handle_runtime_hint_request(self, request_data: dict) -> dict:
         """Handle a runtime hint generation request."""

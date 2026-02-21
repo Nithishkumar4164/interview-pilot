@@ -11,9 +11,11 @@ from src.websocket.audio_handler import router as audio_ws_router
 from src.websocket.code_handler import router as code_ws_router
 from src.websocket.dashboard_handler import router as dashboard_ws_router
 from src.services.session_state_service import SessionStateService
+from src.services.persistence_service import PersistenceService
 from src.utils.logging import setup_logging
 
 session_state_service = SessionStateService()
+persistence_service = PersistenceService(async_session_factory)
 
 
 @asynccontextmanager
@@ -27,9 +29,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Start periodic session state snapshots
     session_state_service.start_periodic_snapshots(async_session_factory)
 
+    # Start persistence service
+    await persistence_service.start()
+
     yield
 
     # Shutdown
+    await persistence_service.stop()
     health_monitor.stop()
     session_state_service.stop_periodic_snapshots()
 

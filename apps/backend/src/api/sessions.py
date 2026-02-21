@@ -93,6 +93,130 @@ async def get_session(
     }
 
 
+@router.get("/{session_id}/state")
+async def get_session_state(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Get full session state for recovery after page reload.
+
+    Returns session metadata, recent transcripts, analyses, hints,
+    and plan data for restoring the frontend.
+    """
+    session_repo = SessionRepository(db)
+    db_session = await session_repo.get_by_id(uuid.UUID(session_id))
+
+    if db_session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        )
+
+    # Compute elapsed time
+    elapsed_ms = 0
+    if db_session.started_at:
+        if db_session.ended_at:
+            elapsed_ms = int((db_session.ended_at - db_session.started_at).total_seconds() * 1000)
+        else:
+            elapsed_ms = int((datetime.now(UTC) - db_session.started_at).total_seconds() * 1000)
+
+    # Fetch recent transcripts from DB
+    from src.repositories.transcript_repo import TranscriptRepository
+    transcript_repo = TranscriptRepository(db)
+    transcripts = await transcript_repo.get_session_transcripts(
+        uuid.UUID(session_id), final_only=True, limit=200
+    )
+
+    # Fetch recent analyses from DB
+    from src.repositories.analysis_repo import AnalysisEventRepository
+    analysis_repo = AnalysisEventRepository(db)
+    analyses = await analysis_repo.get_recent(uuid.UUID(session_id), count=50)
+
+    # Fetch hint events from DB
+    from src.repositories.hint_repo import HintEventRepository
+    hint_repo = HintEventRepository(db)
+    hints = await hint_repo.get_session_hints(uuid.UUID(session_id))
+
+    # Fetch plan data
+    from sqlalchemy import select
+    from src.models.plan import InterviewPlan
+    plan_result = await db.execute(
+        select(InterviewPlan)
+        .where(InterviewPlan.session_id == uuid.UUID(session_id))
+        .where(InterviewPlan.is_active == True)  # noqa: E712
+        .order_by(InterviewPlan.version.desc())
+        .limit(1)
+    )
+    plan = plan_result.scalar_one_or_none()
+
+    # Get session state snapshot (in-memory or from DB)
+    snapshot_data = None
+    try:
+        from src.dependencies import get_session_state_service
+        sss = get_session_state_service()
+        state = sss._states.get(session_id)
+        if state:
+            snapshot_data = state.to_snapshot()
+        else:
+            recovered = await sss.recover_session(session_id, db)
+            if recovered:
+                snapshot_data = recovered.to_snapshot()
+    except Exception:
+        pass
+
+    return {
+        "session": {
+            "id": str(db_session.id),
+            "status": db_session.status,
+            "level": db_session.level,
+            "duration_minutes": db_session.duration_minutes,
+            "elapsed_ms": elapsed_ms,
+            "started_at": db_session.started_at.isoformat() if db_session.started_at else None,
+            "ended_at": db_session.ended_at.isoformat() if db_session.ended_at else None,
+        },
+        "transcripts": [
+            {
+                "id": str(t.id),
+                "speaker_role": t.speaker_role,
+                "text": t.text,
+                "is_final": t.is_final,
+                "confidence": t.confidence,
+                "timestamp": t.timestamp,
+                "channel": t.channel,
+                "is_retroactive": t.is_retroactive,
+            }
+            for t in transcripts
+        ],
+        "analyses": [
+            {
+                "answer_quality": a.answer_quality,
+                "on_track": a.on_track,
+                "insight": a.insight,
+                "red_flags": a.red_flags or [],
+                "suggestion": a.suggestion,
+                "hint_signal": a.hint_signal,
+                "timestamp": a.created_at.isoformat() if a.created_at else "",
+            }
+            for a in analyses
+        ],
+        "hints": [
+            {
+                "id": str(h.id),
+                "question_id": h.question_id,
+                "level": h.level,
+                "text": h.text,
+                "displayed_at": h.displayed_at,
+                "interviewer_used": h.interviewer_used,
+                "candidate_response_quality": h.candidate_response_quality,
+            }
+            for h in hints
+        ],
+        "plan": plan.plan_data if plan else None,
+        "plan_id": str(plan.id) if plan else None,
+        "snapshot": snapshot_data,
+    }
+
+
 @router.post("/{session_id}/go-live")
 async def go_live(
     session_id: str,
@@ -191,9 +315,83 @@ async def end_session(
     db_session.status = SessionStatus.ENDED
     db_session.ended_at = now
     await session_repo.update(db_session)
+
+    # Generate report from in-memory worker data
+    report_id = None
+    try:
+        from src.websocket.audio_handler import _active_workers
+        from src.websocket.code_handler import _active_analyzers
+        from src.dependencies import failover_manager, get_session_state_service
+        from src.services.report_service import ReportService
+        from src.models.report import Report
+        from src.repositories.report_repo import ReportRepository
+
+        worker = _active_workers.get(session_id)
+        hint_service = _hint_services.get(session_id)
+        code_analyzer = _active_analyzers.get(session_id)
+
+        if worker and hint_service:
+            # Calculate duration
+            duration_minutes = db_session.duration_minutes
+            if db_session.started_at:
+                elapsed = (now - db_session.started_at).total_seconds() / 60.0
+                duration_minutes = round(elapsed, 1)
+
+            report_service = ReportService(failover_manager)
+            generated = await report_service.generate_report(
+                session_id=session_id,
+                memory=worker.memory,
+                analysis=worker.analysis,
+                code_analysis=code_analyzer,
+                hints=hint_service,
+                contradictions=worker.contradictions,
+                duration_minutes=duration_minutes,
+                target_level=db_session.level,
+            )
+
+            # Persist report to DB
+            report_repo = ReportRepository(db)
+            report = Report(
+                id=uuid.UUID(generated.id),
+                session_id=uuid.UUID(session_id),
+                report_data={
+                    "scores": [s.model_dump() for s in generated.scores],
+                    "key_moments": [m.model_dump() for m in generated.key_moments],
+                    "strengths": generated.strengths,
+                    "areas_for_growth": generated.areas_for_growth,
+                    "level_comparison": generated.level_comparison,
+                    "hint_summary": generated.hint_summary,
+                    "generated_at": generated.generated_at,
+                },
+                recommendation=generated.recommendation.value,
+                confidence_level=generated.confidence_level,
+                is_final=True,
+            )
+            await report_repo.create(report)
+            report_id = str(report.id)
+
+        # Save final session snapshot
+        try:
+            sss = get_session_state_service()
+            await sss.save_snapshot(session_id, db)
+            sss.remove_state(session_id)
+        except Exception:
+            pass
+
+    except Exception as e:
+        # Report generation failure should not block session end
+        import logging
+        logging.getLogger("api.sessions").error(f"Report generation failed: {e}")
+
     await db.commit()
 
-    return {"status": "ended", "session_id": session_id}
+    # Cleanup in-memory services
+    _hint_services.pop(session_id, None)
+
+    result = {"status": "ended", "session_id": session_id}
+    if report_id:
+        result["report_id"] = report_id
+    return result
 
 
 @router.post("/{session_id}/hints/next")
@@ -230,7 +428,31 @@ async def acknowledge_hint(
     session_id: str,
     hint_id: str,
     req: AcknowledgeHintRequest,
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
+    """Acknowledge a hint with usage and response metrics."""
+    # Update in-memory state
+    service = _hint_services.get(session_id)
+    if service:
+        service.acknowledge_hint(
+            hint_id=hint_id,
+            interviewer_used=req.interviewer_used,
+            candidate_response_quality=req.candidate_response_quality,
+        )
+
+    # Update DB record
+    try:
+        from src.repositories.hint_repo import HintEventRepository
+        hint_repo = HintEventRepository(db)
+        quality_str = req.candidate_response_quality.value if hasattr(req.candidate_response_quality, "value") else str(req.candidate_response_quality)
+        await hint_repo.update_acknowledgment(
+            hint_id=uuid.UUID(hint_id),
+            interviewer_used=req.interviewer_used,
+            candidate_response_quality=quality_str,
+        )
+    except (ValueError, Exception):
+        pass  # hint_id may not be a valid UUID or may not exist in DB yet
+
     return {
         "hint_id": hint_id,
         "acknowledged": True,

@@ -58,6 +58,15 @@ export interface SessionState {
   goToQuestion: (index: number) => void;
   resetQuestionTimer: () => void;
   setContextReloading: (loading: boolean) => void;
+  restoreFromServer: (data: {
+    sessionId: string;
+    status: SessionStatus;
+    level: string;
+    durationMinutes: number;
+    elapsedMs: number;
+    startedAt: string | null;
+    currentQuestionIndex?: number;
+  }) => void;
   reset: () => void;
 }
 
@@ -128,6 +137,25 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   resetQuestionTimer: () => set({ questionStartedAtMs: get().elapsedMs }),
 
   setContextReloading: (loading) => set({ contextReloading: loading }),
+
+  restoreFromServer: (data) => {
+    const allQ = getAllPlanQuestions();
+    const questionIndex = data.currentQuestionIndex ?? 0;
+    const q = allQ[questionIndex];
+    set({
+      sessionId: data.sessionId,
+      status: data.status,
+      level: data.level,
+      durationMinutes: data.durationMinutes,
+      elapsedMs: data.elapsedMs,
+      startedAt: data.startedAt,
+      currentQuestionIndex: questionIndex,
+      totalQuestions: allQ.length,
+      currentQuestionText: q?.text ?? '',
+      currentPhaseIndex: q ? getPhaseIndexForQuestion(questionIndex) : 0,
+      questionStartedAtMs: data.elapsedMs,
+    });
+  },
 
   reset: () =>
     set({

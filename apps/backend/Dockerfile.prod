@@ -1,0 +1,32 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install uv for fast dependency management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Copy dependency files
+COPY pyproject.toml ./
+
+# Install production dependencies only (no dev extras) + gunicorn
+RUN uv pip install --system . gunicorn
+
+# Copy source code
+COPY . .
+
+# Non-root user
+RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8000
+
+# Gunicorn with Uvicorn workers
+# - 2 workers (suitable for 4GB VPS; adjust via GUNICORN_WORKERS env)
+# - 120s timeout for long LLM calls
+CMD ["gunicorn", "src.main:app", \
+     "-k", "uvicorn.workers.UvicornWorker", \
+     "-w", "2", \
+     "-b", "0.0.0.0:8000", \
+     "--timeout", "120", \
+     "--graceful-timeout", "30", \
+     "--access-logfile", "-"]

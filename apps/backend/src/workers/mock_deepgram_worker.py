@@ -91,10 +91,10 @@ class MockDeepgramWorker:
     async def _emit_transcript(self, channel: str) -> None:
         """Emit a synthetic transcript result for the given channel."""
         if channel == "tab":
-            utterances = _INTERVIEWER_UTTERANCES
+            utterances = _CANDIDATE_UTTERANCES
             speaker_id = 0
         else:
-            utterances = _CANDIDATE_UTTERANCES
+            utterances = _INTERVIEWER_UTTERANCES
             speaker_id = 1
 
         idx = self._utterance_index.get(channel, 0)

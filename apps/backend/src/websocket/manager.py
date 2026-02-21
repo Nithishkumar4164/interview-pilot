@@ -91,6 +91,12 @@ class ConnectionManager:
 
     async def send_transcript(self, session_id: str, event: dict) -> None:
         """Send a transcript event to all dashboard connections."""
+        if not self.has_connections(session_id):
+            logger.warning(
+                "transcript_dropped_no_clients",
+                session_id=session_id,
+                text_preview=event.get("text", "")[:50],
+            )
         await self.broadcast(session_id, {
             "type": "transcript",
             "session_id": session_id,

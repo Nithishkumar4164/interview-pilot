@@ -39,6 +39,22 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
     """
     await dashboard_manager.connect(session_id, websocket)
 
+    # Send catch-up transcripts if session is already active
+    from src.websocket.audio_handler import _active_workers
+
+    worker = _active_workers.get(session_id)
+    if worker:
+        recent = worker.get_recent_transcripts()
+        if recent:
+            await dashboard_manager.send_catchup(session_id, {
+                "events": recent,
+            })
+            logger.info(
+                "dashboard_catchup_sent",
+                session_id=session_id,
+                event_count=len(recent),
+            )
+
     # Per-connection event filter (empty = receive all)
     subscribed_types: set[str] = set()
 

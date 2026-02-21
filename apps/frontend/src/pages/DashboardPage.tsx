@@ -27,6 +27,8 @@ export function DashboardPage() {
   const setPlanError = usePlanStore((s) => s.setPlanError);
   const resumeStatus = usePlanStore((s) => s.resume.status);
 
+  const [candidateName, setCandidateName] = useState('');
+  const [candidateEmail, setCandidateEmail] = useState('');
   const [level, setLevel] = useState('sde2');
   const [duration, setDuration] = useState(60);
   const [focusAreas, setFocusAreas] = useState<string[]>(['coding']);
@@ -86,6 +88,9 @@ export function DashboardPage() {
         level,
         duration_minutes: duration,
         focus_areas: focusAreas,
+        candidate_name: candidateName || undefined,
+        candidate_email: candidateEmail || undefined,
+        resume_data: resolvedResumeData,
       });
       const sessionId = sessionResult.session_id;
       const label = LEVELS.find((l) => l.value === level)?.label ?? level;
@@ -110,7 +115,7 @@ export function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [level, duration, focusAreas, navigate, setSession, setPlan, setPlanStatus, setPlanError, waitForResume]);
+  }, [level, duration, focusAreas, candidateName, candidateEmail, navigate, setSession, setPlan, setPlanStatus, setPlanError, waitForResume]);
 
   return (
     <div className="dashboard-page">
@@ -135,6 +140,28 @@ export function DashboardPage() {
 
       <section className="dashboard-page__start" aria-label="Start Interview">
         <h2>New Interview</h2>
+
+        <div className="form-group">
+          <label htmlFor="candidate-name">Candidate Name</label>
+          <input
+            id="candidate-name"
+            type="text"
+            placeholder="e.g. Jane Doe"
+            value={candidateName}
+            onChange={(e) => setCandidateName(e.target.value)}
+          />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="candidate-email">Candidate Email</label>
+          <input
+            id="candidate-email"
+            type="email"
+            placeholder="e.g. jane@example.com"
+            value={candidateEmail}
+            onChange={(e) => setCandidateEmail(e.target.value)}
+          />
+        </div>
 
         <div className="form-group">
           <label>Resume (Optional)</label>

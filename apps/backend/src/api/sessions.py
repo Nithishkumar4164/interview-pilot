@@ -56,6 +56,9 @@ async def start_session(
         focus_areas=req.focus_areas,
         job_description=req.job_description,
         custom_notes=req.custom_notes,
+        candidate_name=req.candidate_name,
+        candidate_email=req.candidate_email,
+        resume_data=req.resume_data,
     )
     await session_repo.create(db_session)
     await db.commit()

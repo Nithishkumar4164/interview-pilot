@@ -90,7 +90,12 @@ export function SessionsPage() {
 
   const filtered = sessions.filter((s) => {
     if (filter !== 'all' && s.status !== filter) return false;
-    if (search && !s.id.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const matchesId = s.id.toLowerCase().includes(q);
+      const matchesName = s.candidate_name?.toLowerCase().includes(q);
+      if (!matchesId && !matchesName) return false;
+    }
     return true;
   });
 
@@ -207,7 +212,7 @@ export function SessionsPage() {
         <input
           className="sessions-page__search"
           type="text"
-          placeholder="Enter Session ID"
+          placeholder="Search by name or session ID"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -273,6 +278,9 @@ export function SessionsPage() {
                     >
                       {copiedId === s.id ? 'Copied!' : s.id.slice(0, 8)}
                     </span>
+                    {s.candidate_name && (
+                      <span className="session-card__candidate">{s.candidate_name}</span>
+                    )}
                     <span className="session-card__level">
                       {LEVEL_LABELS[s.level] ?? s.level}
                     </span>

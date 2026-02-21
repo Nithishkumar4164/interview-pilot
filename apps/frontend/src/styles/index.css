@@ -3717,6 +3717,16 @@ ul, ol {
   background: var(--color-surface-hover);
 }
 
+.session-card__candidate {
+  font-weight: 500;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .session-card__level {
   font-weight: 600;
   font-size: var(--text-sm);

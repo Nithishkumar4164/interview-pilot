@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import BaseModel
@@ -20,6 +20,9 @@ class InterviewSession(BaseModel):
     focus_areas: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     job_description: Mapped[str | None] = mapped_column(String, nullable=True)
     custom_notes: Mapped[str | None] = mapped_column(String, nullable=True)
+    candidate_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    candidate_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    resume_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

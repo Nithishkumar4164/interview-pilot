@@ -7,6 +7,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { DashboardWSClient, type WSMessage } from '@/api/websocket';
 import { useTranscriptStore } from '@/stores/transcript-store';
+import { useSpeakerStore } from '@/stores/speaker-store';
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { useHintStore } from '@/stores/hint-store';
 import { useOfflineStore } from '@/stores/offline-store';
@@ -18,6 +19,9 @@ export function useWebSocket(sessionId: string | null) {
   // Grab store actions (stable references from Zustand)
   const addEntry = useTranscriptStore((s) => s.addEntry);
   const addCatchupEntries = useTranscriptStore((s) => s.addCatchupEntries);
+  const updateEntrySpeaker = useTranscriptStore((s) => s.updateEntrySpeaker);
+  const applySnapshot = useSpeakerStore((s) => s.applySnapshot);
+  const setSvTranscripts = useSpeakerStore((s) => s.setSvTranscripts);
   const addAnalysis = useAnalysisStore((s) => s.addAnalysis);
   const addRedFlag = useAnalysisStore((s) => s.addRedFlag);
   const setCodeAnalysis = useAnalysisStore((s) => s.setCodeAnalysis);
@@ -46,6 +50,8 @@ export function useWebSocket(sessionId: string | null) {
             timestamp: message.timestamp,
             channel: (p.channel as string) || 'unknown',
             isRetroactive: (p.is_retroactive as boolean) ?? false,
+            rootSpeakerId: (p.root_speaker_id as string) || '',
+            speechVectorId: (p.speech_vector_id as string) || '',
           });
           break;
         }
@@ -142,6 +148,8 @@ export function useWebSocket(sessionId: string | null) {
                 timestamp: (e.timestamp as string) || message.timestamp,
                 channel: (e.channel as string) || 'unknown',
                 isRetroactive: true,
+                rootSpeakerId: (e.root_speaker_id as string) || '',
+                speechVectorId: (e.speech_vector_id as string) || '',
               })),
             );
           }
@@ -154,6 +162,36 @@ export function useWebSocket(sessionId: string | null) {
           const status = p.status as string;
           if (provider && status) {
             setProviderStatus(provider, status);
+          }
+          break;
+        }
+
+        case 'speaker_snapshot': {
+          const p = message.payload as Record<string, unknown>;
+          applySnapshot({
+            root_speakers: (p.root_speakers as Record<string, unknown>) as any,
+            speech_vectors: (p.speech_vectors as Record<string, unknown>) as any,
+          });
+          break;
+        }
+
+        case 'speaker_transcript_assigned': {
+          const p = message.payload as Record<string, unknown>;
+          const tid = p.transcript_id as string;
+          const newRsId = p.new_root_speaker_id as string;
+          const newSvId = p.new_speech_vector_id as string;
+          if (tid) {
+            updateEntrySpeaker(tid, newRsId, newSvId);
+          }
+          break;
+        }
+
+        case 'sv_transcripts': {
+          const p = message.payload as Record<string, unknown>;
+          const svId = p.sv_id as string;
+          const transcripts = p.transcripts as Array<{ id: string; text: string }>;
+          if (svId && transcripts) {
+            setSvTranscripts(svId, transcripts);
           }
           break;
         }
@@ -181,9 +219,10 @@ export function useWebSocket(sessionId: string | null) {
       }
     },
     [
-      addEntry, addCatchupEntries, addAnalysis, addRedFlag,
-      setCodeAnalysis, updateScores, setActiveHint, setHintSignal,
-      setProviderStatus, setSessionStatus, setCurrentQuestion,
+      addEntry, addCatchupEntries, updateEntrySpeaker, applySnapshot, setSvTranscripts,
+      addAnalysis, addRedFlag, setCodeAnalysis, updateScores,
+      setActiveHint, setHintSignal, setProviderStatus,
+      setSessionStatus, setCurrentQuestion,
     ],
   );
 
@@ -198,6 +237,8 @@ export function useWebSocket(sessionId: string | null) {
         setWSStatus('connected');
         setBackendStatus('connected');
         setReconnectAttempts(0);
+        // Request the speaker snapshot so the panel updates when audio session exists
+        client.send({ type: 'get_speaker_snapshot' });
       },
       onClose: () => {
         console.log('[useWebSocket] onClose — session:', sessionId);

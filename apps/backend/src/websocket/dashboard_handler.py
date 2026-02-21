@@ -40,7 +40,7 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
     await dashboard_manager.connect(session_id, websocket)
 
     # Send catch-up transcripts if session is already active
-    from src.websocket.audio_handler import _active_workers
+    from src.websocket.audio_handler import _active_workers, _active_sessions
 
     worker = _active_workers.get(session_id)
     if worker:
@@ -54,6 +54,12 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                 session_id=session_id,
                 event_count=len(recent),
             )
+
+    # Send speaker snapshot on connect
+    service = _active_sessions.get(session_id)
+    if service:
+        snapshot = service.speaker_service.get_speaker_snapshot()
+        await dashboard_manager.send_speaker_snapshot(session_id, snapshot)
 
     # Per-connection event filter (empty = receive all)
     subscribed_types: set[str] = set()
@@ -85,6 +91,94 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                             "type": "subscribed",
                             "event_types": list(subscribed_types),
                         })
+
+                # ── Speaker management handlers ──────────────────────
+                elif msg_type == "get_speaker_snapshot":
+                    svc = _active_sessions.get(session_id)
+                    if svc:
+                        snap = svc.speaker_service.get_speaker_snapshot()
+                    else:
+                        # No audio session yet — return defaults so the
+                        # panel is never empty.
+                        from src.services.speaker_service import SpeakerService
+                        snap = SpeakerService(session_id).get_speaker_snapshot()
+                    await dashboard_manager.send_speaker_snapshot(session_id, snap)
+
+                elif msg_type == "create_root_speaker":
+                    svc = _active_sessions.get(session_id)
+                    if svc:
+                        svc.speaker_service.create_root_speaker(
+                            label=message.get("label", "Speaker"),
+                            color=message.get("color"),
+                        )
+                        snap = svc.speaker_service.get_speaker_snapshot()
+                        await dashboard_manager.send_speaker_snapshot(session_id, snap)
+
+                elif msg_type == "rename_root_speaker":
+                    svc = _active_sessions.get(session_id)
+                    if svc:
+                        svc.speaker_service.rename_root_speaker(
+                            rs_id=message.get("rs_id", ""),
+                            label=message.get("label", ""),
+                        )
+                        snap = svc.speaker_service.get_speaker_snapshot()
+                        await dashboard_manager.send_speaker_snapshot(session_id, snap)
+
+                elif msg_type == "delete_root_speaker":
+                    svc = _active_sessions.get(session_id)
+                    if svc:
+                        svc.speaker_service.delete_root_speaker(
+                            rs_id=message.get("rs_id", ""),
+                        )
+                        snap = svc.speaker_service.get_speaker_snapshot()
+                        await dashboard_manager.send_speaker_snapshot(session_id, snap)
+
+                elif msg_type == "reassign_speech_vector":
+                    svc = _active_sessions.get(session_id)
+                    if svc:
+                        svc.speaker_service.reassign_speech_vector(
+                            sv_id=message.get("sv_id", ""),
+                            target_rs_id=message.get("target_rs_id", ""),
+                        )
+                        snap = svc.speaker_service.get_speaker_snapshot()
+                        await dashboard_manager.send_speaker_snapshot(session_id, snap)
+
+                elif msg_type == "reassign_transcript":
+                    svc = _active_sessions.get(session_id)
+                    if svc:
+                        new_sv_id = svc.speaker_service.reassign_transcript(
+                            transcript_id=message.get("transcript_id", ""),
+                            source_sv_id=message.get("source_sv_id", ""),
+                            target_rs_id=message.get("target_rs_id", ""),
+                        )
+                        await dashboard_manager.send_speaker_transcript_assigned(
+                            session_id,
+                            {
+                                "transcript_id": message.get("transcript_id", ""),
+                                "new_root_speaker_id": message.get("target_rs_id", ""),
+                                "new_speech_vector_id": new_sv_id,
+                            },
+                        )
+                        # Also broadcast updated snapshot
+                        snap = svc.speaker_service.get_speaker_snapshot()
+                        await dashboard_manager.send_speaker_snapshot(session_id, snap)
+
+                elif msg_type == "get_sv_transcripts":
+                    sv_id = message.get("sv_id", "")
+                    svc = _active_sessions.get(session_id)
+                    worker = _active_workers.get(session_id)
+                    if svc and worker and sv_id:
+                        sv = svc.speaker_service._speech_vectors.get(sv_id)
+                        if sv:
+                            tid_set = set(sv.transcript_ids)
+                            matching = [
+                                {"id": t["id"], "text": t["text"]}
+                                for t in worker._transcript_history
+                                if t["id"] in tid_set
+                            ]
+                            await dashboard_manager.send_sv_transcripts(
+                                session_id, sv_id, matching,
+                            )
 
     except WebSocketDisconnect:
         logger.info(

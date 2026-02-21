@@ -21,7 +21,6 @@ from src.schemas.report import (
     KeyMomentSchema,
     Recommendation,
 )
-from src.services.analysis_service import AnalysisResult
 from src.services.contradiction_service import Contradiction
 from src.services.hint_service import ActiveHint
 from src.services.memory_service import FactStore
@@ -127,11 +126,11 @@ class ReportInput:
     session_id: str
     duration_minutes: float
     target_level: str
-    fact_store: FactStore
-    analysis_results: list[AnalysisResult]
-    hint_events: list[ActiveHint]
-    hint_metrics: HintResponseMetricsSchema
-    contradictions: list[Contradiction]
+    fact_store: FactStore | dict | str
+    analysis_results: list  # EnhancedAnalysisResult or dict
+    hint_events: list  # ActiveHint or dict
+    hint_metrics: HintResponseMetricsSchema | dict
+    contradictions: list  # Contradiction or dict
     transcript_summary: str
     code_progress: str
     detected_approach: str | None = None

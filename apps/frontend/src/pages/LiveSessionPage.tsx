@@ -349,11 +349,6 @@ export function LiveSessionPage() {
         },
       });
 
-      try {
-        await api.triggerNextHint(sessionId, q.id);
-      } catch {
-        // non-critical — hints will still work via manual trigger
-      }
     },
     [sessionId, send],
   );

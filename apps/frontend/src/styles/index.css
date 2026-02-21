@@ -3668,6 +3668,22 @@ ul, ol {
 .session-card__status--paused   { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
 .session-card__status--ended    { background: rgba(107, 113, 148, 0.15); color: var(--color-text-secondary); }
 
+.session-card__id {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  background: var(--color-bg-tertiary);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.session-card__id:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
+
 .session-card__level {
   font-weight: 600;
   font-size: var(--text-sm);

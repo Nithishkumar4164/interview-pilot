@@ -70,6 +70,7 @@ export function SessionsPage() {
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -254,6 +255,18 @@ export function SessionsPage() {
                   <div className="session-card__top-row">
                     <span className={`session-card__status session-card__status--${s.status}`}>
                       {s.status}
+                    </span>
+                    <span
+                      className="session-card__id"
+                      title="Click to copy full ID"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(s.id);
+                        setCopiedId(s.id);
+                        setTimeout(() => setCopiedId((prev) => prev === s.id ? null : prev), 1500);
+                      }}
+                    >
+                      {copiedId === s.id ? 'Copied!' : s.id.slice(0, 8)}
                     </span>
                     <span className="session-card__level">
                       {LEVEL_LABELS[s.level] ?? s.level}

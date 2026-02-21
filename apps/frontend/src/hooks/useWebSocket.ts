@@ -8,7 +8,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { DashboardWSClient, type WSMessage } from '@/api/websocket';
 import { useTranscriptStore } from '@/stores/transcript-store';
 import { useSpeakerStore } from '@/stores/speaker-store';
-import { useAnalysisStore, mapDimensions } from '@/stores/analysis-store';
+import { useAnalysisStore, mapDimensions, type CodeRatingResult } from '@/stores/analysis-store';
 import { useHintStore, type RuntimeHintEntry } from '@/stores/hint-store';
 import { useOfflineStore } from '@/stores/offline-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -30,6 +30,8 @@ export function useWebSocket(sessionId: string | null) {
   const setHintSignal = useHintStore((s) => s.setHintSignal);
   const setActiveRuntimeHint = useHintStore((s) => s.setActiveRuntimeHint);
   const setRuntimeHintLoading = useHintStore((s) => s.setRuntimeHintLoading);
+  const setCodeRating = useAnalysisStore((s) => s.setCodeRating);
+  const setCodeRatingLoading = useAnalysisStore((s) => s.setCodeRatingLoading);
   const setWSStatus = useOfflineStore((s) => s.setWSStatus);
   const setBackendStatus = useOfflineStore((s) => s.setBackendStatus);
   const setProviderStatus = useOfflineStore((s) => s.setProviderStatus);
@@ -224,6 +226,35 @@ export function useWebSocket(sessionId: string | null) {
           break;
         }
 
+        case 'code_rating': {
+          const p = message.payload as Record<string, unknown>;
+          if (p.error) {
+            setCodeRatingLoading(false);
+            console.error('[WS] Code rating error:', p.error);
+            break;
+          }
+          const rating: CodeRatingResult = {
+            questionId: (p.question_id as string) || '',
+            approachMatch: (p.approach_match as string) || 'unclear',
+            approachName: (p.approach_name as string) || 'N/A',
+            correctness: (p.correctness as string) || 'incorrect',
+            correctnessIssues: (p.correctness_issues as string[]) || [],
+            complexityActual: (p.complexity_actual as { time?: string; space?: string }) || {},
+            complexityExpected: (p.complexity_expected as { time?: string; space?: string }) || {},
+            complexityMatch: (p.complexity_match as boolean) ?? false,
+            pitfallsHit: (p.pitfalls_hit as string[]) || [],
+            pitfallsAvoided: (p.pitfalls_avoided as string[]) || [],
+            strengths: (p.strengths as string[]) || [],
+            improvementAreas: (p.improvement_areas as string[]) || [],
+            overallScore: (p.overall_score as number) ?? 0,
+            summary: (p.summary as string) || '',
+            latencyMs: (p.latency_ms as number) ?? 0,
+            provider: (p.provider as string) || 'unknown',
+          };
+          setCodeRating(rating);
+          break;
+        }
+
         case 'error': {
           const p = message.payload as Record<string, unknown>;
           console.error('[WS] Server error:', p.message || p);
@@ -250,6 +281,7 @@ export function useWebSocket(sessionId: string | null) {
       addEntry, addCatchupEntries, updateEntrySpeaker, applySnapshot, setSvTranscripts,
       addAnalysis, addRedFlag, setCodeAnalysis, updateScores,
       setActiveHint, setHintSignal, setActiveRuntimeHint, setRuntimeHintLoading,
+      setCodeRating, setCodeRatingLoading,
       setProviderStatus, setSessionStatus, setCurrentQuestion,
     ],
   );

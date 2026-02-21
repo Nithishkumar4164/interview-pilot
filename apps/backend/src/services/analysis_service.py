@@ -94,6 +94,37 @@ hint_signal:
   guide = Candidate is stuck, needs a concept-level hint
   direct = Candidate is very stuck, needs explicit direction"""
 
+CODE_RATING_SYSTEM_PROMPT = """You are a code evaluation assistant for a live technical interview.
+
+You are given the interview question, the expected approaches (brute force and optimal),
+known common pitfalls, and the candidate's submitted code or pseudocode.
+
+Evaluate the candidate's code against the known solutions and pitfalls.
+
+Respond in JSON with this exact structure:
+{
+  "approach_match": "<optimal|brute_force|partial_optimal|novel|unclear>",
+  "approach_name": "<name of the matched approach or 'N/A'>",
+  "correctness": "<correct|mostly_correct|partially_correct|incorrect>",
+  "correctness_issues": ["<list of correctness issues, empty if none>"],
+  "complexity_actual": {"time": "<big-O>", "space": "<big-O>"},
+  "complexity_expected": {"time": "<big-O>", "space": "<big-O>"},
+  "complexity_match": <true/false>,
+  "pitfalls_hit": ["<pitfalls from the known list that the code falls into>"],
+  "pitfalls_avoided": ["<pitfalls from the known list that the code avoids>"],
+  "strengths": ["<positive aspects of the code>"],
+  "improvement_areas": ["<specific suggestions for improvement>"],
+  "overall_score": <1-5 integer>,
+  "summary": "<2-3 sentence overall assessment>"
+}
+
+Score scale:
+  1 = Incorrect or fundamentally flawed
+  2 = Partially correct but major issues
+  3 = Adequate — works but suboptimal or has notable gaps
+  4 = Good — solid solution with minor issues
+  5 = Excellent — optimal or near-optimal, clean and correct"""
+
 HINT_RECEPTION_BLOCK = """"hint_reception": {
       "score": "<excellent|good|adequate|weak|poor>",
       "acted_on_hint": <true/false>,
@@ -377,6 +408,97 @@ class AnalysisService:
                 error=str(e),
             )
             return None
+
+    async def rate_candidate_code(self, code: str, language: str = "unknown") -> dict:
+        """Rate candidate code against the question plan's known solutions and pitfalls."""
+        # Build user content from question plan context
+        parts = []
+
+        if self._current_question:
+            parts.append(f"## Interview Question\n{self._current_question}")
+
+        if self._question_plan:
+            qp = self._question_plan
+            brute = qp.get("brute_force_approach")
+            if brute:
+                if isinstance(brute, dict):
+                    parts.append(f"## Brute Force Approach\nName: {brute.get('name', 'N/A')}\nComplexity: {brute.get('expected_complexity', {})}\nSteps: {brute.get('key_steps', [])}")
+                else:
+                    parts.append(f"## Brute Force Approach\n{brute}")
+
+            approaches = qp.get("optimal_approaches") or qp.get("optimal_approach")
+            if approaches:
+                if isinstance(approaches, list):
+                    for i, a in enumerate(approaches, 1):
+                        if isinstance(a, dict):
+                            parts.append(f"## Optimal Approach {i}\nName: {a.get('name', 'N/A')}\nComplexity: {a.get('expected_complexity', {})}\nSteps: {a.get('key_steps', [])}")
+                        else:
+                            parts.append(f"## Optimal Approach {i}\n{a}")
+                else:
+                    parts.append(f"## Optimal Approach\n{approaches}")
+
+            pitfalls = qp.get("common_pitfalls")
+            if pitfalls:
+                if isinstance(pitfalls, list):
+                    parts.append("## Common Pitfalls\n" + "\n".join(f"- {p}" for p in pitfalls))
+                else:
+                    parts.append(f"## Common Pitfalls\n{pitfalls}")
+
+        parts.append(f"## Candidate's Code (language: {language})\n```{language}\n{code}\n```")
+
+        user_content = "\n\n".join(parts)
+
+        try:
+            result = await self._failover.analyze(
+                AnalysisContext(
+                    system_prompt=CODE_RATING_SYSTEM_PROMPT,
+                    user_content=user_content,
+                    task_type=TaskType.CODE_RATING,
+                ),
+                LLMConfig(
+                    max_tokens=800,
+                    temperature=0.2,
+                    response_format="json",
+                ),
+                session_id=self.session_id,
+            )
+
+            data = result.parsed
+            if not data:
+                try:
+                    data = json.loads(result.content)
+                except json.JSONDecodeError:
+                    data = {}
+
+            return {
+                "approach_match": data.get("approach_match", "unclear"),
+                "approach_name": data.get("approach_name", "N/A"),
+                "correctness": data.get("correctness", "incorrect"),
+                "correctness_issues": data.get("correctness_issues", []),
+                "complexity_actual": data.get("complexity_actual", {}),
+                "complexity_expected": data.get("complexity_expected", {}),
+                "complexity_match": data.get("complexity_match", False),
+                "pitfalls_hit": data.get("pitfalls_hit", []),
+                "pitfalls_avoided": data.get("pitfalls_avoided", []),
+                "strengths": data.get("strengths", []),
+                "improvement_areas": data.get("improvement_areas", []),
+                "overall_score": min(5, max(1, int(data.get("overall_score", 3)))),
+                "summary": data.get("summary", ""),
+                "latency_ms": result.latency_ms,
+                "provider": result.provider,
+            }
+
+        except Exception as e:
+            logger.error(
+                "code_rating_failed",
+                session_id=self.session_id,
+                error=str(e),
+            )
+            return {
+                "error": str(e),
+                "overall_score": 0,
+                "summary": f"Rating unavailable: {e}",
+            }
 
     def get_recent_analyses(self, count: int = 5) -> list[EnhancedAnalysisResult]:
         """Get the most recent analysis results."""

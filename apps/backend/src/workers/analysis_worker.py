@@ -229,6 +229,15 @@ class AnalysisWorker:
         response = await self.runtime_hints.generate_hint(request)
         return response.model_dump()
 
+    async def handle_code_rating(self, data: dict) -> dict:
+        """Handle a code rating request from the dashboard."""
+        code = data.get("code", "")
+        language = data.get("language", "unknown")
+        question_id = data.get("question_id", "")
+        result = await self.analysis.rate_candidate_code(code, language)
+        result["question_id"] = question_id
+        return result
+
     async def handle_runtime_hint_ack(self, data: dict) -> None:
         """Handle runtime hint acknowledgment for logging."""
         hint_id = data.get("hint_id", "")

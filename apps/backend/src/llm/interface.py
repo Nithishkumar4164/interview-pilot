@@ -11,6 +11,7 @@ class TaskType(str, Enum):
     REPORT_GENERATION = "report_generation"
     HINT_GENERATION = "hint_generation"
     RUNTIME_HINT_GENERATION = "runtime_hint_generation"
+    CODE_RATING = "code_rating"
     SUMMARY_COMPRESSION = "summary_compression"
     RESUME_EXTRACTION = "resume_extraction"
     QUESTION_GENERATION = "question_generation"

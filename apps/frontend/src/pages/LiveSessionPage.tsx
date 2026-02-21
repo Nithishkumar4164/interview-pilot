@@ -201,6 +201,26 @@ export function LiveSessionPage() {
     [send],
   );
 
+  // ── Code Rating Handler ────────────────────────────────────────────
+
+  const handleRateCode = useCallback(
+    (code: string, language: string) => {
+      if (!sessionId) return;
+      const planState = usePlanStore.getState().plan;
+      let questionId = '';
+      if (planState) {
+        const { currentQuestionIndex } = useSessionStore.getState();
+        const allQuestions = planState.phases.flatMap((p) => p.questions);
+        if (currentQuestionIndex < allQuestions.length) {
+          questionId = allQuestions[currentQuestionIndex].id;
+        }
+      }
+      useAnalysisStore.getState().setCodeRatingLoading(true);
+      send({ type: 'rate_code', code, language, question_id: questionId });
+    },
+    [sessionId, send],
+  );
+
   // ── Question navigation ────────────────────────────────────────────
 
   const navigateToQuestion = useCallback(
@@ -211,6 +231,7 @@ export function LiveSessionPage() {
 
       useSessionStore.getState().goToQuestion(newIndex);
       useHintStore.getState().clear();
+      useAnalysisStore.getState().clearCodeRating();
       useSessionStore.getState().setContextReloading(true);
 
       // Notify backend so analysis pipeline evaluates against the new question
@@ -309,6 +330,7 @@ export function LiveSessionPage() {
               onGoToQuestion={handleGoToQuestion}
               onRequestHint={handleRequestHint}
               onAcknowledgeHint={handleAcknowledgeHint}
+              onRateCode={handleRateCode}
             />
           </div>
 

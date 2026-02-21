@@ -331,6 +331,10 @@ async def end_session(
         hint_service = _hint_services.get(session_id)
         code_analyzer = _active_analyzers.get(session_id)
 
+        # Drain in-flight background tasks so snapshots capture complete data
+        if worker:
+            await worker.drain()
+
         # Calculate duration
         duration_minutes = db_session.duration_minutes
         if db_session.started_at:

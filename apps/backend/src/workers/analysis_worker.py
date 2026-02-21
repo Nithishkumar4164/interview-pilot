@@ -61,6 +61,13 @@ class AnalysisWorker:
         self._pending_analysis: bool = False
         self._analysis_lock = asyncio.Lock()
 
+        # Background analysis task tracking
+        self._bg_analysis_task: asyncio.Task | None = None
+
+        # Throttle interim transcript pushes (max once per 300ms)
+        self._last_interim_push: float = 0
+        _INTERIM_THROTTLE_S = 0.3
+
         # Transcript history for catch-up on dashboard connect
         self._transcript_history: list[dict] = []
 
@@ -80,15 +87,7 @@ class AnalysisWorker:
         self._events_processed += 1
         speaker = event.speaker_role.value
 
-        # 1. Always update memory (even for interim results)
-        await self.memory.add_utterance(
-            speaker=speaker,
-            text=event.text,
-            timestamp=event.timestamp,
-            is_final=event.is_final,
-        )
-
-        # 2. Push transcript to dashboard
+        # Build transcript event dict (used for dashboard + history + DB)
         transcript_event = {
             "id": event.id,
             "speaker_role": speaker,
@@ -101,12 +100,31 @@ class AnalysisWorker:
             "root_speaker_id": event.root_speaker_id,
             "speech_vector_id": event.speech_vector_id,
         }
-        await dashboard_manager.send_transcript(self.session_id, transcript_event)
+
+        # 1. Push transcripts to dashboard FIRST (never block on LLM).
+        #    Finals are always sent immediately.
+        #    Interims are throttled (max once per 300ms) to avoid
+        #    single-word flickering while keeping the live preview.
+        if event.is_final:
+            await dashboard_manager.send_transcript(self.session_id, transcript_event)
+        else:
+            now = asyncio.get_event_loop().time()
+            if now - self._last_interim_push >= self._INTERIM_THROTTLE_S:
+                self._last_interim_push = now
+                await dashboard_manager.send_transcript(self.session_id, transcript_event)
 
         # Broadcast speaker snapshot when a new speech vector was created
         if event.speaker_changed and self._get_speaker_snapshot is not None:
             snapshot = self._get_speaker_snapshot()
             await dashboard_manager.send_speaker_snapshot(self.session_id, snapshot)
+
+        # 2. Update memory with ALL events (non-blocking — LLM calls are background tasks)
+        await self.memory.add_utterance(
+            speaker=speaker,
+            text=event.text,
+            timestamp=event.timestamp,
+            is_final=event.is_final,
+        )
 
         # Store final transcripts for catch-up on dashboard reconnect
         if event.is_final:
@@ -137,15 +155,15 @@ class AnalysisWorker:
             and event.speaker_role == SpeakerRole.CANDIDATE
             and len(event.text.split()) > 5  # Skip very short utterances
         ):
-            await self._maybe_analyze(speaker, event.text)
+            self._schedule_analysis(speaker, event.text)
 
-    async def _maybe_analyze(self, speaker: str, text: str) -> None:
-        """Run analysis with rate limiting."""
+    def _schedule_analysis(self, speaker: str, text: str) -> None:
+        """Schedule analysis as a background task with rate limiting."""
         now = asyncio.get_event_loop().time()
         elapsed = now - self._last_analysis_time
 
         if elapsed < MIN_ANALYSIS_INTERVAL_S:
-            # Too soon — mark pending and schedule
+            # Too soon — mark pending and schedule after delay
             if not self._pending_analysis:
                 self._pending_analysis = True
                 delay = MIN_ANALYSIS_INTERVAL_S - elapsed
@@ -157,7 +175,10 @@ class AnalysisWorker:
                 )
             return
 
-        await self._run_analysis(speaker, text)
+        # Fire-and-forget — _analysis_lock prevents overlapping runs
+        self._bg_analysis_task = asyncio.create_task(
+            self._run_analysis(speaker, text)
+        )
 
     async def _run_analysis(self, speaker: str, text: str) -> None:
         """Execute the analysis + contradiction pipeline."""
@@ -310,6 +331,18 @@ class AnalysisWorker:
     def get_recent_transcripts(self, limit: int = 50) -> list[dict]:
         """Return recent transcript events for catch-up replay."""
         return self._transcript_history[-limit:]
+
+    async def drain(self) -> None:
+        """Flush all in-flight background work for safe shutdown.
+
+        Drains memory service tasks and any in-flight analysis task.
+        """
+        await self.memory.drain()
+        if self._bg_analysis_task and not self._bg_analysis_task.done():
+            try:
+                await asyncio.wait_for(self._bg_analysis_task, timeout=10.0)
+            except (asyncio.TimeoutError, Exception):
+                pass
 
     def stop(self) -> None:
         """Stop the worker."""

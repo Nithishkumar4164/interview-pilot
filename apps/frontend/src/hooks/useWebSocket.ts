@@ -15,6 +15,8 @@ import { useSessionStore } from '@/stores/session-store';
 
 export function useWebSocket(sessionId: string | null) {
   const clientRef = useRef<DashboardWSClient | null>(null);
+  const knownSvIds = useRef<Set<string>>(new Set());
+  const snapshotRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Grab store actions (stable references from Zustand)
   const addEntry = useTranscriptStore((s) => s.addEntry);
@@ -44,6 +46,7 @@ export function useWebSocket(sessionId: string | null) {
       switch (message.type) {
         case 'transcript': {
           const p = message.payload as Record<string, unknown>;
+          const svId = (p.speech_vector_id as string) || '';
           addEntry({
             id: (p.id as string) || crypto.randomUUID(),
             speakerRole: (p.speaker_role as 'interviewer' | 'candidate' | 'unknown') || 'unknown',
@@ -54,8 +57,20 @@ export function useWebSocket(sessionId: string | null) {
             channel: (p.channel as string) || 'unknown',
             isRetroactive: (p.is_retroactive as boolean) ?? false,
             rootSpeakerId: (p.root_speaker_id as string) || '',
-            speechVectorId: (p.speech_vector_id as string) || '',
+            speechVectorId: svId,
           });
+
+          // If transcript references a speech vector we haven't seen yet,
+          // request a speaker snapshot refresh (debounced to avoid spamming).
+          if (svId && !knownSvIds.current.has(svId)) {
+            knownSvIds.current.add(svId);
+            if (!snapshotRefreshTimer.current) {
+              snapshotRefreshTimer.current = setTimeout(() => {
+                snapshotRefreshTimer.current = null;
+                clientRef.current?.send({ type: 'get_speaker_snapshot' });
+              }, 500);
+            }
+          }
           break;
         }
 
@@ -177,9 +192,14 @@ export function useWebSocket(sessionId: string | null) {
 
         case 'speaker_snapshot': {
           const p = message.payload as Record<string, unknown>;
+          const svs = (p.speech_vectors as Record<string, unknown>) ?? {};
+          // Keep known SV IDs in sync so we don't re-request unnecessarily
+          for (const id of Object.keys(svs)) {
+            knownSvIds.current.add(id);
+          }
           applySnapshot({
             root_speakers: (p.root_speakers as Record<string, unknown>) as any,
-            speech_vectors: (p.speech_vectors as Record<string, unknown>) as any,
+            speech_vectors: svs as any,
           });
           break;
         }

@@ -198,6 +198,7 @@ async def get_session_state(
                 "suggestion": a.suggestion,
                 "hint_signal": a.hint_signal,
                 "timestamp": a.created_at.isoformat() if a.created_at else "",
+                "dimensions": a.dimensions,
             }
             for a in analyses
         ],

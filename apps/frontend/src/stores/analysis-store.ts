@@ -218,34 +218,29 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
         ? scored.reduce((sum, a) => sum + a.answerQuality, 0) / scored.length
         : 0;
 
-      // Derive communication and hintResponsiveness from dimensions
+      // Derive all dimension-based scores from full history
       const scoreUpdates: Partial<ScoreState> = {
         problemSolving: Math.round(avg * 10) / 10,
       };
 
-      if (entry.dimensions) {
-        const commScore = dimensionScoreToNumber(entry.dimensions.communicationQuality.score);
-        // Running average of communication scores
-        const withDims = analyses.filter((a) => a.dimensions && a.onTrack);
-        if (withDims.length > 0) {
-          const commAvg = withDims.reduce(
-            (sum, a) => sum + (a.dimensions ? dimensionScoreToNumber(a.dimensions.communicationQuality.score) : 0),
-            0,
-          ) / withDims.length;
-          scoreUpdates.communication = Math.round(commAvg * 10) / 10;
-        } else {
-          scoreUpdates.communication = commScore;
-        }
+      // Running average of communication scores
+      const withDims = analyses.filter((a) => a.dimensions && a.onTrack);
+      if (withDims.length > 0) {
+        const commAvg = withDims.reduce(
+          (sum, a) => sum + (a.dimensions ? dimensionScoreToNumber(a.dimensions.communicationQuality.score) : 0),
+          0,
+        ) / withDims.length;
+        scoreUpdates.communication = Math.round(commAvg * 10) / 10;
+      }
 
-        // Hint responsiveness from hint_reception dimension
-        const hintEntries = analyses.filter((a) => a.dimensions?.hintReception && a.onTrack);
-        if (hintEntries.length > 0) {
-          const hintAvg = hintEntries.reduce(
-            (sum, a) => sum + (a.dimensions?.hintReception ? dimensionScoreToNumber(a.dimensions.hintReception.score) : 0),
-            0,
-          ) / hintEntries.length;
-          scoreUpdates.hintResponsiveness = Math.round(hintAvg * 10) / 10;
-        }
+      // Hint responsiveness from hint_reception dimension
+      const hintEntries = analyses.filter((a) => a.dimensions?.hintReception && a.onTrack);
+      if (hintEntries.length > 0) {
+        const hintAvg = hintEntries.reduce(
+          (sum, a) => sum + (a.dimensions?.hintReception ? dimensionScoreToNumber(a.dimensions.hintReception.score) : 0),
+          0,
+        ) / hintEntries.length;
+        scoreUpdates.hintResponsiveness = Math.round(hintAvg * 10) / 10;
       }
 
       return {
@@ -303,7 +298,14 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
 
   setCodeRatingInput: (input) => set({ codeRatingInput: input }),
 
-  setCodeRating: (rating) => set({ codeRating: rating, codeRatingLoading: false }),
+  setCodeRating: (rating) => set((s) => ({
+    codeRating: rating,
+    codeRatingLoading: false,
+    scores: {
+      ...s.scores,
+      ...(rating ? { codeQuality: rating.overallScore } : {}),
+    },
+  })),
 
   setCodeRatingLoading: (loading) => set({ codeRatingLoading: loading }),
 

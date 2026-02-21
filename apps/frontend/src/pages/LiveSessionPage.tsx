@@ -124,7 +124,7 @@ export function LiveSessionPage() {
             hintSignal: a.hint_signal ?? 'none',
             timestamp: a.timestamp,
             provider: '',
-            dimensions: null,
+            dimensions: mapDimensions(a.dimensions),
           }));
           useAnalysisStore.getState().restoreAnalyses(analysisEntries);
         }

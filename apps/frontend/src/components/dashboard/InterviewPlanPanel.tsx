@@ -33,6 +33,7 @@ export function InterviewPlanPanel({
 }: InterviewPlanPanelProps) {
   const plan = usePlanStore((s) => s.plan);
   const currentQuestionIndex = useSessionStore((s) => s.currentQuestionIndex);
+  const contextReloading = useSessionStore((s) => s.contextReloading);
 
   const { givenLevels, history: hintHistory, hintSignal } = useHintStore();
 
@@ -136,7 +137,13 @@ export function InterviewPlanPanel({
 
       {/* Current Question Card */}
       {currentQuestion && (
-        <div className="current-question-card">
+        <div className="current-question-card" style={{ position: 'relative' }}>
+          {contextReloading && (
+            <div className="current-question-card__loading-overlay">
+              <span className="current-question-card__spinner" />
+              <span>Syncing context…</span>
+            </div>
+          )}
           <div className="current-question-card__header">
             <span className={`phase-section__badge phase-section__badge--${currentQuestion.phaseName}`}>
               {currentQuestion.phaseName.replace('_', ' ')}

@@ -46,6 +46,7 @@ export interface SessionState {
   currentQuestionText: string;
   currentPhaseIndex: number;
   questionStartedAtMs: number;
+  contextReloading: boolean;
 
   // Actions
   setSession: (id: string, level: string, duration: number) => void;
@@ -56,6 +57,7 @@ export interface SessionState {
   advanceQuestion: (delta: number) => void;
   goToQuestion: (index: number) => void;
   resetQuestionTimer: () => void;
+  setContextReloading: (loading: boolean) => void;
   reset: () => void;
 }
 
@@ -71,6 +73,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   currentQuestionText: '',
   currentPhaseIndex: 0,
   questionStartedAtMs: 0,
+  contextReloading: false,
 
   setSession: (id, level, duration) =>
     set({ sessionId: id, level, durationMinutes: duration, status: 'ready' }),
@@ -124,6 +127,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   resetQuestionTimer: () => set({ questionStartedAtMs: get().elapsedMs }),
 
+  setContextReloading: (loading) => set({ contextReloading: loading }),
+
   reset: () =>
     set({
       sessionId: null,
@@ -137,5 +142,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       currentQuestionText: '',
       currentPhaseIndex: 0,
       questionStartedAtMs: 0,
+      contextReloading: false,
     }),
 }));

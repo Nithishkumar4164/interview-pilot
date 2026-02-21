@@ -33,6 +33,11 @@ ENHANCED_ANALYSIS_SYSTEM_PROMPT = """You are a real-time interview analysis assi
 
 Analyze the candidate's most recent response in the context of the interview so far.
 
+IMPORTANT: Always evaluate the candidate's response against the CURRENT question
+provided in the context. The current question may change during the interview.
+Ignore prior question context in the interview summary — only the explicitly
+marked "Current Question" section reflects the active question.
+
 Respond in JSON with this exact structure:
 {
   "answer_quality": <1-5 integer>,

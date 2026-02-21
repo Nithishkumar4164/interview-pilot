@@ -198,6 +198,31 @@ class AnalysisWorker:
         self.analysis.set_question_plan(question_data)
         self.runtime_hints.set_question(question_data)
 
+    async def on_question_change(
+        self, question_text: str, question_plan: dict, question_index: int = 0
+    ) -> None:
+        """Handle a question navigation event from the dashboard.
+
+        Resets stale context so the analysis pipeline evaluates against the new question.
+        """
+        logger.info(
+            "question_change_started",
+            session_id=self.session_id,
+            question_index=question_index,
+            question_text=question_text[:80],
+        )
+        # 1. Force-compress + clear Tier 1 working memory
+        await self.memory.reset_for_new_question()
+        # 2. Update analysis service context
+        self.analysis.set_current_question(question_text)
+        self.analysis.set_question_plan(question_plan)
+        self.analysis.set_active_hint("")
+        # 3. Update runtime hint service
+        self.runtime_hints.set_question(question_plan)
+        self.runtime_hints._recent_insights.clear()
+        # 4. Reset rate limiter so first utterance on new question is analyzed immediately
+        self._last_analysis_time = 0
+
     async def handle_runtime_hint_request(self, request_data: dict) -> dict:
         """Handle a runtime hint generation request."""
         request = RuntimeHintRequest.model_validate(request_data)

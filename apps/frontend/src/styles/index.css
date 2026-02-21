@@ -2265,6 +2265,7 @@ ul, ol {
 
 /* Current Question Card */
 .current-question-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -2272,6 +2273,29 @@ ul, ol {
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
+}
+
+.current-question-card__loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  background: rgba(30, 34, 48, 0.85);
+  border-radius: var(--radius-lg);
+  z-index: 10;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.current-question-card__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 .current-question-card__header {

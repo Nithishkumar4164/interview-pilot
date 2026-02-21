@@ -251,6 +251,23 @@ class MemoryService:
         """Record a hint interaction in the fact store."""
         self.fact_store.hint_interactions.append(hint_data)
 
+    async def reset_for_new_question(self) -> None:
+        """Reset memory for a new question transition.
+
+        1. Force-compress pending utterances into rolling summary
+        2. Clear Tier 1 working memory
+        3. Keep Tier 2 (rolling summary) and Tier 3 (fact store) intact
+        """
+        if self._unsummarized_buffer:
+            await self._compress_summary()
+        self._working_memory.clear()
+        logger.info(
+            "memory_reset_for_new_question",
+            session_id=self.session_id,
+            summary_preserved=bool(self._rolling_summary),
+            facts_preserved=bool(self.fact_store.to_text()),
+        )
+
     # ── Context Assembly ──────────────────────────────────────────────
 
     def assemble_context(
@@ -263,6 +280,14 @@ class MemoryService:
         Returns a formatted string combining all tiers within token budgets.
         """
         parts = []
+
+        # Current question context (first for LLM primacy effect)
+        if question_text:
+            parts.append(f"## Current Question\n{question_text}")
+
+        # Active hints
+        if hint_text:
+            parts.append(f"## Active Hints\n{hint_text}")
 
         # Tier 3: Fact Store (most compressed, highest signal)
         facts_text = truncate_to_budget(
@@ -283,14 +308,6 @@ class MemoryService:
         if recent_text:
             recent_text = truncate_to_budget(recent_text, BUDGET_WORKING_MEMORY)
             parts.append(f"## Recent Conversation\n{recent_text}")
-
-        # Current question context
-        if question_text:
-            parts.append(f"## Current Question\n{question_text}")
-
-        # Active hints
-        if hint_text:
-            parts.append(f"## Active Hints\n{hint_text}")
 
         return "\n\n".join(parts)
 

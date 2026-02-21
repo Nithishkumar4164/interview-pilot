@@ -211,6 +211,26 @@ export function LiveSessionPage() {
 
       useSessionStore.getState().goToQuestion(newIndex);
       useHintStore.getState().clear();
+      useSessionStore.getState().setContextReloading(true);
+
+      // Notify backend so analysis pipeline evaluates against the new question
+      send({
+        type: 'change_question',
+        question_index: newIndex,
+        question_id: q.id,
+        question_text: q.text,
+        question_plan: {
+          id: q.id,
+          text: q.text,
+          category: q.category,
+          difficulty: q.difficulty,
+          time_minutes: q.time_minutes,
+          hints: q.hints,
+          brute_force_approach: q.brute_force_approach,
+          optimal_approaches: q.optimal_approaches,
+          common_pitfalls: q.common_pitfalls,
+        },
+      });
 
       try {
         await api.triggerNextHint(sessionId, q.id);
@@ -218,7 +238,7 @@ export function LiveSessionPage() {
         // non-critical — hints will still work via manual trigger
       }
     },
-    [sessionId],
+    [sessionId, send],
   );
 
   const handleAdvanceQuestion = useCallback(

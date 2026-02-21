@@ -194,6 +194,19 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                                 error=str(e),
                             )
 
+                elif msg_type == "change_question":
+                    worker = _active_workers.get(session_id)
+                    if worker:
+                        await worker.on_question_change(
+                            question_text=message.get("question_text", ""),
+                            question_plan=message.get("question_plan") or {},
+                            question_index=message.get("question_index", 0),
+                        )
+                        await dashboard_manager.send_context_reloaded(
+                            session_id,
+                            {"question_index": message.get("question_index", 0)},
+                        )
+
                 elif msg_type == "get_sv_transcripts":
                     sv_id = message.get("sv_id", "")
                     svc = _active_sessions.get(session_id)

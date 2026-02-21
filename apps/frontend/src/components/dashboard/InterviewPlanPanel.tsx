@@ -8,6 +8,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { usePlanStore } from '@/stores/plan-store';
 import { useSessionStore, getAllPlanQuestions } from '@/stores/session-store';
 import { useHintStore } from '@/stores/hint-store';
+import { useAnalysisStore, type CodeRatingResult } from '@/stores/analysis-store';
 import type { QuestionHint } from '@/stores/plan-store';
 import type { ApproachPattern } from '@/stores/plan-store';
 import { QuestionTimer } from './QuestionTimer';
@@ -23,6 +24,7 @@ interface InterviewPlanPanelProps {
   onGoToQuestion: (index: number) => void;
   onRequestHint: (level: number) => void;
   onAcknowledgeHint: (hintId: string, quality: 'none' | 'partial' | 'full') => void;
+  onRateCode: (code: string, language: string) => void;
 }
 
 export function InterviewPlanPanel({
@@ -30,6 +32,7 @@ export function InterviewPlanPanel({
   onGoToQuestion,
   onRequestHint,
   onAcknowledgeHint,
+  onRateCode,
 }: InterviewPlanPanelProps) {
   const plan = usePlanStore((s) => s.plan);
   const currentQuestionIndex = useSessionStore((s) => s.currentQuestionIndex);
@@ -220,6 +223,12 @@ export function InterviewPlanPanel({
               </>
             )}
           </div>
+
+          {/* Code Rating Section */}
+          <CodeRatingSection
+            questionId={currentQuestion.id}
+            onRateCode={onRateCode}
+          />
         </div>
       )}
 
@@ -387,6 +396,173 @@ function PhaseProgressBar({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function CodeRatingSection({
+  questionId,
+  onRateCode,
+}: {
+  questionId: string;
+  onRateCode: (code: string, language: string) => void;
+}) {
+  const [showRating, setShowRating] = useState(false);
+  const codeRatingInput = useAnalysisStore((s) => s.codeRatingInput);
+  const setCodeRatingInput = useAnalysisStore((s) => s.setCodeRatingInput);
+  const codeRating = useAnalysisStore((s) => s.codeRating);
+  const codeRatingLoading = useAnalysisStore((s) => s.codeRatingLoading);
+
+  return (
+    <div className="code-rating-section">
+      <button
+        className="plan-panel__section-toggle"
+        onClick={() => setShowRating(!showRating)}
+      >
+        {showRating ? 'Hide' : 'Show'} Code Rating
+      </button>
+
+      {showRating && (
+        <>
+          <textarea
+            className="code-rating-section__input"
+            value={codeRatingInput}
+            onChange={(e) => setCodeRatingInput(e.target.value)}
+            placeholder="Paste candidate's code or pseudocode here..."
+            rows={8}
+            maxLength={5000}
+          />
+          <div className="code-rating-section__actions">
+            <button
+              className="btn btn--primary btn--sm code-rating-section__btn"
+              disabled={codeRatingLoading || !codeRatingInput.trim()}
+              onClick={() => onRateCode(codeRatingInput, 'unknown')}
+            >
+              {codeRatingLoading ? (
+                <>
+                  <span className="current-question-card__spinner" />
+                  Rating...
+                </>
+              ) : (
+                'Rate Code'
+              )}
+            </button>
+          </div>
+
+          {codeRating && codeRating.questionId === questionId && (
+            <CodeRatingDisplay rating={codeRating} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function CodeRatingDisplay({ rating }: { rating: CodeRatingResult }) {
+  const scoreColor =
+    rating.overallScore >= 4 ? 'green' : rating.overallScore >= 3 ? 'amber' : 'red';
+
+  return (
+    <div className="code-rating-result">
+      {/* Score + Correctness */}
+      <div className={`code-rating-result__score code-rating-result__score--${scoreColor}`}>
+        <span className="code-rating-result__score-value">{rating.overallScore}/5</span>
+        <span className="code-rating-result__correctness">{rating.correctness.replace('_', ' ')}</span>
+      </div>
+
+      {/* Summary */}
+      <p className="code-rating-result__summary">{rating.summary}</p>
+
+      {/* Approach match */}
+      <div className="code-rating-result__row">
+        <span className="code-rating-result__label">Approach:</span>
+        <span className={`code-rating-result__badge code-rating-result__badge--${rating.approachMatch}`}>
+          {rating.approachMatch.replace('_', ' ')}
+        </span>
+        {rating.approachName !== 'N/A' && (
+          <span className="code-rating-result__approach-name">{rating.approachName}</span>
+        )}
+      </div>
+
+      {/* Complexity */}
+      <div className="code-rating-result__row">
+        <span className="code-rating-result__label">Complexity:</span>
+        <span>
+          Actual: T={rating.complexityActual.time || '?'} S={rating.complexityActual.space || '?'}
+        </span>
+        <span>
+          Expected: T={rating.complexityExpected.time || '?'} S={rating.complexityExpected.space || '?'}
+        </span>
+        {!rating.complexityMatch && (
+          <span className="code-rating-result__section-label--warning">Mismatch</span>
+        )}
+      </div>
+
+      {/* Correctness Issues */}
+      {rating.correctnessIssues.length > 0 && (
+        <div className="code-rating-result__section">
+          <span className="code-rating-result__section-label--danger">Correctness Issues</span>
+          <ul className="code-rating-result__list">
+            {rating.correctnessIssues.map((issue, i) => (
+              <li key={i}>{issue}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Pitfalls Hit */}
+      {rating.pitfallsHit.length > 0 && (
+        <div className="code-rating-result__section">
+          <span className="code-rating-result__section-label--danger">Pitfalls Hit</span>
+          <ul className="code-rating-result__list">
+            {rating.pitfallsHit.map((p, i) => (
+              <li key={i}>{p}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Pitfalls Avoided */}
+      {rating.pitfallsAvoided.length > 0 && (
+        <div className="code-rating-result__section">
+          <span className="code-rating-result__section-label--success">Pitfalls Avoided</span>
+          <ul className="code-rating-result__list">
+            {rating.pitfallsAvoided.map((p, i) => (
+              <li key={i}>{p}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Strengths */}
+      {rating.strengths.length > 0 && (
+        <div className="code-rating-result__section">
+          <span className="code-rating-result__section-label--success">Strengths</span>
+          <ul className="code-rating-result__list">
+            {rating.strengths.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Improvement Areas */}
+      {rating.improvementAreas.length > 0 && (
+        <div className="code-rating-result__section">
+          <span className="code-rating-result__section-label--warning">Improvement Areas</span>
+          <ul className="code-rating-result__list">
+            {rating.improvementAreas.map((a, i) => (
+              <li key={i}>{a}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Metadata footer */}
+      <div className="code-rating-result__footer">
+        <span>{rating.provider}</span>
+        <span>{Math.round(rating.latencyMs)}ms</span>
+      </div>
     </div>
   );
 }

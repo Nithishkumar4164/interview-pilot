@@ -163,6 +163,25 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                         snap = svc.speaker_service.get_speaker_snapshot()
                         await dashboard_manager.send_speaker_snapshot(session_id, snap)
 
+                # ── Code rating handler ───────────────────────────
+                elif msg_type == "rate_code":
+                    worker = _active_workers.get(session_id)
+                    if worker:
+                        try:
+                            rating_result = await worker.handle_code_rating(message)
+                            await dashboard_manager.send_code_rating(
+                                session_id, rating_result,
+                            )
+                        except Exception as e:
+                            logger.error(
+                                "code_rating_error",
+                                session_id=session_id,
+                                error=str(e),
+                            )
+                            await dashboard_manager.send_error(
+                                session_id, f"Code rating failed: {e}",
+                            )
+
                 # ── Runtime hint handlers ─────────────────────────
                 elif msg_type == "request_runtime_hint":
                     worker = _active_workers.get(session_id)

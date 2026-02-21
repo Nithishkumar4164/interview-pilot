@@ -177,6 +177,14 @@ class ConnectionManager:
             "payload": assignment,
         })
 
+    async def send_code_rating(self, session_id: str, rating: dict) -> None:
+        """Send a code rating response to all dashboard connections."""
+        await self.broadcast(session_id, {
+            "type": "code_rating",
+            "session_id": session_id,
+            "payload": rating,
+        })
+
     async def send_runtime_hint(self, session_id: str, hint: dict) -> None:
         """Send a runtime hint response to all dashboard connections."""
         await self.broadcast(session_id, {

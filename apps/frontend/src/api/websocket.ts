@@ -18,7 +18,8 @@ export type WSMessageType =
   | 'speaker_snapshot'
   | 'speaker_transcript_assigned'
   | 'sv_transcripts'
-  | 'context_reloaded';
+  | 'context_reloaded'
+  | 'code_rating';
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;

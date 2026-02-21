@@ -86,6 +86,25 @@ export interface CodeAnalysisState {
   timestamp: string;
 }
 
+export interface CodeRatingResult {
+  questionId: string;
+  approachMatch: string;
+  approachName: string;
+  correctness: string;
+  correctnessIssues: string[];
+  complexityActual: { time?: string; space?: string };
+  complexityExpected: { time?: string; space?: string };
+  complexityMatch: boolean;
+  pitfallsHit: string[];
+  pitfallsAvoided: string[];
+  strengths: string[];
+  improvementAreas: string[];
+  overallScore: number;
+  summary: string;
+  latencyMs: number;
+  provider: string;
+}
+
 export interface ScoreState {
   problemSolving: number;
   codeQuality: number;
@@ -99,12 +118,19 @@ interface AnalysisStoreState {
   redFlags: Array<{ text: string; timestamp: string; type?: string }>;
   codeAnalysis: CodeAnalysisState | null;
   scores: ScoreState;
+  codeRatingInput: string;
+  codeRating: CodeRatingResult | null;
+  codeRatingLoading: boolean;
 
   // Actions
   addAnalysis: (entry: AnalysisEntry) => void;
   addRedFlag: (flag: { text: string; timestamp: string; type?: string }) => void;
   setCodeAnalysis: (state: CodeAnalysisState) => void;
   updateScores: (scores: Partial<ScoreState>) => void;
+  setCodeRatingInput: (input: string) => void;
+  setCodeRating: (rating: CodeRatingResult | null) => void;
+  setCodeRatingLoading: (loading: boolean) => void;
+  clearCodeRating: () => void;
   clear: () => void;
 }
 
@@ -192,6 +218,9 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
   redFlags: [],
   codeAnalysis: null,
   scores: { ...DEFAULT_SCORES },
+  codeRatingInput: '',
+  codeRating: null,
+  codeRatingLoading: false,
 
   addAnalysis: (entry) =>
     set((s) => {
@@ -250,6 +279,14 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
   updateScores: (scores) =>
     set((s) => ({ scores: { ...s.scores, ...scores } })),
 
+  setCodeRatingInput: (input) => set({ codeRatingInput: input }),
+
+  setCodeRating: (rating) => set({ codeRating: rating, codeRatingLoading: false }),
+
+  setCodeRatingLoading: (loading) => set({ codeRatingLoading: loading }),
+
+  clearCodeRating: () => set({ codeRatingInput: '', codeRating: null, codeRatingLoading: false }),
+
   clear: () =>
     set({
       analyses: [],
@@ -257,5 +294,8 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
       redFlags: [],
       codeAnalysis: null,
       scores: { ...DEFAULT_SCORES },
+      codeRatingInput: '',
+      codeRating: null,
+      codeRatingLoading: false,
     }),
 }));

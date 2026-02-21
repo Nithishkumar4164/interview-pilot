@@ -55,6 +55,9 @@ class AnalysisWorker:
         self._pending_analysis: bool = False
         self._analysis_lock = asyncio.Lock()
 
+        # Transcript history for catch-up on dashboard connect
+        self._transcript_history: list[dict] = []
+
         # Stats
         self._events_processed = 0
         self._analyses_run = 0
@@ -80,7 +83,7 @@ class AnalysisWorker:
         )
 
         # 2. Push transcript to dashboard
-        await dashboard_manager.send_transcript(self.session_id, {
+        transcript_event = {
             "id": event.id,
             "speaker_role": speaker,
             "text": event.text,
@@ -89,7 +92,12 @@ class AnalysisWorker:
             "timestamp": event.timestamp,
             "channel": event.channel,
             "is_retroactive": event.is_retroactive,
-        })
+        }
+        await dashboard_manager.send_transcript(self.session_id, transcript_event)
+
+        # Store final transcripts for catch-up on dashboard reconnect
+        if event.is_final:
+            self._transcript_history.append(transcript_event)
 
         # 3. Only run analysis on final candidate utterances with rate limiting
         if (
@@ -168,6 +176,10 @@ class AnalysisWorker:
     def set_active_hint(self, hint_text: str) -> None:
         """Update the active hint."""
         self.analysis.set_active_hint(hint_text)
+
+    def get_recent_transcripts(self, limit: int = 50) -> list[dict]:
+        """Return recent transcript events for catch-up replay."""
+        return self._transcript_history[-limit:]
 
     def stop(self) -> None:
         """Stop the worker."""

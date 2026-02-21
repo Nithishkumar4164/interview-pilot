@@ -182,10 +182,13 @@ class TranscriptionService:
         result: TranscriptResult,
     ) -> TranscriptEventSchema:
         """Convert a Deepgram TranscriptResult into a TranscriptEventSchema."""
-        # Identify the speaker
-        speaker_role = self.speaker_service.identify(
+        transcript_id = str(uuid.uuid4())
+
+        # Identify the speaker (returns role + root speaker / speech vector IDs + new SV flag)
+        speaker_role, root_speaker_id, speech_vector_id, sv_created = self.speaker_service.identify(
             channel=channel,
             deepgram_speaker=result.speaker,
+            transcript_id=transcript_id,
         )
 
         # Build word timestamps
@@ -202,7 +205,7 @@ class TranscriptionService:
             ]
 
         return TranscriptEventSchema(
-            id=str(uuid.uuid4()),
+            id=transcript_id,
             session_id=self.session_id,
             speaker_role=speaker_role,
             text=result.text,
@@ -212,6 +215,9 @@ class TranscriptionService:
             word_timestamps=word_timestamps,
             is_retroactive=False,
             channel=channel,
+            root_speaker_id=root_speaker_id,
+            speech_vector_id=speech_vector_id,
+            speaker_changed=sv_created,
         )
 
     # ── Speaker Calibration ──────────────────────────────────────────────

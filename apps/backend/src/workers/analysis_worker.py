@@ -10,6 +10,7 @@ Provides rate limiting to avoid analyzing every interim result.
 """
 
 import asyncio
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from src.llm.failover import FailoverManager
@@ -41,9 +42,11 @@ class AnalysisWorker:
         self,
         session_id: str,
         failover_manager: FailoverManager,
+        get_speaker_snapshot: Callable[[], dict] | None = None,
     ) -> None:
         self.session_id = session_id
         self._failover = failover_manager
+        self._get_speaker_snapshot = get_speaker_snapshot
 
         # Services
         self.memory = MemoryService(session_id, failover_manager)
@@ -92,8 +95,15 @@ class AnalysisWorker:
             "timestamp": event.timestamp,
             "channel": event.channel,
             "is_retroactive": event.is_retroactive,
+            "root_speaker_id": event.root_speaker_id,
+            "speech_vector_id": event.speech_vector_id,
         }
         await dashboard_manager.send_transcript(self.session_id, transcript_event)
+
+        # Broadcast speaker snapshot when a new speech vector was created
+        if event.speaker_changed and self._get_speaker_snapshot is not None:
+            snapshot = self._get_speaker_snapshot()
+            await dashboard_manager.send_speaker_snapshot(self.session_id, snapshot)
 
         # Store final transcripts for catch-up on dashboard reconnect
         if event.is_final:

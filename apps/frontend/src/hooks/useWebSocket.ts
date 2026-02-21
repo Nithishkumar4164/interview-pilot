@@ -95,16 +95,21 @@ export function useWebSocket(sessionId: string | null) {
 
         case 'hint': {
           const p = message.payload as Record<string, unknown>;
-          setActiveHint({
-            id: (p.id as string) || crypto.randomUUID(),
-            questionId: (p.question_id as string) || '',
-            level: (p.level as 1 | 2 | 3) || 1,
-            text: (p.text as string) || '',
-            displayedAt: message.timestamp,
-            interviewerUsed: false,
-            candidateResponseQuality: 'none',
-            timeToRespondMs: null,
-          });
+          // Distinguish hint signals (no text/level) from actual hint deliveries
+          if (p.text && p.level) {
+            setActiveHint({
+              id: (p.id as string) || crypto.randomUUID(),
+              questionId: (p.question_id as string) || '',
+              level: p.level as 1 | 2 | 3,
+              text: p.text as string,
+              displayedAt: message.timestamp,
+              interviewerUsed: false,
+              candidateResponseQuality: 'none',
+              timeToRespondMs: null,
+            });
+          } else if (p.signal) {
+            setHintSignal(p.signal as string);
+          }
           break;
         }
 

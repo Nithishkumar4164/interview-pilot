@@ -201,7 +201,7 @@ export function SessionsPage() {
         <input
           className="sessions-page__search"
           type="text"
-          placeholder="Search by session ID..."
+          placeholder="session id"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />

@@ -98,6 +98,7 @@ export interface SessionStateResponse {
     suggestion: string | null;
     hint_signal: string | null;
     timestamp: string;
+    dimensions: Record<string, unknown> | null;
   }>;
   hints: Array<{
     id: string;

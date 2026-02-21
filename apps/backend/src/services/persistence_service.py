@@ -100,6 +100,7 @@ class PersistenceService:
         red_flags: list[str] | None = None,
         suggestion: str | None = None,
         hint_signal: str | None = None,
+        dimensions: dict | None = None,
     ) -> None:
         """Enqueue an analysis event for persistence."""
         entity = AnalysisEvent(
@@ -111,6 +112,7 @@ class PersistenceService:
             red_flags=red_flags,
             suggestion=suggestion,
             hint_signal=hint_signal,
+            dimensions=dimensions,
         )
         self._queue.put_nowait(entity)
 

@@ -208,6 +208,7 @@ class AnalysisWorker:
                     red_flags=result.red_flags if result.red_flags else None,
                     suggestion=result.suggestion_for_interviewer or None,
                     hint_signal=result.hint_signal,
+                    dimensions=result.dimensions.model_dump() if result.dimensions else None,
                 )
             except Exception:
                 logger.warning("persistence_enqueue_failed", type="analysis")

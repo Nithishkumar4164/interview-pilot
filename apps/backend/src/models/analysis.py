@@ -25,6 +25,7 @@ class AnalysisEvent(BaseModel):
     red_flags: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     suggestion: Mapped[str | None] = mapped_column(String, nullable=True)
     hint_signal: Mapped[str | None] = mapped_column(String, nullable=True)
+    dimensions: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class CodeSnapshot(BaseModel):

@@ -3,9 +3,11 @@ import json
 import uuid
 from collections.abc import AsyncGenerator
 
+import redis.asyncio as aioredis
 from fastapi import APIRouter, HTTPException, UploadFile, status
 from starlette.responses import StreamingResponse
 
+from src.config import settings
 from src.dependencies import failover_manager
 from src.schemas.upload import ExtractionStatusResponse, UploadResponse
 from src.services.resume_service import ResumeService
@@ -15,8 +17,30 @@ from src.utils.logging import get_logger
 router = APIRouter(prefix="/upload", tags=["upload"])
 logger = get_logger("upload")
 
-# In-memory extraction cache (production would use Redis or DB)
-_extraction_cache: dict[str, dict] = {}
+_CACHE_PREFIX = "extraction:"
+_CACHE_TTL = 300  # 5 minutes
+
+_redis: aioredis.Redis | None = None
+
+
+async def _get_redis() -> aioredis.Redis:
+    global _redis
+    if _redis is None:
+        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+    return _redis
+
+
+async def _cache_set(reference_id: str, data: dict) -> None:
+    r = await _get_redis()
+    await r.set(f"{_CACHE_PREFIX}{reference_id}", json.dumps(data), ex=_CACHE_TTL)
+
+
+async def _cache_get(reference_id: str) -> dict | None:
+    r = await _get_redis()
+    raw = await r.get(f"{_CACHE_PREFIX}{reference_id}")
+    if raw is None:
+        return None
+    return json.loads(raw)
 
 
 def _get_resume_service() -> ResumeService:
@@ -60,15 +84,15 @@ async def upload_resume(
             logger.warning("s3_upload_failed", error=str(e), detail="Continuing with local extraction only")
 
     # Start extraction in background so the upload returns immediately
-    _extraction_cache[reference_id] = {"status": "processing"}
+    await _cache_set(reference_id, {"status": "processing"})
 
     async def _run_extraction() -> None:
         try:
             structured = await service.process_resume(content)
-            _extraction_cache[reference_id] = {"status": "completed", "data": structured}
+            await _cache_set(reference_id, {"status": "completed", "data": structured})
         except Exception as e:
             logger.error("extraction_failed", error=str(e))
-            _extraction_cache[reference_id] = {"status": "failed", "error": str(e)}
+            await _cache_set(reference_id, {"status": "failed", "error": str(e)})
 
     asyncio.create_task(_run_extraction())
 
@@ -85,7 +109,7 @@ async def get_extraction_status(
     reference_id: str,
 ) -> ExtractionStatusResponse:
     """Check the status of resume extraction."""
-    cache_entry = _extraction_cache.get(reference_id)
+    cache_entry = await _cache_get(reference_id)
 
     if cache_entry is None:
         raise HTTPException(
@@ -108,7 +132,7 @@ async def _sse_event_generator(reference_id: str) -> AsyncGenerator[str, None]:
     """Yield SSE events for extraction progress."""
     elapsed = 0
     while elapsed < SSE_TIMEOUT_SECONDS:
-        cache_entry = _extraction_cache.get(reference_id)
+        cache_entry = await _cache_get(reference_id)
 
         if cache_entry is None:
             yield f"event: error\ndata: {json.dumps({'status': 'failed', 'error': 'Reference ID not found'})}\n\n"
@@ -136,7 +160,8 @@ async def _sse_event_generator(reference_id: str) -> AsyncGenerator[str, None]:
 @router.get("/{reference_id}/stream")
 async def stream_extraction_status(reference_id: str) -> StreamingResponse:
     """Stream extraction status via Server-Sent Events."""
-    if reference_id not in _extraction_cache:
+    cache_entry = await _cache_get(reference_id)
+    if cache_entry is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Reference ID not found",

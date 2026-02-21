@@ -72,9 +72,7 @@ export function TranscriptPanel() {
         <div ref={bottomRef} />
       </div>
 
-      {latestAnalysis && (
-        <InsightBar analysis={latestAnalysis} />
-      )}
+      <InsightBar analysis={latestAnalysis} />
     </section>
   );
 }
@@ -212,7 +210,15 @@ const DIMENSION_LABELS: Array<{ key: keyof InsightDimensions; label: string }> =
   { key: 'communicationQuality', label: 'Communication' },
 ];
 
-function InsightBar({ analysis }: { analysis: { insight: string; answerQuality: number; onTrack: boolean; dimensions?: InsightDimensions | null } }) {
+function InsightBar({ analysis }: { analysis: { insight: string; answerQuality: number; onTrack: boolean; dimensions?: InsightDimensions | null } | null }) {
+  if (!analysis) {
+    return (
+      <div className="insight-bar insight-bar--waiting" aria-live="polite">
+        <span className="insight-bar__text">Waiting for candidate response to generate insights…</span>
+      </div>
+    );
+  }
+
   const quality = analysis.answerQuality;
   const color = quality >= 4 ? 'green' : quality >= 3 ? 'amber' : 'red';
 

@@ -12,6 +12,7 @@ export default defineConfig({
         'content/code-scraper': resolve(__dirname, 'src/content/code-scraper.ts'),
         'audio/audio-processor': resolve(__dirname, 'src/audio/audio-processor.ts'),
         'offscreen/offscreen': resolve(__dirname, 'src/offscreen/offscreen.html'),
+        'mic-permission/mic-permission': resolve(__dirname, 'src/mic-permission/mic-permission.html'),
         'popup/index': resolve(__dirname, 'src/popup/index.html'),
         'sidepanel/index': resolve(__dirname, 'src/sidepanel/index.html'),
       },

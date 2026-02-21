@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>InterviewPilot — Microphone Access</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background: #f8fafc;
+      color: #1e293b;
+    }
+    .card {
+      text-align: center;
+      padding: 32px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      max-width: 360px;
+    }
+    h2 { margin: 0 0 8px; font-size: 18px; }
+    p { color: #64748b; font-size: 14px; margin: 0 0 20px; }
+    #status { font-size: 14px; margin-top: 16px; }
+    .success { color: #22c55e; }
+    .error { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Microphone Access</h2>
+    <p>InterviewPilot needs microphone access to capture interviewer audio. Please allow the permission prompt.</p>
+    <div id="status">Requesting access...</div>
+  </div>
+  <script type="module" src="./mic-permission.ts"></script>
+</body>
+</html>

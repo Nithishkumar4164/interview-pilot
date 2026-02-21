@@ -13,10 +13,11 @@ interface CaptureState {
   stream: MediaStream | null;
   audioContext: AudioContext | null;
   workletNode: AudioWorkletNode | null;
+  audioElement: HTMLAudioElement | null;
 }
 
-const tabCapture: CaptureState = { stream: null, audioContext: null, workletNode: null };
-const micCapture: CaptureState = { stream: null, audioContext: null, workletNode: null };
+const tabCapture: CaptureState = { stream: null, audioContext: null, workletNode: null, audioElement: null };
+const micCapture: CaptureState = { stream: null, audioContext: null, workletNode: null, audioElement: null };
 
 // ── AudioWorklet processor URL ─────────────────────────────────────────
 // MV3 CSP blocks blob: URLs for AudioWorklet modules.
@@ -63,6 +64,11 @@ async function setupAudioPipeline(
 }
 
 function stopCapture(state: CaptureState): void {
+  if (state.audioElement) {
+    state.audioElement.pause();
+    state.audioElement.srcObject = null;
+    state.audioElement = null;
+  }
   if (state.workletNode) {
     state.workletNode.disconnect();
     state.workletNode = null;
@@ -90,6 +96,14 @@ async function startTabCapture(streamId: string): Promise<void> {
       } as any,
     });
 
+    // Play tab audio through an <audio> element.
+    // Offscreen AudioContext.destination is a null sink (no speakers),
+    // so we need a real <audio> element for the AUDIO_PLAYBACK reason.
+    const audio = document.createElement('audio');
+    audio.srcObject = stream;
+    audio.play().catch((err) => console.warn('[Offscreen] Audio play failed:', err));
+    tabCapture.audioElement = audio;
+
     await setupAudioPipeline(stream, 'tab', tabCapture);
     chrome.runtime.sendMessage({ type: 'tab-capture-started' });
     console.log('[Offscreen] Tab capture started');
@@ -106,22 +120,30 @@ function stopTabCapture(): void {
 
 // ── Mic capture ────────────────────────────────────────────────────────
 
-async function startMicCapture(): Promise<void> {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    });
+async function startMicCapture(retries = 3, delayMs = 500): Promise<void> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
 
-    await setupAudioPipeline(stream, 'mic', micCapture);
-    chrome.runtime.sendMessage({ type: 'mic-capture-started' });
-    console.log('[Offscreen] Mic capture started');
-  } catch (err) {
-    console.error('[Offscreen] Mic capture failed:', err);
+      await setupAudioPipeline(stream, 'mic', micCapture);
+      chrome.runtime.sendMessage({ type: 'mic-capture-started' });
+      console.log('[Offscreen] Mic capture started');
+      return;
+    } catch (err) {
+      console.warn(`[Offscreen] Mic capture attempt ${attempt}/${retries} failed:`, err);
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
   }
+  console.error('[Offscreen] Mic capture failed after all retries');
+  chrome.runtime.sendMessage({ type: 'mic-capture-failed' });
 }
 
 function stopMicCapture(): void {
@@ -160,3 +182,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 console.log('[Offscreen] Audio capture bridge ready');
+
+// Signal to service worker that the offscreen document is ready to receive messages
+chrome.runtime.sendMessage({ type: 'offscreen:ready' }).catch(() => {});

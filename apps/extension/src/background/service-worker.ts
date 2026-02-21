@@ -42,6 +42,8 @@ let codeWs: WSClient | null = null;
 const offlineBuffer = new OfflineBuffer();
 const drainQueue = new ChunkQueue();
 
+let offscreenReady = false;
+
 const state: ExtensionState = {
   sessionId: null,
   backendUrl: 'ws://localhost:8000',
@@ -52,6 +54,32 @@ const state: ExtensionState = {
   codeScrapingActive: false,
   bufferStats: { audioChunks: 0, codeSnapshots: 0, estimatedDurationMs: 0 },
 };
+
+// ── Offscreen Ready Handshake ──────────────────────────────────────────────
+
+function sendToOffscreen(message: Record<string, unknown>, maxRetries = 10, delayMs = 100): void {
+  let attempts = 0;
+
+  function trySend(): void {
+    if (offscreenReady) {
+      chrome.runtime.sendMessage(message).catch((err) => {
+        console.error('[InterviewPilot] sendToOffscreen failed:', err);
+      });
+      return;
+    }
+    attempts++;
+    if (attempts >= maxRetries) {
+      console.error('[InterviewPilot] Offscreen not ready after', maxRetries, 'retries, sending anyway');
+      chrome.runtime.sendMessage(message).catch((err) => {
+        console.error('[InterviewPilot] sendToOffscreen fallback failed:', err);
+      });
+      return;
+    }
+    setTimeout(trySend, delayMs);
+  }
+
+  trySend();
+}
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -313,11 +341,15 @@ async function ensureOffscreen(): Promise<void> {
   const contexts = await (chrome.runtime as any).getContexts({
     contextTypes: ['OFFSCREEN_DOCUMENT'],
   });
-  if (contexts.length > 0) return;
+  if (contexts.length > 0) {
+    offscreenReady = true;
+    return;
+  }
+  offscreenReady = false;
   await (chrome.offscreen as any).createDocument({
     url: 'dist/src/offscreen/offscreen.html',
-    reasons: ['USER_MEDIA'],
-    justification: 'Audio capture for interview transcription',
+    reasons: ['USER_MEDIA', 'AUDIO_PLAYBACK'],
+    justification: 'Audio capture and playback for interview transcription',
   });
 }
 
@@ -325,6 +357,12 @@ async function ensureOffscreen(): Promise<void> {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.type) {
+    case 'offscreen:ready':
+      offscreenReady = true;
+      console.log('[InterviewPilot] Offscreen document ready');
+      sendResponse({ status: 'ok' });
+      return true;
+
     case 'get-state':
       // Re-trigger reconnect if WSClients exist but are stuck in reconnecting
       // (setTimeout timers are lost when MV3 service worker goes dormant)
@@ -383,6 +421,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ status: 'ok' });
       return true;
 
+    case 'mic-capture-failed':
+      // Offscreen couldn't get mic permission — open a tab to request it
+      console.log('[InterviewPilot] Mic capture failed, opening permission page');
+      chrome.tabs.create({
+        url: chrome.runtime.getURL('dist/src/mic-permission/mic-permission.html'),
+        active: true,
+      });
+      sendResponse({ status: 'ok' });
+      return true;
+
+    case 'mic-permission-granted':
+      // Permission granted via tab — now start mic capture in offscreen
+      console.log('[InterviewPilot] Mic permission granted, starting capture');
+      if (sender.tab?.id) {
+        chrome.tabs.remove(sender.tab.id).catch(() => {});
+      }
+      ensureOffscreen()
+        .then(() => sendToOffscreen({ type: 'offscreen:start-mic-capture' }))
+        .catch((err) => console.error('[InterviewPilot] Failed to start mic capture:', err));
+      sendResponse({ status: 'ok' });
+      return true;
+
+    case 'mic-permission-denied':
+      console.warn('[InterviewPilot] Mic permission denied by user');
+      sendResponse({ status: 'ok' });
+      return true;
+
     case 'audio-chunk': {
       const { channel, timestamp } = message;
       // pcmData arrives as a plain number array (Int16 values) from offscreen
@@ -415,7 +480,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'start-tab-capture':
       ensureOffscreen()
         .then(() => {
-          chrome.runtime.sendMessage({ type: 'offscreen:start-tab-capture', streamId: message.streamId });
+          sendToOffscreen({ type: 'offscreen:start-tab-capture', streamId: message.streamId });
         })
         .catch((err) => {
           console.error('[InterviewPilot] Failed to start tab capture:', err);
@@ -424,19 +489,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
 
     case 'stop-tab-capture':
-      chrome.runtime.sendMessage({ type: 'offscreen:stop-tab-capture' }).catch(() => {});
+      sendToOffscreen({ type: 'offscreen:stop-tab-capture' });
       sendResponse({ status: 'ok' });
       return true;
 
     case 'start-mic-capture':
       ensureOffscreen()
-        .then(() => chrome.runtime.sendMessage({ type: 'offscreen:start-mic-capture' }))
+        .then(() => sendToOffscreen({ type: 'offscreen:start-mic-capture' }))
         .catch((err) => console.error('[InterviewPilot] Failed to start mic capture:', err));
       sendResponse({ status: 'ok' });
       return true;
 
     case 'stop-mic-capture':
-      chrome.runtime.sendMessage({ type: 'offscreen:stop-mic-capture' }).catch(() => {});
+      sendToOffscreen({ type: 'offscreen:stop-mic-capture' });
       sendResponse({ status: 'ok' });
       return true;
 

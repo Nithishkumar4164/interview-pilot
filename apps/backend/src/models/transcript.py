@@ -25,6 +25,8 @@ class Transcript(BaseModel):
     word_timestamps: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     is_retroactive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     channel: Mapped[str] = mapped_column(String(20), nullable=False, default="tab")
+    root_speaker_id: Mapped[str] = mapped_column(String, nullable=False, default="")
+    speech_vector_id: Mapped[str] = mapped_column(String, nullable=False, default="")
 
     session: Mapped["InterviewSession"] = relationship(back_populates="transcripts")
 

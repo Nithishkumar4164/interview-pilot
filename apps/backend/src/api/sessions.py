@@ -184,6 +184,8 @@ async def get_session_state(
                 "timestamp": t.timestamp,
                 "channel": t.channel,
                 "is_retroactive": t.is_retroactive,
+                "root_speaker_id": t.root_speaker_id,
+                "speech_vector_id": t.speech_vector_id,
             }
             for t in transcripts
         ],

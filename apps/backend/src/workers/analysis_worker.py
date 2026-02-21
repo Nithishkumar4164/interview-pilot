@@ -125,6 +125,8 @@ class AnalysisWorker:
                     timestamp=event.timestamp,
                     channel=event.channel,
                     is_retroactive=event.is_retroactive,
+                    root_speaker_id=event.root_speaker_id,
+                    speech_vector_id=event.speech_vector_id,
                 )
             except Exception:
                 logger.warning("persistence_enqueue_failed", type="transcript")

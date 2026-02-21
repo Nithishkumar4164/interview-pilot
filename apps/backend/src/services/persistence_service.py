@@ -70,6 +70,8 @@ class PersistenceService:
         channel: str = "tab",
         is_retroactive: bool = False,
         word_timestamps: dict | None = None,
+        root_speaker_id: str = "",
+        speech_vector_id: str = "",
     ) -> None:
         """Enqueue a transcript for persistence."""
         entity = Transcript(
@@ -83,6 +85,8 @@ class PersistenceService:
             channel=channel,
             is_retroactive=is_retroactive,
             word_timestamps=word_timestamps,
+            root_speaker_id=root_speaker_id,
+            speech_vector_id=speech_vector_id,
         )
         self._queue.put_nowait(entity)
 

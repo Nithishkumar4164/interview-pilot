@@ -303,6 +303,8 @@ class AnalysisWorker:
         """Handle a runtime hint generation request."""
         request = RuntimeHintRequest.model_validate(request_data)
         response = await self.runtime_hints.generate_hint(request)
+        # Inform analysis service so hint_reception dimension is scored
+        self.analysis.set_active_hint(response.text)
         return response.model_dump()
 
     async def handle_code_rating(self, data: dict) -> dict:

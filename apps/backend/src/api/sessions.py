@@ -560,6 +560,13 @@ async def trigger_next_hint(session_id: str, req: TriggerHintRequest) -> dict:
             "text": "No more hints available for this question.",
         }
 
+    # Inform the analysis worker so subsequent LLM calls include
+    # the hint_reception scoring dimension.
+    from src.websocket.audio_handler import _active_workers
+    worker = _active_workers.get(session_id)
+    if worker:
+        worker.set_active_hint(active.text)
+
     return {
         "id": active.hint_id,
         "session_id": session_id,

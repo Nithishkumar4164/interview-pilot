@@ -82,13 +82,13 @@ export function SessionBar({ onPause, onResume, onEnd, onToggleVideo, videoActiv
         <button
           className={`btn btn--secondary video-share-toggle ${videoActive ? 'video-share-toggle--active' : ''}`}
           onClick={onToggleVideo}
-          title={videoActive ? 'Stop sharing video' : 'Share meeting video'}
+          title={videoActive ? 'Stop import' : 'Import meeting video'}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginRight: 4 }}>
             <rect x="1" y="3" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
             <path d="M11 6.5L14.5 4V12L11 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          {videoActive ? 'Stop Video' : 'Share Video'}
+          {videoActive ? 'Stop Import' : 'Import Video'}
         </button>
 
         {status === 'live' && (

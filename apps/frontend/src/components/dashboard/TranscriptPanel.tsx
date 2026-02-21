@@ -223,7 +223,7 @@ function InsightBar({ analysis }: { analysis: { insight: string; answerQuality: 
   const color = quality >= 4 ? 'green' : quality >= 3 ? 'amber' : 'red';
 
   return (
-    <div className={`insight-bar insight-bar--${color}`} aria-live="polite">
+    <div className={`insight-bar insight-bar--${color}${!analysis.onTrack ? ' insight-bar--off-track' : ''}`} aria-live="polite">
       <span className="insight-bar__quality">{quality}/5</span>
       <span className="insight-bar__text">{analysis.insight}</span>
       {!analysis.onTrack && (

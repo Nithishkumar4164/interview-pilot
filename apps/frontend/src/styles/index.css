@@ -3519,7 +3519,7 @@ ul, ol {
   height: calc(100vh - 28px);
 }
 
-/* Share Video Button */
+/* Import Video Button */
 .video-share-toggle--active {
   background: rgba(239, 68, 68, 0.15);
   color: var(--color-danger);

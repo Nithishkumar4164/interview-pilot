@@ -191,9 +191,14 @@ export function SessionsPage() {
               {sessions.length} session{sessions.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <button className="btn btn--primary" onClick={() => navigate('/new')}>
-            New Interview
-          </button>
+          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+            <button className="btn btn--ghost" onClick={() => navigate('/reports')}>
+              Reports
+            </button>
+            <button className="btn btn--primary" onClick={() => navigate('/new')}>
+              New Interview
+            </button>
+          </div>
         </div>
       </header>
 

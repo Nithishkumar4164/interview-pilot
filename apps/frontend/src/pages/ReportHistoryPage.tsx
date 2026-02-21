@@ -34,6 +34,7 @@ export function ReportHistoryPage() {
   const navigate = useNavigate();
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -76,7 +77,7 @@ export function ReportHistoryPage() {
       <header className="report-history-page__header">
         <div>
           <button className="btn btn--ghost" onClick={() => navigate('/')}>
-            &larr; Back
+            &larr; Sessions
           </button>
           <h1>Report History</h1>
         </div>
@@ -86,8 +87,15 @@ export function ReportHistoryPage() {
         <p>No reports found. Complete an interview session to generate a report.</p>
       ) : (
         <>
+          <input
+            className="report-history-page__search"
+            type="text"
+            placeholder="Enter Session ID"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
           <div className="report-history-page__list">
-            {reports.map((r) => {
+            {reports.filter((r) => !search || r.session_id.toLowerCase().includes(search.toLowerCase())).map((r) => {
               const color = getRecommendationColor(r.recommendation);
               const isSelected = selected.has(r.id);
 
@@ -118,6 +126,7 @@ export function ReportHistoryPage() {
                       })}
                     </span>
                     <div className="report-history-card__meta">
+                      <span className="report-history-card__session-id">{r.session_id.slice(0, 8)}</span>
                       <span className={`report-history-card__badge report-history-card__badge--${color}`}>
                         {formatRecommendation(r.recommendation)}
                       </span>

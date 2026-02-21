@@ -216,14 +216,16 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                 elif msg_type == "change_question":
                     worker = _active_workers.get(session_id)
                     if worker:
+                        # Send context_reloaded FIRST so the dashboard
+                        # unblocks instantly (don't wait for LLM work)
+                        await dashboard_manager.send_context_reloaded(
+                            session_id,
+                            {"question_index": message.get("question_index", 0)},
+                        )
                         await worker.on_question_change(
                             question_text=message.get("question_text", ""),
                             question_plan=message.get("question_plan") or {},
                             question_index=message.get("question_index", 0),
-                        )
-                        await dashboard_manager.send_context_reloaded(
-                            session_id,
-                            {"question_index": message.get("question_index", 0)},
                         )
 
                 elif msg_type == "get_sv_transcripts":

@@ -8,6 +8,7 @@ Manages interview context across three memory tiers:
 Token budgets enforce context window limits per tier.
 """
 
+import asyncio
 import json
 from collections import deque
 from dataclasses import dataclass, field
@@ -140,6 +141,10 @@ class MemoryService:
         # Tier 3: Fact Store
         self.fact_store = FactStore()
 
+        # Background task tracking
+        self._bg_compress_task: asyncio.Task | None = None
+        self._bg_extract_tasks: set[asyncio.Task] = set()
+
         # Stats
         self._total_utterances = 0
 
@@ -152,9 +157,8 @@ class MemoryService:
     ) -> None:
         """Add a new utterance to the memory system.
 
-        - Pushes to Tier 1 working memory (FIFO eviction)
-        - Buffers for Tier 2 summary compression
-        - Triggers Tier 3 fact extraction for substantial utterances
+        Only sync operations run inline (deque append, buffer append).
+        LLM calls (compression, fact extraction) are scheduled as background tasks.
         """
         if not text.strip():
             return
@@ -173,16 +177,82 @@ class MemoryService:
         # Buffer for Tier 2
         self._unsummarized_buffer.append(utterance)
 
-        # Tier 2: Trigger compression if buffer is large enough
+        # Tier 2: Schedule compression in background if buffer is large enough
         if len(self._unsummarized_buffer) >= SUMMARY_TRIGGER_COUNT:
-            await self._compress_summary()
+            self._schedule_compress()
 
-        # Tier 3: Extract facts from substantial utterances (>20 words)
+        # Tier 3: Schedule fact extraction in background for substantial utterances
         if is_final and len(text.split()) > 20:
-            await self._extract_facts(speaker, text)
+            self._schedule_extract_facts(speaker, text)
+
+    # ── Background Task Scheduling ─────────────────────────────────
+
+    def _is_compress_running(self) -> bool:
+        """Check if a background compression task is already in flight."""
+        return self._bg_compress_task is not None and not self._bg_compress_task.done()
+
+    def _schedule_compress(self) -> None:
+        """Snapshot the buffer and schedule compression in background.
+
+        Skips if a compression is already running to avoid overlapping LLM calls.
+        """
+        if self._is_compress_running():
+            return
+
+        # Snapshot and clear the buffer immediately (sync)
+        buffer_snapshot = list(self._unsummarized_buffer)
+        self._unsummarized_buffer.clear()
+
+        self._bg_compress_task = asyncio.create_task(
+            self._compress_summary_from_snapshot(buffer_snapshot)
+        )
+
+    async def _compress_summary_from_snapshot(
+        self, buffer_snapshot: list[Utterance]
+    ) -> None:
+        """Run LLM compression on a provided buffer snapshot (background)."""
+        if not buffer_snapshot:
+            return
+
+        buffer_text = "\n".join(
+            f"[{u.speaker}]: {u.text}" for u in buffer_snapshot
+        )
+        user_content = (
+            f"Current summary:\n{self._rolling_summary or '(empty)'}\n\n"
+            f"New utterances:\n{buffer_text}"
+        )
+
+        try:
+            result = await self._failover.analyze(
+                AnalysisContext(
+                    system_prompt=SUMMARY_SYSTEM_PROMPT,
+                    user_content=user_content,
+                    task_type=TaskType.SUMMARY_COMPRESSION,
+                ),
+                LLMConfig(max_tokens=500, temperature=0.3),
+                session_id=self.session_id,
+            )
+            self._rolling_summary = result.content
+
+            logger.debug(
+                "summary_compressed",
+                session_id=self.session_id,
+                summary_tokens=estimate_tokens(self._rolling_summary),
+            )
+        except Exception as e:
+            # Re-prepend items to buffer for retry on next trigger
+            self._unsummarized_buffer = buffer_snapshot + self._unsummarized_buffer
+            logger.error(
+                "summary_compression_failed",
+                session_id=self.session_id,
+                error=str(e),
+            )
 
     async def _compress_summary(self) -> None:
-        """Compress the unsummarized buffer into the rolling summary."""
+        """Blocking compression of the unsummarized buffer.
+
+        Used only by drain() to ensure all data is flushed before shutdown.
+        """
         if not self._unsummarized_buffer:
             return
 
@@ -217,6 +287,12 @@ class MemoryService:
                 error=str(e),
             )
             # Keep the buffer — will retry on next trigger
+
+    def _schedule_extract_facts(self, speaker: str, text: str) -> None:
+        """Schedule fact extraction as a background task."""
+        task = asyncio.create_task(self._extract_facts(speaker, text))
+        self._bg_extract_tasks.add(task)
+        task.add_done_callback(self._bg_extract_tasks.discard)
 
     async def _extract_facts(self, speaker: str, text: str) -> None:
         """Extract structured facts from a substantial utterance."""
@@ -254,19 +330,53 @@ class MemoryService:
     async def reset_for_new_question(self) -> None:
         """Reset memory for a new question transition.
 
-        1. Force-compress pending utterances into rolling summary
-        2. Clear Tier 1 working memory
-        3. Keep Tier 2 (rolling summary) and Tier 3 (fact store) intact
+        1. Clear Tier 1 working memory immediately (sync)
+        2. Wait for any in-flight compression to finish (to not lose data)
+        3. Schedule compression of remaining buffer in background
+        4. Keep Tier 2 (rolling summary) and Tier 3 (fact store) intact
         """
-        if self._unsummarized_buffer:
-            await self._compress_summary()
         self._working_memory.clear()
+
+        # Wait for in-flight compression so we don't lose its result
+        if self._is_compress_running():
+            try:
+                await asyncio.wait_for(self._bg_compress_task, timeout=10.0)
+            except (asyncio.TimeoutError, Exception):
+                pass
+
+        # Schedule compression of remaining buffer in background
+        if self._unsummarized_buffer:
+            self._schedule_compress()
+
         logger.info(
             "memory_reset_for_new_question",
             session_id=self.session_id,
             summary_preserved=bool(self._rolling_summary),
             facts_preserved=bool(self.fact_store.to_text()),
         )
+
+    async def drain(self) -> None:
+        """Await all in-flight background tasks for safe shutdown.
+
+        Waits for compression and extraction tasks (with 10s timeout),
+        then flushes any remaining unsummarized buffer via blocking compression.
+        """
+        tasks: list[asyncio.Task] = []
+        if self._bg_compress_task and not self._bg_compress_task.done():
+            tasks.append(self._bg_compress_task)
+        tasks.extend(t for t in self._bg_extract_tasks if not t.done())
+
+        if tasks:
+            logger.info(
+                "memory_drain_waiting",
+                session_id=self.session_id,
+                task_count=len(tasks),
+            )
+            await asyncio.wait(tasks, timeout=10.0)
+
+        # Flush any remaining unsummarized utterances
+        if self._unsummarized_buffer:
+            await self._compress_summary()
 
     # ── Context Assembly ──────────────────────────────────────────────
 

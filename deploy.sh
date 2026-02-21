@@ -29,5 +29,8 @@ echo "==> Service status:"
 $COMPOSE ps
 
 echo ""
-echo "Deployment complete. Verify with:"
-echo "  curl http://localhost/health"
+echo "==> Verifying health..."
+curl -sf http://localhost:3000/health && echo " OK" || echo " FAILED"
+
+echo ""
+echo "Deployment complete!"

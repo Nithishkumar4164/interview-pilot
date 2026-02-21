@@ -188,6 +188,9 @@ interview-pilot/
 │   │   │   ├── services/         # Business logic (analysis, hints, reports, LLM)
 │   │   │   ├── models/           # SQLAlchemy ORM models
 │   │   │   ├── schemas/          # Pydantic request/response schemas
+│   │   │   ├── llm/              # LLM provider clients and failover logic
+│   │   │   ├── repositories/     # Data access layer
+│   │   │   ├── workers/          # Background task workers
 │   │   │   └── main.py           # FastAPI app entrypoint
 │   │   ├── alembic/              # Database migrations
 │   │   ├── tests/
@@ -205,10 +208,12 @@ interview-pilot/
 │   └── extension/
 │       ├── src/
 │       │   ├── background/       # Service worker
-│       │   ├── content/          # Content scripts (Meet, Zoom, Teams injectors)
+│       │   ├── content/          # Content scripts (code scraping on CoderPad, HackerRank, LeetCode)
 │       │   ├── sidepanel/        # Side panel React UI
+│       │   ├── popup/            # Browser action popup UI
 │       │   ├── offscreen/        # Offscreen document for audio processing
 │       │   ├── audio/            # Audio capture and encoding
+│       │   ├── mic-permission/   # Microphone permission flow
 │       │   ├── networking/       # WebSocket client for backend communication
 │       │   ├── storage/          # IndexedDB persistence layer
 │       │   └── utils/
@@ -275,6 +280,12 @@ interview-pilot/
 ## API Overview
 
 ### REST Endpoints
+
+#### Auth (`/api/auth`)
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/refresh` | Refresh JWT tokens |
+| `GET` | `/me` | Get current user profile |
 
 #### Sessions (`/api/sessions`)
 | Method | Path | Description |

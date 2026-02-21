@@ -17,6 +17,7 @@ class Report(BaseModel):
     recommendation: Mapped[str] = mapped_column(String(20), nullable=False)
     confidence_level: Mapped[float] = mapped_column(Float, nullable=False)
     is_final: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
 
     session: Mapped["InterviewSession"] = relationship(back_populates="reports")
     notes: Mapped[list["ReportNote"]] = relationship(back_populates="report")

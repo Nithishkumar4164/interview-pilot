@@ -318,13 +318,12 @@ async def end_session(
     db_session.ended_at = now
     await session_repo.update(db_session)
 
-    # Generate report from in-memory worker data
+    # Create placeholder report and launch background generation
     report_id = None
     try:
         from src.websocket.audio_handler import _active_workers
         from src.websocket.code_handler import _active_analyzers
-        from src.dependencies import failover_manager, get_session_state_service
-        from src.services.report_service import ReportService
+        from src.dependencies import failover_manager, async_session_factory, get_session_state_service
         from src.models.report import Report
         from src.repositories.report_repo import ReportRepository
 
@@ -332,47 +331,82 @@ async def end_session(
         hint_service = _hint_services.get(session_id)
         code_analyzer = _active_analyzers.get(session_id)
 
-        if worker and hint_service:
-            # Calculate duration
-            duration_minutes = db_session.duration_minutes
-            if db_session.started_at:
-                elapsed = (now - db_session.started_at).total_seconds() / 60.0
-                duration_minutes = round(elapsed, 1)
+        # Calculate duration
+        duration_minutes = db_session.duration_minutes
+        if db_session.started_at:
+            elapsed = (now - db_session.started_at).total_seconds() / 60.0
+            duration_minutes = round(elapsed, 1)
 
-            report_service = ReportService(failover_manager)
-            generated = await report_service.generate_report(
-                session_id=session_id,
-                memory=worker.memory,
-                analysis=worker.analysis,
-                code_analysis=code_analyzer,
-                hints=hint_service,
-                contradictions=worker.contradictions,
-                duration_minutes=duration_minutes,
-                target_level=db_session.level,
+        # Capture snapshots from in-memory services before cleanup
+        snapshots: dict = {
+            "session_id": session_id,
+            "duration_minutes": duration_minutes,
+            "target_level": db_session.level,
+        }
+        if worker:
+            snapshots["fact_store"] = (
+                worker.memory.fact_store.to_dict()
+                if hasattr(worker.memory.fact_store, "to_dict")
+                else worker.memory.fact_store.to_text()
             )
+            snapshots["rolling_summary"] = worker.memory._rolling_summary
+            snapshots["analysis_results"] = [
+                {
+                    "answer_quality": a.answer_quality,
+                    "on_track": a.on_track,
+                    "insight": a.insight,
+                    "red_flags": a.red_flags,
+                    "suggestion": a.suggestion,
+                    "hint_signal": a.hint_signal,
+                }
+                for a in worker.analysis.get_recent_analyses(count=50)
+            ]
+            snapshots["contradictions"] = [
+                {"explanation": c.explanation, "confidence": c.confidence}
+                for c in worker.contradictions.contradictions
+            ]
+        if hint_service:
+            snapshots["hint_events"] = [
+                {
+                    "question_id": h.question_id,
+                    "level": h.level,
+                    "interviewer_used": h.interviewer_used,
+                    "candidate_response_quality": (
+                        h.candidate_response_quality.value
+                        if hasattr(h.candidate_response_quality, "value")
+                        else str(h.candidate_response_quality)
+                    ),
+                    "time_to_respond_ms": h.time_to_respond_ms,
+                    "hint_id": h.hint_id,
+                    "text": h.text,
+                }
+                for h in hint_service._hint_events
+            ]
+            snapshots["hint_metrics"] = hint_service.get_metrics().model_dump()
+        if code_analyzer:
+            ca_result = code_analyzer.get_latest_result()
+            if ca_result:
+                snapshots["code_progress"] = ca_result.progress_state.value
+                snapshots["detected_approach"] = (
+                    ca_result.detected_approach.name if ca_result.detected_approach else None
+                )
+            else:
+                snapshots["code_progress"] = "unknown"
 
-            # Persist report to DB
-            report_repo = ReportRepository(db)
-            report = Report(
-                id=uuid.UUID(generated.id),
-                session_id=uuid.UUID(session_id),
-                report_data={
-                    "scores": [s.model_dump() for s in generated.scores],
-                    "key_moments": [m.model_dump() for m in generated.key_moments],
-                    "strengths": generated.strengths,
-                    "areas_for_growth": generated.areas_for_growth,
-                    "level_comparison": generated.level_comparison,
-                    "hint_summary": generated.hint_summary,
-                    "generated_at": generated.generated_at,
-                },
-                recommendation=generated.recommendation.value,
-                confidence_level=generated.confidence_level,
-                is_final=True,
-            )
-            await report_repo.create(report)
-            report_id = str(report.id)
+        # Create placeholder report row with status=pending
+        report_repo = ReportRepository(db)
+        placeholder_report = Report(
+            session_id=uuid.UUID(session_id),
+            report_data={},
+            recommendation="lean_hire",
+            confidence_level=0.0,
+            is_final=False,
+            status="pending",
+        )
+        await report_repo.create(placeholder_report)
+        report_id = str(placeholder_report.id)
 
-        # Save final session snapshot
+        # Save final session snapshot before cleanup
         try:
             sss = get_session_state_service()
             await sss.save_snapshot(session_id, db)
@@ -380,20 +414,94 @@ async def end_session(
         except Exception:
             pass
 
+        await db.commit()
+
+        # Cleanup in-memory services
+        _hint_services.pop(session_id, None)
+
+        # Fire background task for report generation
+        import asyncio
+        asyncio.create_task(
+            _generate_report_background(
+                report_id=report_id,
+                session_id=session_id,
+                snapshots=snapshots,
+                fm=failover_manager,
+                session_factory=async_session_factory,
+            )
+        )
+
     except Exception as e:
-        # Report generation failure should not block session end
         import logging
-        logging.getLogger("api.sessions").error(f"Report generation failed: {e}")
-
-    await db.commit()
-
-    # Cleanup in-memory services
-    _hint_services.pop(session_id, None)
+        logging.getLogger("api.sessions").error(f"Report setup failed: {e}")
+        await db.commit()
+        _hint_services.pop(session_id, None)
 
     result = {"status": "ended", "session_id": session_id}
     if report_id:
         result["report_id"] = report_id
     return result
+
+
+async def _generate_report_background(
+    report_id: str,
+    session_id: str,
+    snapshots: dict,
+    fm,
+    session_factory,
+) -> None:
+    """Background task: generate report and update DB row."""
+    import logging
+    logger = logging.getLogger("api.sessions.background_report")
+
+    try:
+        from src.services.report_service import ReportService
+
+        async with session_factory() as db:
+            report_service = ReportService(fm)
+            generated = await report_service.generate_report_from_db(
+                session_id=session_id,
+                snapshots=snapshots,
+                db=db,
+            )
+
+            # Update the placeholder report row
+            from src.repositories.report_repo import ReportRepository
+            report_repo = ReportRepository(db)
+            report = await report_repo.get_by_id(uuid.UUID(report_id))
+            if report:
+                report.report_data = {
+                    "scores": [s.model_dump() for s in generated.scores],
+                    "key_moments": [m.model_dump() for m in generated.key_moments],
+                    "strengths": generated.strengths,
+                    "areas_for_growth": generated.areas_for_growth,
+                    "level_comparison": generated.level_comparison,
+                    "hint_summary": generated.hint_summary,
+                    "annotated_transcript": generated.annotated_transcript,
+                    "generated_at": generated.generated_at,
+                }
+                report.recommendation = generated.recommendation.value
+                report.confidence_level = generated.confidence_level
+                report.is_final = True
+                report.status = "completed"
+                await report_repo.update(report)
+
+            await db.commit()
+            logger.info(f"Report {report_id} generation completed for session {session_id}")
+
+    except Exception as e:
+        logger.error(f"Background report generation failed for {report_id}: {e}")
+        try:
+            async with session_factory() as db:
+                from src.repositories.report_repo import ReportRepository
+                report_repo = ReportRepository(db)
+                report = await report_repo.get_by_id(uuid.UUID(report_id))
+                if report:
+                    report.status = "failed"
+                    await report_repo.update(report)
+                await db.commit()
+        except Exception as inner_e:
+            logger.error(f"Failed to mark report as failed: {inner_e}")
 
 
 @router.post("/{session_id}/hints/next")
@@ -432,28 +540,61 @@ async def acknowledge_hint(
     req: AcknowledgeHintRequest,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Acknowledge a hint with usage and response metrics."""
-    # Update in-memory state
+    """Acknowledge a hint with usage and response metrics.
+
+    The hint_id from the frontend may not match the backend-generated ID
+    stored in the DB (frontend creates its own UUID). We try an exact-ID
+    match first, then fall back to updating the latest unacknowledged hint
+    for this session.  If the hint row hasn't been flushed from the
+    PersistenceService queue yet, neither query will find it — the in-memory
+    HintService state (updated below) is the authoritative source and will
+    be captured at session end for the report.
+    """
+    # 1. Update in-memory state (always succeeds — uses backend hint_id)
     service = _hint_services.get(session_id)
     if service:
-        service.acknowledge_hint(
+        # Try matching by backend hint_id first, then by frontend hint_id
+        matched = service.acknowledge_hint(
             hint_id=hint_id,
             interviewer_used=req.interviewer_used,
             candidate_response_quality=req.candidate_response_quality,
         )
+        if not matched:
+            # Frontend hint_id didn't match — acknowledge the most recent hint
+            current = service.get_current_hint()
+            if current:
+                service.acknowledge_hint(
+                    hint_id=current.hint_id,
+                    interviewer_used=req.interviewer_used,
+                    candidate_response_quality=req.candidate_response_quality,
+                )
 
-    # Update DB record
+    # 2. Update DB record
     try:
         from src.repositories.hint_repo import HintEventRepository
         hint_repo = HintEventRepository(db)
         quality_str = req.candidate_response_quality.value if hasattr(req.candidate_response_quality, "value") else str(req.candidate_response_quality)
-        await hint_repo.update_acknowledgment(
-            hint_id=uuid.UUID(hint_id),
-            interviewer_used=req.interviewer_used,
-            candidate_response_quality=quality_str,
-        )
-    except (ValueError, Exception):
-        pass  # hint_id may not be a valid UUID or may not exist in DB yet
+
+        # Try exact ID match first (works if frontend and backend IDs happen to align)
+        updated = False
+        try:
+            updated = await hint_repo.update_acknowledgment(
+                hint_id=uuid.UUID(hint_id),
+                interviewer_used=req.interviewer_used,
+                candidate_response_quality=quality_str,
+            )
+        except ValueError:
+            pass  # hint_id not a valid UUID
+
+        # Fall back: find latest unacknowledged hint for this session
+        if not updated:
+            await hint_repo.acknowledge_latest_unacked(
+                session_id=uuid.UUID(session_id),
+                interviewer_used=req.interviewer_used,
+                candidate_response_quality=quality_str,
+            )
+    except Exception:
+        pass  # Row may not be flushed yet; in-memory state is authoritative
 
     return {
         "hint_id": hint_id,

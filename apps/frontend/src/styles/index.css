@@ -3180,10 +3180,43 @@ ul, ol {
   margin-bottom: var(--space-6);
 }
 
+.report-history-page__search {
+  width: 100%;
+  max-width: 360px;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  outline: none;
+  transition: border-color var(--transition-fast);
+  margin-bottom: var(--space-4);
+}
+
+.report-history-page__search::placeholder {
+  color: var(--color-text-muted);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.report-history-page__search:focus {
+  border-color: var(--color-primary);
+}
+
 .report-history-page__list {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+.report-history-card__session-id {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  background: var(--color-bg-tertiary);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
 }
 
 .report-history-card {

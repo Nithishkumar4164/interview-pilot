@@ -40,7 +40,7 @@ Interview Pilot is a full-stack platform that augments SDE interviewers with rea
 | **Hierarchical Memory** | 3-tier context: working memory → rolling summary → fact store |
 | **Progressive Hints** | 3 levels (Nudge → Guide → Direct) with time-based auto-advance |
 | **Contradiction Detection** | Real-time inconsistency flagging across candidate statements |
-| **Code Analysis** | Live code review from CoderPad, HackerRank, LeetCode |
+| **Code Analysis** | code review with 5-dimensional rating and pitfalls |
 | **Report Generation** | 7-criteria assessment with annotated transcript and hint usage |
 | **Offline Resilience** | 3 degradation levels maintain functionality during connectivity loss |
 | **LLM Failover** | Automatic provider switching between Anthropic Claude and OpenAI GPT |

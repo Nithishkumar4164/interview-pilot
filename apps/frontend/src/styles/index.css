@@ -538,6 +538,10 @@ ul, ol {
   color: var(--color-text-secondary);
 }
 
+.insight-bar--off-track {
+  opacity: 0.5;
+}
+
 .insight-bar__badge {
   font-size: var(--text-xs);
   padding: 1px var(--space-2);
@@ -3309,6 +3313,217 @@ ul, ol {
   width: 12px;
   height: 12px;
   border-radius: 2px;
+}
+
+/* ======================================================================
+ * VIDEO OVERLAY
+ * ====================================================================== */
+.video-overlay {
+  position: fixed;
+  z-index: 1000;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--color-border);
+  background: #000;
+}
+
+.video-overlay__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: var(--color-surface);
+  cursor: grab;
+  user-select: none;
+}
+
+.video-overlay__header:active {
+  cursor: grabbing;
+}
+
+.video-overlay__title {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.video-overlay__controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.video-overlay__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.video-overlay__btn:hover {
+  background: var(--color-surface-hover, rgba(255,255,255,0.1));
+  color: var(--color-text-secondary);
+}
+
+.video-overlay__btn--active {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.video-overlay__btn--active:hover {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.video-overlay__btn--close:hover {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.video-overlay__canvas {
+  width: 100%;
+  height: calc(100% - 28px);
+  display: block;
+  background: #000;
+}
+
+.video-overlay__crop-overlay {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  cursor: crosshair;
+  z-index: 2;
+}
+
+.video-overlay__crop-dim {
+  position: absolute;
+  background: rgba(0,0,0,0.5);
+  pointer-events: none;
+}
+
+.video-overlay__crop-selection {
+  position: absolute;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
+  pointer-events: none;
+}
+
+.video-overlay__resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+}
+
+.video-overlay__resize-handle::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--color-text-muted);
+  border-bottom: 2px solid var(--color-text-muted);
+  opacity: 0.5;
+}
+
+/* Docked mode — sits in normal flow above transcript, height set via inline style */
+.video-overlay--docked {
+  position: relative;
+  z-index: auto;
+  width: 100%;
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.video-overlay--docked .video-overlay__header {
+  cursor: default;
+}
+
+.video-overlay--docked .video-overlay__header:active {
+  cursor: default;
+}
+
+.video-overlay--docked .video-overlay__resize-handle {
+  display: none;
+}
+
+/* Bottom-edge drag divider for docked overlays */
+.video-overlay__dock-resize {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 3;
+}
+
+.video-overlay__dock-resize::after {
+  content: '';
+  position: absolute;
+  bottom: 1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--color-text-muted);
+  opacity: 0.4;
+  transition: opacity var(--transition-fast);
+}
+
+.video-overlay__dock-resize:hover::after {
+  opacity: 0.8;
+}
+
+/* Fullscreen mode — covers entire viewport */
+.video-overlay--fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  border-radius: 0;
+  border: none;
+}
+
+.video-overlay--fullscreen .video-overlay__header {
+  cursor: default;
+}
+
+.video-overlay--fullscreen .video-overlay__header:active {
+  cursor: default;
+}
+
+.video-overlay--fullscreen .video-overlay__resize-handle {
+  display: none;
+}
+
+.video-overlay--fullscreen .video-overlay__canvas {
+  height: calc(100vh - 28px);
+}
+
+/* Share Video Button */
+.video-share-toggle--active {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-danger);
+  border-color: var(--color-danger);
 }
 
 /* ======================================================================

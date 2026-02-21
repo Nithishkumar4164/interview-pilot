@@ -333,8 +333,13 @@ async def end_session(
         code_analyzer = _active_analyzers.get(session_id)
 
         # Drain in-flight background tasks so snapshots capture complete data
+        # Use a hard timeout so the endpoint never hangs
+        import asyncio
         if worker:
-            await worker.drain()
+            try:
+                await asyncio.wait_for(worker.drain(), timeout=5.0)
+            except (asyncio.TimeoutError, Exception):
+                pass
 
         # Calculate duration
         duration_minutes = db_session.duration_minutes
@@ -411,12 +416,12 @@ async def end_session(
         await report_repo.create(placeholder_report)
         report_id = str(placeholder_report.id)
 
-        # Save final session snapshot before cleanup
+        # Save final session snapshot before cleanup (with timeout)
         try:
             sss = get_session_state_service()
-            await sss.save_snapshot(session_id, db)
+            await asyncio.wait_for(sss.save_snapshot(session_id, db), timeout=3.0)
             sss.remove_state(session_id)
-        except Exception:
+        except (asyncio.TimeoutError, Exception):
             pass
 
         await db.commit()
@@ -425,7 +430,6 @@ async def end_session(
         _hint_services.pop(session_id, None)
 
         # Fire background task for report generation
-        import asyncio
         asyncio.create_task(
             _generate_report_background(
                 report_id=report_id,

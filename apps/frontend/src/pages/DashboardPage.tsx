@@ -28,7 +28,7 @@ export function DashboardPage() {
   const resumeStatus = usePlanStore((s) => s.resume.status);
 
   const [level, setLevel] = useState('sde2');
-  const [duration, setDuration] = useState(45);
+  const [duration, setDuration] = useState(60);
   const [focusAreas, setFocusAreas] = useState<string[]>(['coding']);
   const [resumeData, setResumeData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);

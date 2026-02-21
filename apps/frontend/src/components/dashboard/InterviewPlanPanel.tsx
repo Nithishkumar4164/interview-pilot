@@ -7,7 +7,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { usePlanStore } from '@/stores/plan-store';
 import { useSessionStore, getAllPlanQuestions } from '@/stores/session-store';
-import { useHintStore, type HintEntry } from '@/stores/hint-store';
+import { useHintStore } from '@/stores/hint-store';
+import type { QuestionHint } from '@/stores/plan-store';
 import type { ApproachPattern } from '@/stores/plan-store';
 import { QuestionTimer } from './QuestionTimer';
 
@@ -20,7 +21,7 @@ const LEVEL_LABELS: Record<number, string> = {
 interface InterviewPlanPanelProps {
   onAdvanceQuestion: (delta: number) => void;
   onGoToQuestion: (index: number) => void;
-  onRequestHint: () => void;
+  onRequestHint: (level: number) => void;
   onAcknowledgeHint: (hintId: string, quality: 'none' | 'partial' | 'full') => void;
 }
 
@@ -33,29 +34,13 @@ export function InterviewPlanPanel({
   const plan = usePlanStore((s) => s.plan);
   const currentQuestionIndex = useSessionStore((s) => s.currentQuestionIndex);
 
-  const { currentLevel, activeHint, history: hintHistory, hintSignal } = useHintStore();
+  const { givenLevels, history: hintHistory, hintSignal } = useHintStore();
 
   const [showNavigator, setShowNavigator] = useState(false);
   const [showBruteForce, setShowBruteForce] = useState(false);
   const [showOptimal, setShowOptimal] = useState(false);
   const [showPitfalls, setShowPitfalls] = useState(false);
-
-  // Keyboard shortcut: H to show next hint
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      ) {
-        return;
-      }
-      if (e.key === 'h' || e.key === 'H') {
-        onRequestHint();
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onRequestHint]);
+  const [expandedHintLevel, setExpandedHintLevel] = useState<number | null>(null);
 
   // Reset expandable sections when question changes
   const prevQuestionIndex = useRef(currentQuestionIndex);
@@ -64,6 +49,7 @@ export function InterviewPlanPanel({
       setShowBruteForce(false);
       setShowOptimal(false);
       setShowPitfalls(false);
+      setExpandedHintLevel(null);
       prevQuestionIndex.current = currentQuestionIndex;
     }
   }, [currentQuestionIndex]);
@@ -230,82 +216,110 @@ export function InterviewPlanPanel({
         </div>
       )}
 
-      {/* ── Static Hints ─────────────────────────────────────────── */}
-      <div className="plan-panel__hints">
-        <div className="hint-panel__header">
-          <h3>Hints</h3>
-          <span className="hint-panel__level">Level {currentLevel}/3</span>
-        </div>
-
-        {/* Hint Signal Indicator */}
-        {hintSignal !== 'none' && (
-          <div className={`hint-signal hint-signal--${hintSignal}`} role="status">
-            {hintSignal === 'nudge' && 'Candidate may need a gentle nudge'}
-            {hintSignal === 'guide' && 'Candidate seems stuck — hint recommended'}
-            {hintSignal === 'direct' && 'Candidate very stuck — consider direct hint'}
+      {/* ── Hints Accordion ──────────────────────────────────────── */}
+      {currentQuestion && currentQuestion.hints && currentQuestion.hints.length > 0 && (
+        <div className="plan-panel__hints">
+          <div className="hint-panel__header">
+            <h3>Hints</h3>
+            <span className="hint-panel__level">
+              {givenLevels.size}/{currentQuestion.hints.length} given
+            </span>
           </div>
-        )}
 
-        {/* Active Hint */}
-        {activeHint ? (
-          <div className="hint-panel__active">
-            <div className="hint-card">
-              <span className={`hint-card__level hint-card__level--${activeHint.level}`}>
-                {LEVEL_LABELS[activeHint.level]}
-              </span>
-              <p className="hint-card__text">{activeHint.text}</p>
+          {/* Hint Signal Indicator */}
+          {hintSignal !== 'none' && (
+            <div className={`hint-signal hint-signal--${hintSignal}`} role="status">
+              {hintSignal === 'nudge' && 'Candidate may need a gentle nudge'}
+              {hintSignal === 'guide' && 'Candidate seems stuck — hint recommended'}
+              {hintSignal === 'direct' && 'Candidate very stuck — consider direct hint'}
             </div>
+          )}
 
-            {!activeHint.interviewerUsed && (
-              <div className="hint-panel__actions">
-                <button
-                  className="btn btn--success"
-                  onClick={() => onAcknowledgeHint(activeHint.id, 'full')}
-                >
-                  Got It
-                </button>
-                <button
-                  className="btn btn--secondary"
-                  onClick={() => onAcknowledgeHint(activeHint.id, 'partial')}
-                >
-                  Partially
-                </button>
-                <button
-                  className="btn btn--ghost"
-                  onClick={() => onAcknowledgeHint(activeHint.id, 'none')}
-                >
-                  No Response
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="hint-panel__empty">
-            <p>No active hint</p>
-          </div>
-        )}
+          <div className="hint-accordion">
+            {currentQuestion.hints.map((hint: QuestionHint) => {
+              const isExpanded = expandedHintLevel === hint.level;
+              const isGiven = givenLevels.has(hint.level);
+              const matchingHistory = hintHistory.filter((h) => h.level === hint.level);
+              const latestEntry = matchingHistory[matchingHistory.length - 1] ?? null;
 
-        {/* Show Hint Button */}
-        {currentLevel < 3 && (
-          <button
-            className="btn btn--primary hint-panel__trigger"
-            onClick={onRequestHint}
-            title="Show next hint (H)"
-          >
-            Show Hint (Level {currentLevel + 1})
-          </button>
-        )}
+              return (
+                <div
+                  key={hint.level}
+                  className={`hint-accordion__item ${isGiven ? 'hint-accordion__item--given' : ''}`}
+                >
+                  <button
+                    className="hint-accordion__header"
+                    onClick={() => setExpandedHintLevel(isExpanded ? null : hint.level)}
+                    aria-expanded={isExpanded}
+                  >
+                    <span className={`hint-card__level hint-card__level--${hint.level}`}>
+                      {LEVEL_LABELS[hint.level]}
+                    </span>
+                    <span className="hint-accordion__status">
+                      {isGiven
+                        ? latestEntry?.candidateResponseQuality === 'full'
+                          ? 'Got it'
+                          : latestEntry?.candidateResponseQuality === 'partial'
+                            ? 'Partial'
+                            : latestEntry?.interviewerUsed
+                              ? 'Given'
+                              : 'Given'
+                        : ''}
+                    </span>
+                    <span className={`hint-accordion__chevron ${isExpanded ? 'hint-accordion__chevron--open' : ''}`}>
+                      &#9662;
+                    </span>
+                  </button>
 
-        {/* Hint Timeline */}
-        {hintHistory.length > 0 && (
-          <div className="hint-panel__timeline">
-            <h4>Hint History</h4>
-            {hintHistory.map((hint) => (
-              <StaticHintTimelineEntry key={hint.id} hint={hint} />
-            ))}
+                  {isExpanded && (
+                    <div className="hint-accordion__body">
+                      <p className="hint-card__text">{hint.text}</p>
+
+                      {!isGiven && (
+                        <button
+                          className="btn btn--primary btn--sm"
+                          onClick={() => onRequestHint(hint.level)}
+                        >
+                          Give this hint
+                        </button>
+                      )}
+
+                      {isGiven && latestEntry && !latestEntry.interviewerUsed && (
+                        <div className="hint-panel__actions">
+                          <button
+                            className="btn btn--success btn--small"
+                            onClick={() => onAcknowledgeHint(latestEntry.id, 'full')}
+                          >
+                            Got It
+                          </button>
+                          <button
+                            className="btn btn--secondary btn--small"
+                            onClick={() => onAcknowledgeHint(latestEntry.id, 'partial')}
+                          >
+                            Partially
+                          </button>
+                          <button
+                            className="btn btn--ghost btn--small"
+                            onClick={() => onAcknowledgeHint(latestEntry.id, 'none')}
+                          >
+                            No Response
+                          </button>
+                        </div>
+                      )}
+
+                      {isGiven && latestEntry?.interviewerUsed && (
+                        <span className={`hint-accordion__feedback hint-accordion__feedback--${latestEntry.candidateResponseQuality}`}>
+                          {latestEntry.candidateResponseQuality}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Navigation Controls */}
       <div className="navigation-controls">
@@ -366,30 +380,6 @@ function PhaseProgressBar({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function StaticHintTimelineEntry({ hint }: { hint: HintEntry }) {
-  const qualityColors: Record<string, string> = {
-    full: 'green',
-    partial: 'amber',
-    none: 'red',
-  };
-
-  return (
-    <div className="hint-timeline-entry">
-      <span className={`hint-timeline-entry__level hint-timeline-entry__level--${hint.level}`}>
-        L{hint.level}
-      </span>
-      <span className="hint-timeline-entry__text">{hint.text}</span>
-      {hint.interviewerUsed && (
-        <span
-          className={`hint-timeline-entry__quality hint-timeline-entry__quality--${qualityColors[hint.candidateResponseQuality]}`}
-        >
-          {hint.candidateResponseQuality}
-        </span>
-      )}
     </div>
   );
 }

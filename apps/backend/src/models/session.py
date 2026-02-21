@@ -24,10 +24,10 @@ class InterviewSession(BaseModel):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    plans: Mapped[list["InterviewPlan"]] = relationship(back_populates="session")
-    transcripts: Mapped[list["Transcript"]] = relationship(back_populates="session")
-    hint_events: Mapped[list["HintEvent"]] = relationship(back_populates="session")
-    reports: Mapped[list["Report"]] = relationship(back_populates="session")
+    plans: Mapped[list["InterviewPlan"]] = relationship(back_populates="session", cascade="all, delete-orphan")
+    transcripts: Mapped[list["Transcript"]] = relationship(back_populates="session", cascade="all, delete-orphan")
+    hint_events: Mapped[list["HintEvent"]] = relationship(back_populates="session", cascade="all, delete-orphan")
+    reports: Mapped[list["Report"]] = relationship(back_populates="session", cascade="all, delete-orphan")
 
 
 # Avoid circular imports — these are resolved by SQLAlchemy's string-based relationship lookup

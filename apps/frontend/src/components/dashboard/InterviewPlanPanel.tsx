@@ -142,7 +142,7 @@ export function InterviewPlanPanel({
       {currentQuestion && (
         <div className="current-question-card" style={{ position: 'relative' }}>
           {contextReloading && (
-            <div className="current-question-card__loading-overlay">
+            <div className="current-question-card__sync-badge">
               <span className="current-question-card__spinner" />
               <span>Syncing context…</span>
             </div>

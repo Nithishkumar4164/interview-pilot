@@ -419,7 +419,7 @@ function CodeRatingSection({
         className="plan-panel__section-toggle"
         onClick={() => setShowRating(!showRating)}
       >
-        {showRating ? 'Hide' : 'Show'} Code Rating
+        {showRating ? 'Hide' : 'Paste Solution'}
       </button>
 
       {showRating && (

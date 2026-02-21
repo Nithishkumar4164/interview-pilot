@@ -43,6 +43,7 @@ interface HintState {
   currentLevel: number;
   activeHint: HintEntry | null;
   history: HintEntry[];
+  givenLevels: Set<number>;
   autoAdvanceAt: string | null;
   hintSignal: string; // none | nudge | guide | direct
 
@@ -66,6 +67,7 @@ export const useHintStore = create<HintState>((set) => ({
   currentLevel: 0,
   activeHint: null,
   history: [],
+  givenLevels: new Set<number>(),
   autoAdvanceAt: null,
   hintSignal: 'none',
 
@@ -75,12 +77,17 @@ export const useHintStore = create<HintState>((set) => ({
   runtimeHintLoading: false,
 
   setActiveHint: (hint) =>
-    set((s) => ({
-      activeHint: hint,
-      currentLevel: hint.level,
-      history: [...s.history, hint],
-      autoAdvanceAt: null,
-    })),
+    set((s) => {
+      const givenLevels = new Set(s.givenLevels);
+      givenLevels.add(hint.level);
+      return {
+        activeHint: hint,
+        currentLevel: hint.level,
+        history: [...s.history, hint],
+        givenLevels,
+        autoAdvanceAt: null,
+      };
+    }),
 
   acknowledgeHint: (id, quality) =>
     set((s) => ({
@@ -123,6 +130,7 @@ export const useHintStore = create<HintState>((set) => ({
       currentLevel: 0,
       activeHint: null,
       history: [],
+      givenLevels: new Set<number>(),
       autoAdvanceAt: null,
       hintSignal: 'none',
       activeRuntimeHint: null,

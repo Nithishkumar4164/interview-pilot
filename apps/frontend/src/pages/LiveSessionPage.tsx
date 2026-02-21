@@ -97,38 +97,37 @@ export function LiveSessionPage() {
     }
   }, [sessionId, isPanel, setStatus, navigate]);
 
-  const handleRequestHint = useCallback(async () => {
-    if (!sessionId) return;
-    try {
-      // Get current question ID from the plan
-      const planState = usePlanStore.getState().plan;
-      let questionId = '';
-      if (planState) {
-        const { currentQuestionIndex } = useSessionStore.getState();
-        const allQuestions = planState.phases.flatMap((p) => p.questions);
-        if (currentQuestionIndex < allQuestions.length) {
-          questionId = allQuestions[currentQuestionIndex].id;
-        }
-      }
+  const handleRequestHint = useCallback(
+    (level: number) => {
+      if (!sessionId) return;
 
-      const result = await api.triggerNextHint(sessionId, questionId);
-      // Update hint store with real hint data
-      if (result.id && result.level > 0) {
-        useHintStore.getState().setActiveHint({
-          id: result.id,
-          questionId: result.question_id,
-          level: result.level as 1 | 2 | 3,
-          text: result.text,
-          displayedAt: new Date().toISOString(),
-          interviewerUsed: false,
-          candidateResponseQuality: 'none',
-          timeToRespondMs: null,
-        });
-      }
-    } catch (err) {
-      console.error('Failed to request hint:', err);
-    }
-  }, [sessionId]);
+      const planState = usePlanStore.getState().plan;
+      if (!planState) return;
+
+      const { currentQuestionIndex } = useSessionStore.getState();
+      const allQuestions = planState.phases.flatMap((p) => p.questions);
+      const question = allQuestions[currentQuestionIndex];
+      if (!question) return;
+
+      const hint = question.hints?.find((h: { level: number; text: string }) => h.level === level);
+      if (!hint) return;
+
+      useHintStore.getState().setActiveHint({
+        id: crypto.randomUUID(),
+        questionId: question.id,
+        level: level as 1 | 2 | 3,
+        text: hint.text,
+        displayedAt: new Date().toISOString(),
+        interviewerUsed: false,
+        candidateResponseQuality: 'none',
+        timeToRespondMs: null,
+      });
+
+      // Notify backend for tracking (fire-and-forget)
+      api.triggerNextHint(sessionId, question.id).catch(() => {});
+    },
+    [sessionId],
+  );
 
   const handleAcknowledgeHint = useCallback(
     async (hintId: string, quality: 'none' | 'partial' | 'full') => {

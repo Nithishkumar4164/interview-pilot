@@ -6,6 +6,7 @@ import { LiveSessionPage } from '@/pages/LiveSessionPage';
 import { ReportPage } from '@/pages/ReportPage';
 import { ReportHistoryPage } from '@/pages/ReportHistoryPage';
 import { ReportComparisonPage } from '@/components/report/ReportComparison';
+import { SessionsPage } from '@/pages/SessionsPage';
 
 export function App() {
   useEffect(() => {
@@ -20,7 +21,8 @@ export function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<DashboardPage />} />
+      <Route path="/" element={<SessionsPage />} />
+      <Route path="/new" element={<DashboardPage />} />
       <Route path="/session/:sessionId/plan" element={<PlanReviewPage />} />
       <Route path="/session/:sessionId" element={<LiveSessionPage />} />
       <Route path="/reports" element={<ReportHistoryPage />} />

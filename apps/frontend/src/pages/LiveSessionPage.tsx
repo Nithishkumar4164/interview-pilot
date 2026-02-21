@@ -227,11 +227,13 @@ export function LiveSessionPage() {
       return;
     }
     try {
+      const controller = new CaptureController();
+      controller.setFocusBehavior("no-focus-change");
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: { displaySurface: 'browser' } as MediaTrackConstraints,
         audio: false,
-      });
-      window.focus();
+        controller,
+      } as DisplayMediaStreamOptions);
       setVideoStream(stream);
       setOverlays([{ id: crypto.randomUUID(), cropRegion: null, mode: 'floating' }]);
     } catch {

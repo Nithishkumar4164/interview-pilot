@@ -3527,6 +3527,451 @@ ul, ol {
 }
 
 /* ======================================================================
+ * SESSIONS PAGE
+ * ====================================================================== */
+.sessions-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-4);
+}
+
+.sessions-page__header {
+  margin-bottom: var(--space-6);
+}
+
+.sessions-page__header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.sessions-page__header h1 {
+  font-size: var(--text-2xl);
+  margin: 0;
+}
+
+.sessions-page__subtitle {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  margin-top: var(--space-1);
+}
+
+.sessions-page__toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.sessions-page__search {
+  width: 100%;
+  max-width: 360px;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.sessions-page__search::placeholder {
+  color: var(--color-text-muted);
+}
+
+.sessions-page__search:focus {
+  border-color: var(--color-primary);
+}
+
+.sessions-page__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.sessions-page__loading,
+.sessions-page__error,
+.sessions-page__empty {
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: var(--space-12) 0;
+  font-size: var(--text-lg);
+}
+
+.sessions-page__error {
+  color: var(--color-danger);
+}
+
+.sessions-page__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.chip__count {
+  opacity: 0.7;
+  font-size: var(--text-xs);
+  margin-left: 2px;
+}
+
+/* ── Session Card ──────────────────────────────────────────────────── */
+.session-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color var(--transition-fast);
+}
+
+.session-card:hover {
+  border-color: var(--color-primary);
+}
+
+.session-card--expanded {
+  border-color: var(--color-primary);
+}
+
+.session-card__header {
+  padding: var(--space-4);
+  cursor: pointer;
+  user-select: none;
+}
+
+.session-card__header:hover {
+  background: var(--color-surface-hover);
+}
+
+.session-card__top-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.session-card__status {
+  display: inline-block;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  letter-spacing: 0.5px;
+}
+
+.session-card__status--planning { background: rgba(99, 102, 241, 0.15); color: var(--color-primary); }
+.session-card__status--ready    { background: rgba(59, 130, 246, 0.15); color: var(--color-info); }
+.session-card__status--live     { background: rgba(34, 197, 94, 0.15); color: var(--color-success); }
+.session-card__status--paused   { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
+.session-card__status--ended    { background: rgba(107, 113, 148, 0.15); color: var(--color-text-secondary); }
+
+.session-card__level {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+.session-card__duration {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.session-card__date {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-left: auto;
+}
+
+.session-card__chevron {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  transition: transform var(--transition-fast);
+}
+
+.session-card__chevron--open {
+  transform: rotate(180deg);
+}
+
+.session-card__focus-areas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.session-card__focus-chip {
+  font-size: var(--text-xs);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  text-transform: capitalize;
+}
+
+.session-card__report-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.session-card__rec {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.session-card__rec--green   { background: rgba(16, 185, 129, 0.15); color: var(--color-success); }
+.session-card__rec--amber   { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
+.session-card__rec--orange  { background: rgba(249, 115, 22, 0.15); color: #f97316; }
+.session-card__rec--red     { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
+.session-card__rec--pending { background: rgba(99, 102, 241, 0.15); color: var(--color-primary); }
+
+.session-card__confidence {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* ── Session Card Actions ──────────────────────────────────────────── */
+.session-card__actions {
+  display: flex;
+  gap: var(--space-2);
+  padding: 0 var(--space-4) var(--space-3);
+}
+
+.btn--sm {
+  padding: 4px 12px;
+  font-size: var(--text-xs);
+  border-radius: var(--radius-sm);
+}
+
+.btn--danger-text {
+  color: var(--color-danger) !important;
+}
+
+.btn--danger-text:hover {
+  background: rgba(239, 68, 68, 0.1) !important;
+}
+
+/* ── Session Card Detail (expanded) ────────────────────────────────── */
+.session-card__detail {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-4);
+  background: var(--color-bg-secondary);
+}
+
+.session-card__links {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Session Detail Component ──────────────────────────────────────── */
+.session-detail__loading,
+.session-detail__error {
+  padding: var(--space-4);
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.session-detail__error {
+  color: var(--color-danger);
+}
+
+.session-detail__stats {
+  display: flex;
+  gap: var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+.session-detail__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.session-detail__stat-value {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.session-detail__stat-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.session-detail__section {
+  margin-top: var(--space-4);
+}
+
+.session-detail__section-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--space-3);
+}
+
+/* ── Plan phases ── */
+.session-detail__phase {
+  margin-bottom: var(--space-3);
+}
+
+.session-detail__phase-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-1);
+}
+
+.session-detail__phase-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  text-transform: capitalize;
+}
+
+.session-detail__phase-time {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.session-detail__questions {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.session-detail__question {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+}
+
+.session-detail__question:last-child {
+  border-bottom: none;
+}
+
+.session-detail__question-text {
+  flex: 1;
+  color: var(--color-text);
+}
+
+.session-detail__question-meta {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.session-detail__question-category {
+  font-size: var(--text-xs);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  text-transform: capitalize;
+}
+
+.session-detail__question-difficulty {
+  font-size: var(--text-xs);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--color-warning);
+}
+
+/* ── Scores ── */
+.session-detail__scores {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.session-detail__score-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.session-detail__score-criterion {
+  width: 140px;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  text-transform: capitalize;
+  flex-shrink: 0;
+}
+
+.session-detail__score-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: var(--color-bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.session-detail__score-bar-fill {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 3px;
+  transition: width var(--transition-base);
+}
+
+.session-detail__score-value {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.session-detail__list-section {
+  margin-top: var(--space-3);
+}
+
+.session-detail__list-section h5 {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--space-1);
+}
+
+.session-detail__list-section ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.session-detail__list-section li {
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  padding: var(--space-1) 0;
+  padding-left: var(--space-3);
+  position: relative;
+}
+
+.session-detail__list-section li::before {
+  content: '\2022';
+  position: absolute;
+  left: 0;
+  color: var(--color-text-muted);
+}
+
+/* ======================================================================
  * PRINT STYLESHEET
  * ====================================================================== */
 @media print {

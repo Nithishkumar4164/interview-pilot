@@ -118,17 +118,24 @@ export async function getSessionState(sessionId: string) {
   return request<SessionStateResponse>(`/api/sessions/${sessionId}/state`);
 }
 
+export interface SessionListItem {
+  id: string;
+  status: string;
+  level: string;
+  duration_minutes: number;
+  focus_areas: string[];
+  started_at: string | null;
+  ended_at: string | null;
+  created_at: string;
+  report_id: string | null;
+  report_status: string | null;
+  recommendation: string | null;
+  confidence_level: number | null;
+  plan_id: string | null;
+}
+
 export interface SessionListResponse {
-  sessions: Array<{
-    id: string;
-    status: string;
-    level: string;
-    duration_minutes: number;
-    focus_areas: string[];
-    started_at: string | null;
-    ended_at: string | null;
-    created_at: string;
-  }>;
+  sessions: SessionListItem[];
   total: number;
   limit: number;
   offset: number;
@@ -141,6 +148,61 @@ export async function listSessions(status?: string) {
 
 export async function getSessionReport(sessionId: string) {
   return request<Record<string, unknown>>(`/api/history/sessions/${sessionId}/report`);
+}
+
+export interface SessionDetailQuestion {
+  id: string;
+  text: string;
+  category: string;
+  difficulty: number;
+  time_minutes: number;
+}
+
+export interface SessionDetailPhase {
+  phase: string;
+  start_minute: number;
+  duration_minutes: number;
+  questions: SessionDetailQuestion[];
+}
+
+export interface SessionDetailResponse {
+  session_id: string;
+  plan: {
+    id: string;
+    phases: SessionDetailPhase[];
+  } | null;
+  report: {
+    id: string;
+    recommendation: string;
+    confidence_level: number;
+    scores: Array<{ criterion: string; score: number }>;
+    key_moments_count: number;
+    strengths: string[];
+    areas_for_growth: string[];
+  } | null;
+  stats: {
+    transcript_count: number;
+    analysis_count: number;
+    hint_count: number;
+  };
+}
+
+export async function getSessionDetail(sessionId: string) {
+  return request<SessionDetailResponse>(`/api/history/sessions/${sessionId}/detail`);
+}
+
+export async function deleteSession(sessionId: string) {
+  return request<{ status: string; session_id: string }>(
+    `/api/sessions/${sessionId}`,
+    { method: 'DELETE' },
+  );
+}
+
+export async function generateReport(sessionId: string) {
+  return request<{ report_id: string; status: string }>(
+    `/api/reports/generate/${sessionId}`,
+    { method: 'POST' },
+  );
 }
 
 // ── Hints ─────────────────────────────────────────────────────────────

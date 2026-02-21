@@ -506,7 +506,7 @@ class AnalysisService:
 
     def get_average_quality(self) -> float:
         """Get the running average answer quality score."""
-        scored = [a for a in self._analysis_history if a.answer_quality > 0]
+        scored = [a for a in self._analysis_history if a.answer_quality > 0 and a.on_track]
         if not scored:
             return 0.0
         return sum(a.answer_quality for a in scored) / len(scored)

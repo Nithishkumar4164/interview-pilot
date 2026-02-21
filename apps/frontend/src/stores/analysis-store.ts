@@ -213,7 +213,7 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
     set((s) => {
       const analyses = [...s.analyses, entry].slice(-50);
       // Update running score average
-      const scored = analyses.filter((a) => a.answerQuality > 0);
+      const scored = analyses.filter((a) => a.answerQuality > 0 && a.onTrack);
       const avg = scored.length > 0
         ? scored.reduce((sum, a) => sum + a.answerQuality, 0) / scored.length
         : 0;
@@ -226,7 +226,7 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
       if (entry.dimensions) {
         const commScore = dimensionScoreToNumber(entry.dimensions.communicationQuality.score);
         // Running average of communication scores
-        const withDims = analyses.filter((a) => a.dimensions);
+        const withDims = analyses.filter((a) => a.dimensions && a.onTrack);
         if (withDims.length > 0) {
           const commAvg = withDims.reduce(
             (sum, a) => sum + (a.dimensions ? dimensionScoreToNumber(a.dimensions.communicationQuality.score) : 0),
@@ -238,7 +238,7 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
         }
 
         // Hint responsiveness from hint_reception dimension
-        const hintEntries = analyses.filter((a) => a.dimensions?.hintReception);
+        const hintEntries = analyses.filter((a) => a.dimensions?.hintReception && a.onTrack);
         if (hintEntries.length > 0) {
           const hintAvg = hintEntries.reduce(
             (sum, a) => sum + (a.dimensions?.hintReception ? dimensionScoreToNumber(a.dimensions.hintReception.score) : 0),
@@ -261,7 +261,7 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
   restoreAnalyses: (entries) =>
     set(() => {
       const analyses = entries.slice(-50);
-      const scored = analyses.filter((a) => a.answerQuality > 0);
+      const scored = analyses.filter((a) => a.answerQuality > 0 && a.onTrack);
       const avg = scored.length > 0
         ? scored.reduce((sum, a) => sum + a.answerQuality, 0) / scored.length
         : 0;
@@ -270,7 +270,7 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
         problemSolving: Math.round(avg * 10) / 10,
       };
 
-      const withDims = analyses.filter((a) => a.dimensions);
+      const withDims = analyses.filter((a) => a.dimensions && a.onTrack);
       if (withDims.length > 0) {
         const commAvg = withDims.reduce(
           (sum, a) => sum + (a.dimensions ? dimensionScoreToNumber(a.dimensions.communicationQuality.score) : 0),
@@ -279,7 +279,7 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
         scoreUpdates.communication = Math.round(commAvg * 10) / 10;
       }
 
-      const hintEntries = analyses.filter((a) => a.dimensions?.hintReception);
+      const hintEntries = analyses.filter((a) => a.dimensions?.hintReception && a.onTrack);
       if (hintEntries.length > 0) {
         const hintAvg = hintEntries.reduce(
           (sum, a) => sum + (a.dimensions?.hintReception ? dimensionScoreToNumber(a.dimensions.hintReception.score) : 0),

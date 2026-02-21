@@ -25,6 +25,7 @@ export function useWebSocket(sessionId: string | null) {
   const setActiveHint = useHintStore((s) => s.setActiveHint);
   const setHintSignal = useHintStore((s) => s.setHintSignal);
   const setWSStatus = useOfflineStore((s) => s.setWSStatus);
+  const setBackendStatus = useOfflineStore((s) => s.setBackendStatus);
   const setProviderStatus = useOfflineStore((s) => s.setProviderStatus);
   const setReconnectAttempts = useOfflineStore((s) => s.setReconnectAttempts);
   const setSessionStatus = useSessionStore((s) => s.setStatus);
@@ -32,6 +33,7 @@ export function useWebSocket(sessionId: string | null) {
 
   const handleMessage = useCallback(
     (message: WSMessage) => {
+      console.debug('[useWebSocket] handleMessage:', message.type);
       switch (message.type) {
         case 'transcript': {
           const p = message.payload as Record<string, unknown>;
@@ -188,16 +190,22 @@ export function useWebSocket(sessionId: string | null) {
   useEffect(() => {
     if (!sessionId) return;
 
+    console.log('[useWebSocket] Connecting for session:', sessionId);
     const client = new DashboardWSClient({
       sessionId,
       onOpen: () => {
+        console.log('[useWebSocket] onOpen — session:', sessionId);
         setWSStatus('connected');
+        setBackendStatus('connected');
         setReconnectAttempts(0);
       },
       onClose: () => {
+        console.log('[useWebSocket] onClose — session:', sessionId);
         setWSStatus('reconnecting');
+        setBackendStatus('reconnecting');
       },
       onError: () => {
+        console.error('[useWebSocket] onError — session:', sessionId);
         setWSStatus('reconnecting');
       },
     });
@@ -214,7 +222,7 @@ export function useWebSocket(sessionId: string | null) {
       clientRef.current = null;
       setWSStatus('disconnected');
     };
-  }, [sessionId, handleMessage, setWSStatus, setReconnectAttempts]);
+  }, [sessionId, handleMessage, setWSStatus, setBackendStatus, setReconnectAttempts]);
 
   const send = useCallback((data: Record<string, unknown>) => {
     clientRef.current?.send(data);

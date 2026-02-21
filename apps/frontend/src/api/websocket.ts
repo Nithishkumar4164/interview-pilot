@@ -78,6 +78,8 @@ export class DashboardWSClient {
 
     this._intentionalClose = false;
 
+    console.log('[WS] Connecting to', this.options.url);
+
     try {
       this.ws = new WebSocket(this.options.url);
     } catch {
@@ -86,6 +88,7 @@ export class DashboardWSClient {
     }
 
     this.ws.onopen = () => {
+      console.log('[WS] Connected');
       this._connected = true;
       this._reconnectAttempts = 0;
       this.reconnectDelay = this.options.reconnectIntervalMs;
@@ -93,7 +96,8 @@ export class DashboardWSClient {
       this.options.onOpen();
     };
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (event) => {
+      console.log('[WS] Closed:', event.code, event.reason || '(no reason)');
       this._connected = false;
       this.stopHeartbeat();
       this.options.onClose();
@@ -104,12 +108,14 @@ export class DashboardWSClient {
     };
 
     this.ws.onerror = (event) => {
+      console.error('[WS] Error:', event);
       this.options.onError(event);
     };
 
     this.ws.onmessage = (event) => {
       try {
         const message: WSMessage = JSON.parse(event.data);
+        console.debug('[WS] Message received:', message.type);
         this.dispatch(message);
       } catch {
         // Ignore unparseable messages (e.g., pong)
@@ -200,6 +206,8 @@ export class DashboardWSClient {
     const jitter = 1 + (Math.random() * 0.5 - 0.25);
     const delay = Math.min(this.reconnectDelay * jitter, this.options.maxReconnectIntervalMs);
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.options.maxReconnectIntervalMs);
+
+    console.log(`[WS] Reconnect attempt ${this._reconnectAttempts} in ${Math.round(delay)}ms`);
 
     this.reconnectTimer = setTimeout(() => {
       this.connect();

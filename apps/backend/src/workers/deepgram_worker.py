@@ -337,10 +337,34 @@ class DeepgramWorker:
         )
 
     async def send_audio(self, channel: str, pcm_data: bytes) -> None:
-        """Send audio data to the appropriate Deepgram stream."""
+        """Send audio data to the appropriate Deepgram stream.
+
+        Auto-reconnects if the stream disconnected (e.g. Deepgram closed
+        an idle connection before mic capture started).
+        """
         stream = self._streams.get(channel)
-        if stream:
-            await stream.send_audio(pcm_data)
+        if not stream:
+            return
+
+        if stream.state == StreamState.DISCONNECTED:
+            logger.info(
+                "deepgram_stream_reconnecting",
+                channel=channel,
+                session_id=self.session_id,
+            )
+            try:
+                await stream.connect()
+                asyncio.create_task(self._forward_results(channel, stream))
+            except Exception as e:
+                logger.error(
+                    "deepgram_reconnect_failed",
+                    channel=channel,
+                    session_id=self.session_id,
+                    error=str(e),
+                )
+                return
+
+        await stream.send_audio(pcm_data)
 
     async def stop(self) -> None:
         """Close all Deepgram streams."""

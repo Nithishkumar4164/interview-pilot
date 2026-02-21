@@ -75,17 +75,6 @@ export interface AnalysisEntry {
   dimensions: InsightDimensions | null;
 }
 
-export interface CodeAnalysisState {
-  codeLength: number;
-  language: string;
-  source: string;
-  progressState: string;
-  detectedApproach: { name: string; confidence: number } | null;
-  isStuck: boolean;
-  bugs: string[];
-  timestamp: string;
-}
-
 export interface CodeRatingResult {
   questionId: string;
   approachMatch: string;
@@ -116,7 +105,6 @@ interface AnalysisStoreState {
   analyses: AnalysisEntry[];
   latestAnalysis: AnalysisEntry | null;
   redFlags: Array<{ text: string; timestamp: string; type?: string }>;
-  codeAnalysis: CodeAnalysisState | null;
   scores: ScoreState;
   codeRatingInput: string;
   codeRating: CodeRatingResult | null;
@@ -125,7 +113,6 @@ interface AnalysisStoreState {
   // Actions
   addAnalysis: (entry: AnalysisEntry) => void;
   addRedFlag: (flag: { text: string; timestamp: string; type?: string }) => void;
-  setCodeAnalysis: (state: CodeAnalysisState) => void;
   updateScores: (scores: Partial<ScoreState>) => void;
   setCodeRatingInput: (input: string) => void;
   setCodeRating: (rating: CodeRatingResult | null) => void;
@@ -216,7 +203,6 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
   analyses: [],
   latestAnalysis: null,
   redFlags: [],
-  codeAnalysis: null,
   scores: { ...DEFAULT_SCORES },
   codeRatingInput: '',
   codeRating: null,
@@ -274,8 +260,6 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
   addRedFlag: (flag) =>
     set((s) => ({ redFlags: [...s.redFlags, flag].slice(-20) })),
 
-  setCodeAnalysis: (state) => set({ codeAnalysis: state }),
-
   updateScores: (scores) =>
     set((s) => ({ scores: { ...s.scores, ...scores } })),
 
@@ -292,7 +276,6 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
       analyses: [],
       latestAnalysis: null,
       redFlags: [],
-      codeAnalysis: null,
       scores: { ...DEFAULT_SCORES },
       codeRatingInput: '',
       codeRating: null,

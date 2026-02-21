@@ -245,24 +245,6 @@ describe('useAnalysisStore', () => {
     expect(useAnalysisStore.getState().redFlags[0].type).toBe('contradiction');
   });
 
-  it('setCodeAnalysis updates code analysis state', () => {
-    useAnalysisStore.getState().setCodeAnalysis({
-      codeLength: 500,
-      language: 'python',
-      source: 'coderpad',
-      progressState: 'partial',
-      detectedApproach: { name: 'hash_map', confidence: 0.85 },
-      isStuck: false,
-      bugs: [],
-      timestamp: '2024-01-01T00:00:00Z',
-    });
-
-    const ca = useAnalysisStore.getState().codeAnalysis;
-    expect(ca?.language).toBe('python');
-    expect(ca?.progressState).toBe('partial');
-    expect(ca?.detectedApproach?.name).toBe('hash_map');
-  });
-
   it('updateScores merges partial scores', () => {
     useAnalysisStore.getState().updateScores({ communication: 3.5, codeQuality: 4 });
     const scores = useAnalysisStore.getState().scores;

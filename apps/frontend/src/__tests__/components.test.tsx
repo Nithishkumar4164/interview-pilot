@@ -5,7 +5,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SessionBar } from '@/components/dashboard/SessionBar';
 import { TranscriptPanel } from '@/components/dashboard/TranscriptPanel';
-import { CodePanel } from '@/components/dashboard/CodePanel';
 import { HintPanel } from '@/components/dashboard/HintPanel';
 import { ScoreRings } from '@/components/dashboard/ScoreRings';
 import { SpeakersPanel } from '@/components/dashboard/SpeakersPanel';
@@ -193,73 +192,6 @@ describe('TranscriptPanel', () => {
     render(withWS(<TranscriptPanel />));
     expect(screen.getByText('Good use of data structures')).toBeInTheDocument();
     expect(screen.getByText('4/5')).toBeInTheDocument();
-  });
-});
-
-// ── CodePanel ─────────────────────────────────────────────────────────
-
-describe('CodePanel', () => {
-  beforeEach(() => {
-    useAnalysisStore.getState().clear();
-  });
-
-  it('shows waiting message when no code analysis', () => {
-    render(<CodePanel />);
-    expect(screen.getByText('Waiting for code snapshots...')).toBeInTheDocument();
-  });
-
-  it('renders code analysis data', () => {
-    useAnalysisStore.getState().setCodeAnalysis({
-      codeLength: 350,
-      language: 'python',
-      source: 'coderpad',
-      progressState: 'partial',
-      detectedApproach: { name: 'hash_map', confidence: 0.85 },
-      isStuck: false,
-      bugs: [],
-      timestamp: '2024-01-01T00:00:00Z',
-    });
-
-    render(<CodePanel />);
-    expect(screen.getByText('python')).toBeInTheDocument();
-    expect(screen.getByText('coderpad')).toBeInTheDocument();
-    expect(screen.getByText('350 chars')).toBeInTheDocument();
-    expect(screen.getByText('Partial')).toBeInTheDocument();
-    expect(screen.getByText(/hash_map/)).toBeInTheDocument();
-  });
-
-  it('shows stuck indicator when stuck', () => {
-    useAnalysisStore.getState().setCodeAnalysis({
-      codeLength: 200,
-      language: 'javascript',
-      source: 'editor',
-      progressState: 'partial',
-      detectedApproach: null,
-      isStuck: true,
-      bugs: [],
-      timestamp: '2024-01-01T00:00:00Z',
-    });
-
-    render(<CodePanel />);
-    expect(screen.getByRole('alert')).toBeInTheDocument();
-    expect(screen.getByText(/stuck/i)).toBeInTheDocument();
-  });
-
-  it('renders bugs list', () => {
-    useAnalysisStore.getState().setCodeAnalysis({
-      codeLength: 400,
-      language: 'python',
-      source: 'coderpad',
-      progressState: 'near_complete',
-      detectedApproach: null,
-      isStuck: false,
-      bugs: ['Off-by-one error in loop', 'Missing null check'],
-      timestamp: '2024-01-01T00:00:00Z',
-    });
-
-    render(<CodePanel />);
-    expect(screen.getByText('Off-by-one error in loop')).toBeInTheDocument();
-    expect(screen.getByText('Missing null check')).toBeInTheDocument();
   });
 });
 

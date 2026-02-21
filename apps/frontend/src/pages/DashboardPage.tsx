@@ -117,6 +117,13 @@ export function DashboardPage() {
       <header className="dashboard-page__header">
         <h1>InterviewPilot</h1>
         <p>AI-Powered Real-Time Interview Assistant</p>
+        <button
+          className="btn btn--ghost"
+          onClick={() => navigate('/reports')}
+          style={{ marginTop: 'var(--space-2)' }}
+        >
+          Past Reports
+        </button>
       </header>
 
       <section className="dashboard-page__start" aria-label="Start Interview">

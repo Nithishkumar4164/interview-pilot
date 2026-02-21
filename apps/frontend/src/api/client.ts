@@ -306,6 +306,51 @@ export async function getReport(reportId: string) {
   return request(`/api/reports/${reportId}`);
 }
 
+export async function getReportStatus(reportId: string) {
+  return request<{ id: string; status: string; is_final: boolean }>(
+    `/api/reports/${reportId}/status`,
+  );
+}
+
+export interface ReportListResponse {
+  reports: Array<{
+    id: string;
+    session_id: string;
+    recommendation: string;
+    confidence_level: number;
+    status: string;
+    is_final: boolean;
+    created_at: string;
+    level: string;
+  }>;
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export async function listReports(limit = 20, offset = 0) {
+  return request<ReportListResponse>(`/api/reports/?limit=${limit}&offset=${offset}`);
+}
+
+export interface CompareReportsResponse {
+  reports: Array<{
+    id: string;
+    session_id: string;
+    recommendation: string;
+    confidence_level: number;
+    is_final: boolean;
+    created_at: string;
+    scores: Array<{ criterion: string; score: number; evidence: string[]; trend: string }>;
+    strengths: string[];
+    areas_for_growth: string[];
+    hint_summary: Record<string, unknown>;
+  }>;
+}
+
+export async function compareReports(ids: string[]) {
+  return request<CompareReportsResponse>(`/api/reports/compare?ids=${ids.join(',')}`);
+}
+
 export async function addReportNote(reportId: string, noteText: string) {
   return request(`/api/reports/${reportId}/notes`, {
     method: 'POST',

@@ -24,6 +24,7 @@ class KeyMomentSchema(BaseModel):
     description: str
     sentiment: str
     impact_on_assessment: str
+    type: str = "neutral"
 
 
 class AssessmentSchema(BaseModel):

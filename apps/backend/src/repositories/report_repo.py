@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -35,6 +35,35 @@ class ReportRepository(BaseRepository[Report]):
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def list_reports(self, limit: int = 20, offset: int = 0) -> list[Report]:
+        """List reports ordered by creation date descending."""
+        stmt = (
+            select(Report)
+            .order_by(Report.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_reports(self) -> int:
+        """Count total reports."""
+        stmt = select(func.count()).select_from(Report)
+        result = await self.db.execute(stmt)
+        return result.scalar() or 0
+
+    async def get_multiple(self, report_ids: list[uuid.UUID]) -> list[Report]:
+        """Fetch multiple reports by ID."""
+        if not report_ids:
+            return []
+        stmt = (
+            select(Report)
+            .where(Report.id.in_(report_ids))
+            .order_by(Report.created_at.desc())
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
 
 
 class ReportNoteRepository(BaseRepository[ReportNote]):

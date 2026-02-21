@@ -35,7 +35,7 @@ class HintEventRepository(BaseRepository[HintEvent]):
         candidate_response_quality: str,
         time_to_respond_ms: int | None = None,
     ) -> bool:
-        """Update a hint event with acknowledgment data."""
+        """Update a hint event with acknowledgment data by exact ID."""
         stmt = (
             update(HintEvent)
             .where(HintEvent.id == hint_id)
@@ -47,3 +47,40 @@ class HintEventRepository(BaseRepository[HintEvent]):
         )
         result = await self.db.execute(stmt)
         return result.rowcount > 0
+
+    async def acknowledge_latest_unacked(
+        self,
+        session_id: uuid.UUID,
+        interviewer_used: bool,
+        candidate_response_quality: str,
+        time_to_respond_ms: int | None = None,
+    ) -> bool:
+        """Find the most recent unacknowledged hint for a session and update it.
+
+        Falls back to this when the frontend-generated hint_id doesn't match
+        the backend-generated ID stored in the DB.
+        """
+        # Find latest unacknowledged hint
+        stmt = (
+            select(HintEvent.id)
+            .where(HintEvent.session_id == session_id)
+            .where(HintEvent.interviewer_used == False)  # noqa: E712
+            .order_by(HintEvent.displayed_at.desc())
+            .limit(1)
+        )
+        result = await self.db.execute(stmt)
+        row = result.scalar_one_or_none()
+        if row is None:
+            return False
+
+        update_stmt = (
+            update(HintEvent)
+            .where(HintEvent.id == row)
+            .values(
+                interviewer_used=interviewer_used,
+                candidate_response_quality=candidate_response_quality,
+                time_to_respond_ms=time_to_respond_ms,
+            )
+        )
+        await self.db.execute(update_stmt)
+        return True

@@ -1,17 +1,22 @@
 """Report API routes.
 
 Endpoints:
-  GET  /api/reports/:id          — Get a report
-  POST /api/reports/:id/notes    — Add a note to a report
+  GET  /api/reports/                — List all reports (paginated)
+  GET  /api/reports/compare         — Compare multiple reports
+  GET  /api/reports/:id             — Get a report
+  GET  /api/reports/:id/status      — Get report generation status
+  POST /api/reports/:id/notes       — Add a note to a report
 """
 
+import asyncio
 import uuid
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.dependencies import get_db
-from src.models.report import ReportNote
+from src.dependencies import get_db, async_session_factory, failover_manager
+from src.models.report import Report, ReportNote
 from src.repositories.report_repo import ReportNoteRepository, ReportRepository
 from src.schemas.report import AddNoteRequest
 from src.utils.logging import get_logger
@@ -22,6 +27,159 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 
 # Default dev user UUID
 _DEV_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
+
+
+@router.post("/generate/{session_id}")
+async def generate_report_for_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Retroactively generate a report for an ended session.
+
+    Useful when the original report generation failed or was interrupted.
+    """
+    from src.repositories.session_repo import SessionRepository
+
+    session_repo = SessionRepository(db)
+    session = await session_repo.get_by_id(uuid.UUID(session_id))
+
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    if session.status != "ended":
+        raise HTTPException(status_code=400, detail="Session must be in 'ended' status.")
+
+    # Check if a completed report already exists
+    report_repo = ReportRepository(db)
+    existing = await report_repo.get_by_session(uuid.UUID(session_id))
+    if existing and existing.status == "completed":
+        return {"report_id": str(existing.id), "status": "already_exists"}
+
+    # Calculate duration
+    duration_minutes = session.duration_minutes
+    if session.started_at and session.ended_at:
+        elapsed = (session.ended_at - session.started_at).total_seconds() / 60.0
+        duration_minutes = round(elapsed, 1)
+
+    # Create placeholder report
+    placeholder = Report(
+        session_id=uuid.UUID(session_id),
+        report_data={},
+        recommendation="lean_hire",
+        confidence_level=0.0,
+        is_final=False,
+        status="pending",
+    )
+    await report_repo.create(placeholder)
+    await db.commit()
+
+    report_id = str(placeholder.id)
+
+    # Build snapshots from DB-only data (no in-memory services available)
+    snapshots = {
+        "session_id": session_id,
+        "duration_minutes": duration_minutes,
+        "target_level": session.level,
+        "code_progress": "unknown",
+    }
+
+    # Fire background generation
+    from src.api.sessions import _generate_report_background
+
+    asyncio.create_task(
+        _generate_report_background(
+            report_id=report_id,
+            session_id=session_id,
+            snapshots=snapshots,
+            fm=failover_manager,
+            session_factory=async_session_factory,
+        )
+    )
+
+    return {"report_id": report_id, "status": "pending"}
+
+
+@router.get("/")
+async def list_reports(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """List all reports, ordered by creation date descending."""
+    report_repo = ReportRepository(db)
+    reports = await report_repo.list_reports(limit=limit, offset=offset)
+    total = await report_repo.count_reports()
+
+    return {
+        "reports": [
+            {
+                "id": str(r.id),
+                "session_id": str(r.session_id),
+                "recommendation": r.recommendation,
+                "confidence_level": r.confidence_level,
+                "status": r.status,
+                "is_final": r.is_final,
+                "created_at": r.created_at.isoformat() if r.created_at else "",
+                "level": (r.report_data or {}).get("level", ""),
+            }
+            for r in reports
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.get("/compare")
+async def compare_reports(
+    ids: str = Query(..., description="Comma-separated report IDs"),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Compare multiple reports side by side."""
+    report_ids = [uuid.UUID(id.strip()) for id in ids.split(",") if id.strip()]
+
+    if len(report_ids) < 2:
+        raise HTTPException(status_code=400, detail="At least 2 report IDs required for comparison.")
+
+    report_repo = ReportRepository(db)
+    reports = await report_repo.get_multiple(report_ids)
+
+    return {
+        "reports": [
+            {
+                "id": str(r.id),
+                "session_id": str(r.session_id),
+                "recommendation": r.recommendation,
+                "confidence_level": r.confidence_level,
+                "is_final": r.is_final,
+                "created_at": r.created_at.isoformat() if r.created_at else "",
+                "scores": (r.report_data or {}).get("scores", []),
+                "strengths": (r.report_data or {}).get("strengths", []),
+                "areas_for_growth": (r.report_data or {}).get("areas_for_growth", []),
+                "hint_summary": (r.report_data or {}).get("hint_summary", {}),
+            }
+            for r in reports
+        ],
+    }
+
+
+@router.get("/{report_id}/status")
+async def get_report_status(
+    report_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Get the generation status of a report."""
+    report_repo = ReportRepository(db)
+    report = await report_repo.get_by_id(uuid.UUID(report_id))
+
+    if report is None:
+        raise HTTPException(status_code=404, detail=f"Report {report_id} not found.")
+
+    return {
+        "id": str(report.id),
+        "status": report.status,
+        "is_final": report.is_final,
+    }
 
 
 @router.get("/{report_id}")
@@ -44,6 +202,7 @@ async def get_report(
     return {
         "id": str(report.id),
         "session_id": str(report.session_id),
+        "status": report.status,
         "assessment": {
             "recommendation": report.recommendation,
             "confidence_level": report.confidence_level,
@@ -54,6 +213,7 @@ async def get_report(
             "level_comparison": report_data.get("level_comparison", ""),
         },
         "hint_summary": report_data.get("hint_summary", {}),
+        "annotated_transcript": report_data.get("annotated_transcript", []),
         "generated_at": report_data.get("generated_at", ""),
         "is_final": report.is_final,
         "notes": [

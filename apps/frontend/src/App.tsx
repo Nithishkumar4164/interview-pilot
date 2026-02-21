@@ -4,6 +4,8 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { PlanReviewPage } from '@/pages/PlanReviewPage';
 import { LiveSessionPage } from '@/pages/LiveSessionPage';
 import { ReportPage } from '@/pages/ReportPage';
+import { ReportHistoryPage } from '@/pages/ReportHistoryPage';
+import { ReportComparisonPage } from '@/components/report/ReportComparison';
 
 export function App() {
   useEffect(() => {
@@ -21,6 +23,8 @@ export function App() {
       <Route path="/" element={<DashboardPage />} />
       <Route path="/session/:sessionId/plan" element={<PlanReviewPage />} />
       <Route path="/session/:sessionId" element={<LiveSessionPage />} />
+      <Route path="/reports" element={<ReportHistoryPage />} />
+      <Route path="/reports/compare" element={<ReportComparisonPage />} />
       <Route path="/reports/:reportId" element={<ReportPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

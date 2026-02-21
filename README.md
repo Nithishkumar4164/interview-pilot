@@ -15,12 +15,12 @@ Reduces cognitive load and bias for SDE interviewers with real-time transcriptio
 - **3-Tier Hierarchical Memory** — Working memory → rolling summary → fact store keeps context across long interviews without losing signal
 - **Progressive Hint System** — Three tiers (Nudge → Guide → Direct) plus runtime smart hints generated on demand
 - **Contradiction Detection** — Flags inconsistencies between candidate statements in real time
-- **Video Overlay Capture** — Chrome extension captures audio and code from Google Meet, Zoom, and Teams
+- **Video Overlay Capture** — Chrome extension captures audio from Google Meet, Zoom, and Teams
 - **Post-Interview Reports** — Automated report generation with recommendation, 7-criteria scoring, annotated transcript, and hint usage summary
 - **Report Comparison** — Side-by-side comparison of candidates across sessions
 - **Offline Resilience** — 3 degradation levels keep the session usable when connectivity drops
 - **LLM Provider Failover** — Automatic failover between Anthropic Claude and OpenAI GPT
-- **Chrome Extension** — Manifest V3 extension with side panel UI, audio capture, and code scraping
+- **Chrome Extension** — Manifest V3 extension with side panel UI and audio capture
 
 ---
 
@@ -67,13 +67,12 @@ interview-pilot/
                                     │   │
 ┌─────────────┐  /ws/audio/{id}    │   │         ┌────────────┐
 │  Extension   │◄──────────────────┘   │         │   MinIO    │
-│  (Chrome)    │  /ws/code/{id}        │         │   (S3)     │
-└─────────────┘◄───────────────────────┘         └────────────┘
+│  (Chrome)    │                                 │   (S3)     │
+└─────────────┘                                  └────────────┘
 ```
 
-Three dedicated WebSocket channels:
+Two dedicated WebSocket channels:
 - **`/ws/audio/{session_id}`** — Streams binary audio frames from the extension to the transcription pipeline
-- **`/ws/code/{session_id}`** — Sends code snapshots and diffs from coding platforms
 - **`/ws/dashboard/{session_id}`** — Broadcasts real-time events (transcripts, analysis, hints, red flags) to the dashboard
 
 ---
@@ -208,7 +207,7 @@ interview-pilot/
 │   └── extension/
 │       ├── src/
 │       │   ├── background/       # Service worker
-│       │   ├── content/          # Content scripts (code scraping on CoderPad, HackerRank, LeetCode)
+│       │   ├── content/          # Content scripts
 │       │   ├── sidepanel/        # Side panel React UI
 │       │   ├── popup/            # Browser action popup UI
 │       │   ├── offscreen/        # Offscreen document for audio processing
@@ -348,18 +347,16 @@ interview-pilot/
 | Endpoint | Direction | Description |
 |----------|-----------|-------------|
 | `/ws/audio/{session_id}` | Extension → Backend | Binary audio frames with 12-byte header (channel, timestamp, sample rate) |
-| `/ws/code/{session_id}` | Extension → Backend | Code snapshots and diffs from coding platforms |
 | `/ws/dashboard/{session_id}` | Backend → Frontend | Real-time events: transcripts, analysis, hints, red flags, speaker updates |
 
 ---
 
 ## Chrome Extension
 
-The Chrome extension captures audio and code from interview platforms and streams them to the backend via WebSocket.
+The Chrome extension captures audio from interview platforms and streams it to the backend via WebSocket.
 
 **Capabilities:**
 - Tab audio capture via offscreen document
-- Code scraping from shared coding environments
 - Side panel UI for session control
 - IndexedDB offline buffer for resilience
 
@@ -368,7 +365,6 @@ The Chrome extension captures audio and code from interview platforms and stream
 | Category | Platforms |
 |----------|----------|
 | Video conferencing | Google Meet, Zoom, Microsoft Teams |
-| Coding platforms | CoderPad, HackerRank, LeetCode |
 
 **Installation:**
 1. Run `pnpm dev` inside `apps/extension` to build with watch mode

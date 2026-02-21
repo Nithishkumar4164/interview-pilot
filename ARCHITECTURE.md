@@ -27,7 +27,7 @@
 
 ## 1. System Overview
 
-Interview Pilot is a full-stack platform that augments SDE interviewers with real-time AI capabilities. It captures audio and code from video-conferencing and coding platforms via a Chrome extension, transcribes speech in real time, performs multi-dimensional analysis of candidate responses, delivers progressive hints, and generates comprehensive post-interview reports.
+Interview Pilot is a full-stack platform that augments SDE interviewers with real-time AI capabilities. It captures audio from video-conferencing platforms via a Chrome extension, transcribes speech in real time, performs multi-dimensional analysis of candidate responses, delivers progressive hints, and generates comprehensive post-interview reports.
 
 ### Core Capabilities
 
@@ -40,7 +40,6 @@ Interview Pilot is a full-stack platform that augments SDE interviewers with rea
 | **Hierarchical Memory** | 3-tier context: working memory → rolling summary → fact store |
 | **Progressive Hints** | 3 levels (Nudge → Guide → Direct) with time-based auto-advance |
 | **Contradiction Detection** | Real-time inconsistency flagging across candidate statements |
-| **Code Analysis** | code review with 5-dimensional rating and pitfalls |
 | **Report Generation** | 7-criteria assessment with annotated transcript and hint usage |
 | **Offline Resilience** | 3 degradation levels maintain functionality during connectivity loss |
 | **LLM Failover** | Automatic provider switching between Anthropic Claude and OpenAI GPT |
@@ -65,17 +64,16 @@ Interview Pilot is a full-stack platform that augments SDE interviewers with rea
 │  │  │ Mic Audio    │─┼───────────────┐   │     │  │ Panel          │  │  │
 │  │  │ Capture      │ │               │   │     │  ├────────────────┤  │  │
 │  │  └──────────────┘ │               │   │     │  │ Hint Panel     │  │  │
-│  │  ┌──────────────┐ │               │   │     │  ├────────────────┤  │  │
-│  │  │ Code Scraper │─┼──────────┐    │   │     │  │ Plan Sidebar   │  │  │
-│  │  │ (Content JS) │ │          │    │   │     │  └────────────────┘  │  │
-│  │  └──────────────┘ │          │    │   │     │         ▲            │  │
-│  └──────────────────┘          │    │   │     └─────────┼────────────┘  │
-│                                 │    │   │               │               │
-│  ┌──────────────────────────────┼────┼───┼───────────────┼─────────────┐│
+│  │  └──────────────┘ │               │   │     │  ├────────────────┤  │  │
+│  │                    │               │   │     │  │ Plan Sidebar   │  │  │
+│  │                    │               │   │     │  └────────────────┘  │  │
+│  └──────────────────┘               │   │     │         ▲            │  │
+│                                      │   │     └─────────┼────────────┘  │
+│                                      │   │               │               │
+│  ┌───────────────────────────────────┼───┼───────────────┼─────────────┐│
 │  │                    FASTAPI BACKEND (:8000)             │             ││
-│  │                              │    │   │               │             ││
-│  │  /ws/code/{id} ◄─────────────┘    │   │    /ws/dashboard/{id}       ││
-│  │  /ws/audio/{id} ◄────────────────┘   │               │             ││
+│  │                                   │   │               │             ││
+│  │  /ws/audio/{id} ◄────────────────┘   │    /ws/dashboard/{id}       ││
 │  │         │                  ◄──────────┘               │             ││
 │  │         ▼                                             │             ││
 │  │  ┌──────────────┐   ┌─────────────┐   ┌──────────────┤             ││
@@ -116,7 +114,7 @@ interview-pilot/
 ├── apps/
 │   ├── backend/                Python 3.12 — FastAPI server (:8000)
 │   ├── frontend/               React 19 + TypeScript — Dashboard (:5173)
-│   └── extension/              Chrome Manifest V3 — Audio/code capture
+│   └── extension/              Chrome Manifest V3 — Audio capture
 ├── packages/
 │   ├── shared-types/           Cross-service TypeScript type definitions
 │   └── sdk/                    Utility library (token counter, time utils)
@@ -177,12 +175,11 @@ Seven route groups serve the REST API:
 
 ### 4.3 WebSocket Layer (`src/websocket/`)
 
-Three dedicated channels handle real-time communication:
+Two dedicated channels handle real-time communication:
 
 | Channel | Direction | Wire Format | Purpose |
 |---|---|---|---|
 | `/ws/audio/{session_id}` | Extension → Backend | Binary (12-byte header + PCM) | Audio stream for transcription |
-| `/ws/code/{session_id}` | Extension → Backend | JSON | Code snapshots and diffs |
 | `/ws/dashboard/{session_id}` | Backend → Frontend | JSON | Event broadcasting |
 
 **Binary audio frame format:**
@@ -203,7 +200,6 @@ The service layer encapsulates all business logic. Each service is independently
 | Service | Responsibility |
 |---|---|
 | `analysis_service` | 6-dimension utterance evaluation |
-| `code_analysis_service` | Real-time code review, approach matching, progress tracking |
 | `speaker_service` | 3-layer speaker identification |
 | `transcription_service` | Deepgram WebSocket orchestration |
 | `calibration_service` | Interview difficulty and time calibration |
@@ -274,7 +270,6 @@ Repositories abstract database access and provide typed query methods:
 - `analysis_repo` — Analysis event storage and queries
 - `hint_repo` — Hint event tracking
 - `report_repo` — Report queries
-- `code_snapshot_repo` — Code submission history
 - `question_repo` — Curated question bank access
 
 ### 4.6 Model Layer (`src/models/`)
@@ -289,7 +284,6 @@ SQLAlchemy 2.0+ models with async support:
 | `Transcript` | Speech events with timing and speaker info |
 | `AnalysisEvent` | 6-dimension analysis results |
 | `HintEvent` | Hint display and acknowledgment tracking |
-| `CodeSnapshot` | Code submissions with diffs and progress |
 | `Report` | Final assessment with scores and recommendations |
 | `QuestionBank` | Curated questions with hints and alternates |
 
@@ -374,7 +368,7 @@ Zustand stores are organized by feature domain. Each store is self-contained wit
 
 **PlanReviewPage** — Pre-interview planning: question tree view with timing, swap alternates, reorder, regenerate hints, transition to LIVE status.
 
-**LiveSessionPage** — Real-time interview dashboard: session timer, transcript panel with speaker coloring, 6-dimension analysis rings, hint panel with progressive levels, plan sidebar, code overlay, speaker management.
+**LiveSessionPage** — Real-time interview dashboard: session timer, transcript panel with speaker coloring, 6-dimension analysis rings, hint panel with progressive levels, plan sidebar, speaker management.
 
 **ReportPage** — Post-interview assessment: overall recommendation, 7-criterion scoring, annotated transcript, hint usage summary, key moments and quotes.
 
@@ -397,8 +391,6 @@ extension/src/
 ├── popup/
 │   ├── Popup.tsx                  Connection status + session control
 │   └── main.tsx
-├── content/
-│   └── code-scraper.ts            Content script for CoderPad, HackerRank, LeetCode
 ├── audio/
 │   ├── tab-capture.ts             chrome.tabCapture API
 │   ├── mic-capture.ts             User microphone capture
@@ -409,7 +401,6 @@ extension/src/
 ├── storage/
 │   └── offline-buffer.ts          IndexedDB for offline persistence
 └── utils/
-    └── language-detect.ts         Programming language detection
 ```
 
 ### 6.2 Service Worker Orchestration
@@ -434,12 +425,7 @@ The service worker acts as the central coordinator:
 │                     │ /ws/audio/{session_id}  │  │
 │                     └─────────────────────────┘  │
 │                                                  │
-│  ┌─────────────┐    ┌─────────────────────────┐  │
-│  │ Content      │───►│ WebSocket Client        │  │
-│  │ Script       │    │ /ws/code/{session_id}   │  │
-│  │ (code-       │    └─────────────────────────┘  │
-│  │  scraper)    │                                 │
-│  └─────────────┘    ┌─────────────────────────┐  │
+│                     ┌─────────────────────────┐  │
 │                     │ IndexedDB Offline Buffer │  │
 │                     │ (drain on reconnect)     │  │
 │                     └─────────────────────────┘  │
@@ -451,7 +437,6 @@ The service worker acts as the central coordinator:
 | Category | Platforms |
 |---|---|
 | Video Conferencing | Google Meet, Zoom, Microsoft Teams |
-| Coding Platforms | CoderPad, HackerRank, LeetCode |
 
 ---
 
@@ -463,7 +448,7 @@ Cross-service TypeScript type definitions consumed by both frontend and extensio
 
 - Session types: `InterviewSession`, `InterviewPlan`, `InterviewLevel`
 - Transcript types: `TranscriptEvent`, `SpeakerRole`
-- Analysis types: `AnalysisEvent` (6-dimension), `CodeAnalysis`
+- Analysis types: `AnalysisEvent` (6-dimension)
 - Hint types: `HintEvent`, `HintLevel`, `HintResponseMetrics`
 - Report types: `ReportData`, `Assessment`, `Recommendation`
 - WebSocket types: `WSMessage`, `WSMessageType`
@@ -516,15 +501,6 @@ Extension                    Backend                       Frontend
    │                           │────────────────────────────►│
    │                           │  /ws/dashboard/{id}         │
    │                           │                             │
-   │  Code snapshots (JSON)    │                             │
-   │──────────────────────────►│                             │
-   │  /ws/code/{id}            │                             │
-   │                           │  Analyze code               │
-   │                           │  (approach, progress)       │
-   │                           │                             │
-   │                           │  Broadcast code analysis    │
-   │                           │────────────────────────────►│
-   │                           │                             │
 ```
 
 ### 8.3 REST API Communication
@@ -562,18 +538,15 @@ Frontend                      Backend                       Storage
 │   User   │──────►│ InterviewSession │◄──────│ InterviewPlan  │
 └──────────┘  1:N  └────────┬─────────┘  1:1  └────────────────┘
                             │
-              ┌─────────────┼─────────────┬────────────────┐
-              │ 1:N         │ 1:N         │ 1:N            │ 1:N
-              ▼             ▼             ▼                ▼
-       ┌────────────┐ ┌────────────┐ ┌──────────┐ ┌──────────────┐
-       │ Transcript │ │AnalysisEvt │ │HintEvent │ │ CodeSnapshot │
-       └────────────┘ └────────────┘ └──────────┘ └──────────────┘
-                                                         │
-                            ┌────────────────────────────┘
-                            │ 1:1 (per session)
-                            ▼
+              ┌─────────────┼─────────────┐
+              │ 1:N         │ 1:N         │ 1:N
+              ▼             ▼             ▼
+       ┌────────────┐ ┌────────────┐ ┌──────────┐
+       │ Transcript │ │AnalysisEvt │ │HintEvent │
+       └────────────┘ └────────────┘ └──────────┘
+
                       ┌──────────┐
-                      │  Report  │
+                      │  Report  │  1:1 (per session)
                       └──────────┘
 
        ┌──────────────┐
@@ -628,17 +601,15 @@ The LLM subsystem uses an abstract interface to decouple business logic from pro
 
 ### 10.2 Task-Based Routing
 
-Eight task types are routed to provider pairs (primary + fallback):
+Six task types are routed to provider pairs (primary + fallback):
 
 | Task Type | Primary | Fallback | Model (Primary) |
 |---|---|---|---|
 | Real-time analysis | Anthropic | OpenAI | Claude Sonnet 4 |
-| Code analysis | Anthropic | OpenAI | Claude Sonnet 4 |
 | Report generation | Anthropic | OpenAI | Claude Opus 4 |
 | Hint generation | Anthropic | OpenAI | Claude Sonnet 4 |
 | Summary compression | Anthropic | OpenAI | Claude Sonnet 4 |
 | Resume extraction | Anthropic | OpenAI | Claude Sonnet 4 |
-| Code rating | Anthropic | OpenAI | Claude Sonnet 4 |
 | Question generation | Anthropic | OpenAI | Claude Sonnet 4 |
 
 ### 10.3 Health Monitoring & Failover
@@ -803,7 +774,7 @@ Level 3 — FULLY OFFLINE
 
 ### 13.2 Extension Offline Buffer
 
-When the WebSocket connection drops, the extension stores audio chunks and code snapshots in **IndexedDB**. On reconnect, the `chunk-queue` drains the buffer in order, with retry logic for failed transmissions.
+When the WebSocket connection drops, the extension stores audio chunks in **IndexedDB**. On reconnect, the `chunk-queue` drains the buffer in order, with retry logic for failed transmissions.
 
 ### 13.3 LLM Provider Failover
 

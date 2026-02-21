@@ -7,25 +7,55 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { usePlanStore } from '@/stores/plan-store';
 import { useSessionStore, getAllPlanQuestions } from '@/stores/session-store';
+import { useHintStore, type HintEntry } from '@/stores/hint-store';
 import type { ApproachPattern } from '@/stores/plan-store';
 import { QuestionTimer } from './QuestionTimer';
+
+const LEVEL_LABELS: Record<number, string> = {
+  1: 'Nudge',
+  2: 'Guide',
+  3: 'Direct',
+};
 
 interface InterviewPlanPanelProps {
   onAdvanceQuestion: (delta: number) => void;
   onGoToQuestion: (index: number) => void;
+  onRequestHint: () => void;
+  onAcknowledgeHint: (hintId: string, quality: 'none' | 'partial' | 'full') => void;
 }
 
 export function InterviewPlanPanel({
   onAdvanceQuestion,
   onGoToQuestion,
+  onRequestHint,
+  onAcknowledgeHint,
 }: InterviewPlanPanelProps) {
   const plan = usePlanStore((s) => s.plan);
   const currentQuestionIndex = useSessionStore((s) => s.currentQuestionIndex);
+
+  const { currentLevel, activeHint, history: hintHistory, hintSignal } = useHintStore();
 
   const [showNavigator, setShowNavigator] = useState(false);
   const [showBruteForce, setShowBruteForce] = useState(false);
   const [showOptimal, setShowOptimal] = useState(false);
   const [showPitfalls, setShowPitfalls] = useState(false);
+
+  // Keyboard shortcut: H to show next hint
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+      if (e.key === 'h' || e.key === 'H') {
+        onRequestHint();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onRequestHint]);
 
   // Reset expandable sections when question changes
   const prevQuestionIndex = useRef(currentQuestionIndex);
@@ -200,6 +230,83 @@ export function InterviewPlanPanel({
         </div>
       )}
 
+      {/* ── Static Hints ─────────────────────────────────────────── */}
+      <div className="plan-panel__hints">
+        <div className="hint-panel__header">
+          <h3>Hints</h3>
+          <span className="hint-panel__level">Level {currentLevel}/3</span>
+        </div>
+
+        {/* Hint Signal Indicator */}
+        {hintSignal !== 'none' && (
+          <div className={`hint-signal hint-signal--${hintSignal}`} role="status">
+            {hintSignal === 'nudge' && 'Candidate may need a gentle nudge'}
+            {hintSignal === 'guide' && 'Candidate seems stuck — hint recommended'}
+            {hintSignal === 'direct' && 'Candidate very stuck — consider direct hint'}
+          </div>
+        )}
+
+        {/* Active Hint */}
+        {activeHint ? (
+          <div className="hint-panel__active">
+            <div className="hint-card">
+              <span className={`hint-card__level hint-card__level--${activeHint.level}`}>
+                {LEVEL_LABELS[activeHint.level]}
+              </span>
+              <p className="hint-card__text">{activeHint.text}</p>
+            </div>
+
+            {!activeHint.interviewerUsed && (
+              <div className="hint-panel__actions">
+                <button
+                  className="btn btn--success"
+                  onClick={() => onAcknowledgeHint(activeHint.id, 'full')}
+                >
+                  Got It
+                </button>
+                <button
+                  className="btn btn--secondary"
+                  onClick={() => onAcknowledgeHint(activeHint.id, 'partial')}
+                >
+                  Partially
+                </button>
+                <button
+                  className="btn btn--ghost"
+                  onClick={() => onAcknowledgeHint(activeHint.id, 'none')}
+                >
+                  No Response
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="hint-panel__empty">
+            <p>No active hint</p>
+          </div>
+        )}
+
+        {/* Show Hint Button */}
+        {currentLevel < 3 && (
+          <button
+            className="btn btn--primary hint-panel__trigger"
+            onClick={onRequestHint}
+            title="Show next hint (H)"
+          >
+            Show Hint (Level {currentLevel + 1})
+          </button>
+        )}
+
+        {/* Hint Timeline */}
+        {hintHistory.length > 0 && (
+          <div className="hint-panel__timeline">
+            <h4>Hint History</h4>
+            {hintHistory.map((hint) => (
+              <StaticHintTimelineEntry key={hint.id} hint={hint} />
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Navigation Controls */}
       <div className="navigation-controls">
         <button
@@ -259,6 +366,30 @@ function PhaseProgressBar({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function StaticHintTimelineEntry({ hint }: { hint: HintEntry }) {
+  const qualityColors: Record<string, string> = {
+    full: 'green',
+    partial: 'amber',
+    none: 'red',
+  };
+
+  return (
+    <div className="hint-timeline-entry">
+      <span className={`hint-timeline-entry__level hint-timeline-entry__level--${hint.level}`}>
+        L{hint.level}
+      </span>
+      <span className="hint-timeline-entry__text">{hint.text}</span>
+      {hint.interviewerUsed && (
+        <span
+          className={`hint-timeline-entry__quality hint-timeline-entry__quality--${qualityColors[hint.candidateResponseQuality]}`}
+        >
+          {hint.candidateResponseQuality}
+        </span>
+      )}
     </div>
   );
 }

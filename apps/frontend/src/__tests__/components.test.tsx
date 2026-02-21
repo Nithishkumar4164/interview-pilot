@@ -31,6 +31,8 @@ describe('SessionBar', () => {
     onPause: vi.fn(),
     onResume: vi.fn(),
     onEnd: vi.fn(),
+    onToggleVideo: vi.fn(),
+    videoActive: false,
   };
 
   beforeEach(() => {

@@ -2,7 +2,7 @@
  * Live session page — wires all dashboard components together
  * with WebSocket connection and timer.
  */
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useTimer } from '@/hooks/useTimer';
@@ -19,12 +19,20 @@ import { useOfflineStore } from '@/stores/offline-store';
 import { useSpeakerStore } from '@/stores/speaker-store';
 import { WebSocketProvider } from '@/contexts/WebSocketContext';
 import { SessionBar } from '@/components/dashboard/SessionBar';
+import { VideoOverlay } from '@/components/dashboard/VideoOverlay';
+import type { CropRegion, OverlayMode } from '@/components/dashboard/VideoOverlay';
 import { TranscriptPanel } from '@/components/dashboard/TranscriptPanel';
 import { SpeakersPanel } from '@/components/dashboard/SpeakersPanel';
 import { HintPanel } from '@/components/dashboard/HintPanel';
 import { ScoreRings } from '@/components/dashboard/ScoreRings';
 import { InterviewPlanPanel } from '@/components/dashboard/InterviewPlanPanel';
 import * as api from '@/api/client';
+
+interface OverlayEntry {
+  id: string;
+  cropRegion: CropRegion | null;
+  mode: OverlayMode;
+}
 
 export function LiveSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -35,6 +43,8 @@ export function LiveSessionPage() {
   const setStatus = useSessionStore((s) => s.setStatus);
   const reset = useSessionStore((s) => s.reset);
   const degradationLevel = useOfflineStore((s) => s.degradationLevel);
+  const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
+  const [overlays, setOverlays] = useState<OverlayEntry[]>([]);
 
   // Initialize WebSocket and timer
   const { send } = useWebSocket(sessionId ?? null);
@@ -150,8 +160,44 @@ export function LiveSessionPage() {
       useHintStore.getState().clear();
       useOfflineStore.getState().reset();
       useSpeakerStore.getState().clear();
+      videoStream?.getTracks().forEach(t => t.stop());
     };
   }, [reset]);
+
+  // Clean up if stream becomes inactive (user clicks Chrome's "Stop sharing")
+  useEffect(() => {
+    if (!videoStream) return;
+    const track = videoStream.getVideoTracks()[0];
+    if (!track) return;
+    const onEnded = () => { setVideoStream(null); setOverlays([]); };
+    track.addEventListener('ended', onEnded);
+    return () => track.removeEventListener('ended', onEnded);
+  }, [videoStream]);
+
+  // ── Overlay callbacks ──────────────────────────────────────────────
+
+  const handleCloneOverlay = useCallback(() => {
+    setOverlays(prev => [...prev, { id: crypto.randomUUID(), cropRegion: null, mode: 'floating' }]);
+  }, []);
+
+  const handleCloseOverlay = useCallback((id: string) => {
+    setOverlays(prev => {
+      const next = prev.filter(o => o.id !== id);
+      if (next.length === 0 && videoStream) {
+        videoStream.getTracks().forEach(t => t.stop());
+        setVideoStream(null);
+      }
+      return next;
+    });
+  }, [videoStream]);
+
+  const handleCropChange = useCallback((id: string, region: CropRegion | null) => {
+    setOverlays(prev => prev.map(o => o.id === id ? { ...o, cropRegion: region } : o));
+  }, []);
+
+  const handleModeChange = useCallback((id: string, newMode: OverlayMode) => {
+    setOverlays(prev => prev.map(o => o.id === id ? { ...o, mode: newMode } : o));
+  }, []);
 
   const handlePause = useCallback(async () => {
     if (!sessionId) return;
@@ -172,6 +218,25 @@ export function LiveSessionPage() {
       console.error('Failed to resume session:', err);
     }
   }, [sessionId, setStatus]);
+
+  const handleToggleVideo = useCallback(async () => {
+    if (videoStream) {
+      videoStream.getTracks().forEach((t) => t.stop());
+      setVideoStream(null);
+      setOverlays([]);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: 'browser' } as MediaTrackConstraints,
+        audio: false,
+      });
+      setVideoStream(stream);
+      setOverlays([{ id: crypto.randomUUID(), cropRegion: null, mode: 'floating' }]);
+    } catch {
+      // User cancelled the picker — do nothing
+    }
+  }, [videoStream]);
 
   const isPanel = new URLSearchParams(window.location.search).has('panel');
 
@@ -408,10 +473,39 @@ export function LiveSessionPage() {
           onPause={handlePause}
           onResume={handleResume}
           onEnd={handleEnd}
+          onToggleVideo={handleToggleVideo}
+          videoActive={!!videoStream}
         />
+
+        {/* Floating + fullscreen overlays render outside layout */}
+        {videoStream && overlays.filter(o => o.mode !== 'docked').map(overlay => (
+          <VideoOverlay
+            key={overlay.id}
+            stream={videoStream}
+            cropRegion={overlay.cropRegion}
+            onCropChange={region => handleCropChange(overlay.id, region)}
+            onClone={handleCloneOverlay}
+            onClose={() => handleCloseOverlay(overlay.id)}
+            mode={overlay.mode}
+            onModeChange={mode => handleModeChange(overlay.id, mode)}
+          />
+        ))}
 
         <main className="live-session__body">
           <div className="live-session__left">
+            {/* Docked overlays render above transcript */}
+            {videoStream && overlays.filter(o => o.mode === 'docked').map(overlay => (
+              <VideoOverlay
+                key={overlay.id}
+                stream={videoStream}
+                cropRegion={overlay.cropRegion}
+                onCropChange={region => handleCropChange(overlay.id, region)}
+                onClone={handleCloneOverlay}
+                onClose={() => handleCloseOverlay(overlay.id)}
+                mode={overlay.mode}
+                onModeChange={mode => handleModeChange(overlay.id, mode)}
+              />
+            ))}
             <TranscriptPanel />
           </div>
 

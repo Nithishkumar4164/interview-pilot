@@ -24,7 +24,6 @@ export function useWebSocket(sessionId: string | null) {
   const setSvTranscripts = useSpeakerStore((s) => s.setSvTranscripts);
   const addAnalysis = useAnalysisStore((s) => s.addAnalysis);
   const addRedFlag = useAnalysisStore((s) => s.addRedFlag);
-  const setCodeAnalysis = useAnalysisStore((s) => s.setCodeAnalysis);
   const updateScores = useAnalysisStore((s) => s.updateScores);
   const setActiveHint = useHintStore((s) => s.setActiveHint);
   const setHintSignal = useHintStore((s) => s.setHintSignal);
@@ -91,26 +90,6 @@ export function useWebSocket(sessionId: string | null) {
           if (p.scores) {
             updateScores(p.scores as Record<string, number>);
           }
-          break;
-        }
-
-        case 'code_analysis': {
-          const p = message.payload as Record<string, unknown>;
-          setCodeAnalysis({
-            codeLength: (p.code_length as number) ?? 0,
-            language: (p.language as string) || 'unknown',
-            source: (p.source as string) || 'unknown',
-            progressState: (p.progress_state as string) || 'unknown',
-            detectedApproach: p.detected_approach
-              ? {
-                  name: (p.detected_approach as Record<string, unknown>).name as string,
-                  confidence: (p.detected_approach as Record<string, unknown>).confidence as number,
-                }
-              : null,
-            isStuck: (p.is_stuck as boolean) ?? false,
-            bugs: (p.bugs as string[]) || [],
-            timestamp: message.timestamp,
-          });
           break;
         }
 
@@ -279,7 +258,7 @@ export function useWebSocket(sessionId: string | null) {
     },
     [
       addEntry, addCatchupEntries, updateEntrySpeaker, applySnapshot, setSvTranscripts,
-      addAnalysis, addRedFlag, setCodeAnalysis, updateScores,
+      addAnalysis, addRedFlag, updateScores,
       setActiveHint, setHintSignal, setActiveRuntimeHint, setRuntimeHintLoading,
       setCodeRating, setCodeRatingLoading,
       setProviderStatus, setSessionStatus, setCurrentQuestion,

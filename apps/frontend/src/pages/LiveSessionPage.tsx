@@ -17,7 +17,6 @@ import { WebSocketProvider } from '@/contexts/WebSocketContext';
 import { SessionBar } from '@/components/dashboard/SessionBar';
 import { TranscriptPanel } from '@/components/dashboard/TranscriptPanel';
 import { SpeakersPanel } from '@/components/dashboard/SpeakersPanel';
-import { CodePanel } from '@/components/dashboard/CodePanel';
 import { HintPanel } from '@/components/dashboard/HintPanel';
 import { ScoreRings } from '@/components/dashboard/ScoreRings';
 import { InterviewPlanPanel } from '@/components/dashboard/InterviewPlanPanel';
@@ -337,7 +336,6 @@ export function LiveSessionPage() {
           <div className="live-session__right">
             <SpeakersPanel />
             <ScoreRings />
-            <CodePanel />
             <HintPanel
               onRequestRuntimeHint={handleRequestRuntimeHint}
               onRegenerateRuntimeHint={handleRegenerateRuntimeHint}

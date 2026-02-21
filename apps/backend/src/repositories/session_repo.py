@@ -4,6 +4,7 @@ import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.models.session import InterviewSession
 from src.repositories.base import BaseRepository
@@ -22,3 +23,15 @@ class SessionRepository(BaseRepository[InterviewSession]):
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_sessions_enriched(self, user_id: uuid.UUID) -> list[InterviewSession]:
+        """Get all sessions with reports and plans eagerly loaded."""
+        stmt = (
+            select(InterviewSession)
+            .where(InterviewSession.user_id == user_id)
+            .options(selectinload(InterviewSession.reports))
+            .options(selectinload(InterviewSession.plans))
+            .order_by(InterviewSession.created_at.desc())
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().unique().all())

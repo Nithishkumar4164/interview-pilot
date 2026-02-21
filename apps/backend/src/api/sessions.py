@@ -509,6 +509,33 @@ async def _generate_report_background(
             logger.error(f"Failed to mark report as failed: {inner_e}")
 
 
+@router.delete("/{session_id}")
+async def delete_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Delete a session. Only allowed for planning-status sessions."""
+    session_repo = SessionRepository(db)
+    db_session = await session_repo.get_by_id(uuid.UUID(session_id))
+
+    if db_session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        )
+
+    if db_session.status not in (SessionStatus.PLANNING, SessionStatus.READY):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Can only delete sessions in planning/ready status, currently: {db_session.status}",
+        )
+
+    await session_repo.delete(db_session)
+    await db.commit()
+
+    return {"status": "deleted", "session_id": session_id}
+
+
 @router.post("/{session_id}/hints/next")
 async def trigger_next_hint(session_id: str, req: TriggerHintRequest) -> dict:
     """Get the next progressive hint for a question."""

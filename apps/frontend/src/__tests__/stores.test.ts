@@ -218,6 +218,7 @@ describe('useAnalysisStore', () => {
       hintSignal: 'none',
       timestamp: '2024-01-01T00:00:00Z',
       provider: 'mock',
+      dimensions: null,
     };
     const entry2 = {
       ...entry1,

@@ -29,5 +29,8 @@ class TranscriptEventSchema(BaseModel):
     word_timestamps: list[WordTimestamp] | None = None
     is_retroactive: bool = False
     channel: str  # 'tab' | 'microphone'
+    root_speaker_id: str = ""
+    speech_vector_id: str = ""
+    speaker_changed: bool = False
 
     model_config = {"from_attributes": True}

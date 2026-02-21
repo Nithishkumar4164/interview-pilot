@@ -11,6 +11,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from src.dependencies import failover_manager
 from src.services.transcription_service import TranscriptionService
 from src.utils.logging import get_logger
+from src.websocket.manager import dashboard_manager
 from src.workers.analysis_worker import AnalysisWorker
 
 logger = get_logger("ws.audio")
@@ -26,7 +27,11 @@ def get_transcription_service(session_id: str) -> TranscriptionService:
     """Get or create a TranscriptionService for a session."""
     if session_id not in _active_sessions:
         service = TranscriptionService(session_id)
-        worker = AnalysisWorker(session_id, failover_manager)
+        worker = AnalysisWorker(
+            session_id,
+            failover_manager,
+            get_speaker_snapshot=service.speaker_service.get_speaker_snapshot,
+        )
         service.on_event(worker.on_transcript_event)
         _active_sessions[session_id] = service
         _active_workers[session_id] = worker
@@ -114,6 +119,9 @@ async def audio_websocket(websocket: WebSocket, session_id: str) -> None:
                         "type": "calibration_complete",
                         "speakers": service.get_detected_speakers(),
                     })
+                    # Broadcast updated speaker snapshot to dashboard
+                    snapshot = service.speaker_service.get_speaker_snapshot()
+                    await dashboard_manager.send_speaker_snapshot(session_id, snapshot)
 
                 elif msg_type == "get_speakers":
                     await websocket.send_json({

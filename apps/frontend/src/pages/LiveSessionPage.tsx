@@ -2,15 +2,19 @@
  * Live session page — wires all dashboard components together
  * with WebSocket connection and timer.
  */
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useTimer } from '@/hooks/useTimer';
 import { useSessionStore, getAllPlanQuestions } from '@/stores/session-store';
+import type { SessionStatus } from '@/stores/session-store';
 import { useHintStore } from '@/stores/hint-store';
+import type { HintEntry, HintLevel, HintResponseQuality } from '@/stores/hint-store';
 import { usePlanStore } from '@/stores/plan-store';
 import { useTranscriptStore } from '@/stores/transcript-store';
-import { useAnalysisStore } from '@/stores/analysis-store';
+import type { TranscriptEntry, SpeakerRole } from '@/stores/transcript-store';
+import { useAnalysisStore, mapDimensions } from '@/stores/analysis-store';
+import type { AnalysisEntry } from '@/stores/analysis-store';
 import { useOfflineStore } from '@/stores/offline-store';
 import { useSpeakerStore } from '@/stores/speaker-store';
 import { WebSocketProvider } from '@/contexts/WebSocketContext';
@@ -36,12 +40,105 @@ export function LiveSessionPage() {
   const { send } = useWebSocket(sessionId ?? null);
   useTimer();
 
-  // Initialize session state if entering directly
+  // Track whether recovery has been attempted
+  const recoveryAttempted = useRef(false);
+
+  // Initialize session state — attempt recovery from server first
   useEffect(() => {
-    if (sessionId && status === 'idle') {
-      setSession(sessionId, '', 45);
-      setStatus('live');
-    }
+    if (!sessionId || status !== 'idle' || recoveryAttempted.current) return;
+    recoveryAttempted.current = true;
+
+    (async () => {
+      try {
+        const state = await api.getSessionState(sessionId);
+
+        // Restore plan first (other stores depend on it)
+        if (state.plan) {
+          const planData = state.plan as Record<string, unknown>;
+          usePlanStore.getState().setPlan({
+            id: (state.plan_id ?? '') as string,
+            sessionId,
+            version: (planData.version as number) ?? 1,
+            isActive: true,
+            phases: (planData.phases as Array<Record<string, unknown>>) ?? [],
+            totalMinutes: (planData.total_minutes as number) ?? 0,
+            createdAt: '',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any);
+        }
+
+        // Restore session state
+        const sessionStatus = (state.session.status === 'live' ? 'live' :
+          state.session.status === 'paused' ? 'paused' :
+          state.session.status === 'ended' ? 'ended' : 'live') as SessionStatus;
+
+        const snapshotQuestionIndex = state.snapshot
+          ? ((state.snapshot as Record<string, unknown>).plan_progress as Record<string, number> | undefined)?.current_question_index ?? 0
+          : 0;
+
+        useSessionStore.getState().restoreFromServer({
+          sessionId,
+          status: sessionStatus,
+          level: state.session.level,
+          durationMinutes: state.session.duration_minutes,
+          elapsedMs: state.session.elapsed_ms,
+          startedAt: state.session.started_at,
+          currentQuestionIndex: snapshotQuestionIndex,
+        });
+
+        // Restore transcripts
+        if (state.transcripts.length > 0) {
+          const entries: TranscriptEntry[] = state.transcripts.map((t) => ({
+            id: t.id,
+            speakerRole: t.speaker_role as SpeakerRole,
+            text: t.text,
+            isFinal: t.is_final,
+            confidence: t.confidence,
+            timestamp: t.timestamp,
+            channel: t.channel,
+            isRetroactive: t.is_retroactive,
+            rootSpeakerId: '',
+            speechVectorId: '',
+          }));
+          useTranscriptStore.getState().restoreTranscripts(entries);
+        }
+
+        // Restore analyses
+        if (state.analyses.length > 0) {
+          const analysisEntries: AnalysisEntry[] = state.analyses.map((a) => ({
+            answerQuality: a.answer_quality,
+            onTrack: a.on_track,
+            insight: a.insight,
+            redFlags: a.red_flags,
+            suggestionForInterviewer: a.suggestion ?? '',
+            hintSignal: a.hint_signal ?? 'none',
+            timestamp: a.timestamp,
+            provider: '',
+            dimensions: null,
+          }));
+          useAnalysisStore.getState().restoreAnalyses(analysisEntries);
+        }
+
+        // Restore hints
+        if (state.hints.length > 0) {
+          const hintEntries: HintEntry[] = state.hints.map((h) => ({
+            id: h.id,
+            questionId: h.question_id,
+            level: h.level as HintLevel,
+            text: h.text,
+            displayedAt: h.displayed_at,
+            interviewerUsed: h.interviewer_used,
+            candidateResponseQuality: h.candidate_response_quality as HintResponseQuality,
+            timeToRespondMs: null,
+          }));
+          useHintStore.getState().restoreHints(hintEntries);
+        }
+      } catch {
+        // Recovery failed — fall back to fresh session state
+        setSession(sessionId, '', 45);
+        setStatus('live');
+      }
+    })();
   }, [sessionId, status, setSession, setStatus]);
 
   // Cleanup on unmount

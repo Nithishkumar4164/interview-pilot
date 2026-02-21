@@ -60,6 +60,7 @@ interface HintState {
   setRuntimeHintLoading: (loading: boolean) => void;
   setActiveRuntimeHint: (hint: RuntimeHintEntry) => void;
   acknowledgeRuntimeHint: (hintId: string, feedback: RuntimeHintEntry['feedback']) => void;
+  restoreHints: (hints: HintEntry[]) => void;
   clear: () => void;
 }
 
@@ -124,6 +125,21 @@ export const useHintStore = create<HintState>((set) => ({
           ? { ...s.activeRuntimeHint, feedback }
           : s.activeRuntimeHint,
     })),
+
+  restoreHints: (hints) =>
+    set(() => {
+      const givenLevels = new Set<number>();
+      for (const h of hints) {
+        givenLevels.add(h.level);
+      }
+      const lastHint = hints.length > 0 ? hints[hints.length - 1] : null;
+      return {
+        history: hints,
+        activeHint: lastHint,
+        currentLevel: lastHint?.level ?? 0,
+        givenLevels,
+      };
+    }),
 
   clear: () =>
     set({

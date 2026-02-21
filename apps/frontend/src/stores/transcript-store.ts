@@ -29,6 +29,7 @@ interface TranscriptState {
   addEntry: (entry: TranscriptEntry) => void;
   setInterim: (entry: TranscriptEntry | null) => void;
   addCatchupEntries: (entries: TranscriptEntry[]) => void;
+  restoreTranscripts: (entries: TranscriptEntry[]) => void;
   updateEntrySpeaker: (transcriptId: string, newRootSpeakerId: string, newSpeechVectorId: string) => void;
   clear: () => void;
 }
@@ -59,6 +60,9 @@ export const useTranscriptStore = create<TranscriptState>((set) => ({
     set((s) => ({
       entries: [...entries, ...s.entries].slice(0, MAX_ENTRIES),
     })),
+
+  restoreTranscripts: (entries) =>
+    set({ entries: entries.slice(-MAX_ENTRIES), interimEntry: null }),
 
   updateEntrySpeaker: (transcriptId, newRootSpeakerId, newSpeechVectorId) =>
     set((s) => ({

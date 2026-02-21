@@ -68,3 +68,21 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 def get_failover_manager() -> FailoverManager:
     """FastAPI dependency for the LLM failover manager."""
     return failover_manager
+
+
+def get_persistence_service():
+    """FastAPI dependency for the persistence service.
+
+    Lazy import to avoid circular dependency with main.py.
+    """
+    from src.main import persistence_service
+    return persistence_service
+
+
+def get_session_state_service():
+    """FastAPI dependency for the session state service.
+
+    Lazy import to avoid circular dependency with main.py.
+    """
+    from src.main import session_state_service
+    return session_state_service

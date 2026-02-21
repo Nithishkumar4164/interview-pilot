@@ -64,7 +64,82 @@ export async function pauseSession(sessionId: string) {
 }
 
 export async function endSession(sessionId: string) {
-  return request(`/api/sessions/${sessionId}/end`, { method: 'POST' });
+  return request<{ status: string; session_id: string; report_id?: string }>(
+    `/api/sessions/${sessionId}/end`,
+    { method: 'POST' },
+  );
+}
+
+export interface SessionStateResponse {
+  session: {
+    id: string;
+    status: string;
+    level: string;
+    duration_minutes: number;
+    elapsed_ms: number;
+    started_at: string | null;
+    ended_at: string | null;
+  };
+  transcripts: Array<{
+    id: string;
+    speaker_role: string;
+    text: string;
+    is_final: boolean;
+    confidence: number;
+    timestamp: string;
+    channel: string;
+    is_retroactive: boolean;
+  }>;
+  analyses: Array<{
+    answer_quality: number;
+    on_track: boolean;
+    insight: string;
+    red_flags: string[];
+    suggestion: string | null;
+    hint_signal: string | null;
+    timestamp: string;
+  }>;
+  hints: Array<{
+    id: string;
+    question_id: string;
+    level: number;
+    text: string;
+    displayed_at: string;
+    interviewer_used: boolean;
+    candidate_response_quality: string;
+  }>;
+  plan: Record<string, unknown> | null;
+  plan_id: string | null;
+  snapshot: Record<string, unknown> | null;
+}
+
+export async function getSessionState(sessionId: string) {
+  return request<SessionStateResponse>(`/api/sessions/${sessionId}/state`);
+}
+
+export interface SessionListResponse {
+  sessions: Array<{
+    id: string;
+    status: string;
+    level: string;
+    duration_minutes: number;
+    focus_areas: string[];
+    started_at: string | null;
+    ended_at: string | null;
+    created_at: string;
+  }>;
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export async function listSessions(status?: string) {
+  const params = status ? `?status=${encodeURIComponent(status)}` : '';
+  return request<SessionListResponse>(`/api/history/sessions${params}`);
+}
+
+export async function getSessionReport(sessionId: string) {
+  return request<Record<string, unknown>>(`/api/history/sessions/${sessionId}/report`);
 }
 
 // ── Hints ─────────────────────────────────────────────────────────────

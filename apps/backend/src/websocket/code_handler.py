@@ -76,15 +76,32 @@ async def code_websocket(websocket: WebSocket, session_id: str) -> None:
                         result = await analyzer.analyze_snapshot(code, language)
 
                         # Push code analysis to dashboard
+                        result_dict = result.to_dict()
                         await dashboard_manager.send_code_analysis(
                             session_id,
                             {
                                 "code_length": len(code),
                                 "language": language,
                                 "source": source,
-                                **result.to_dict(),
+                                **result_dict,
                             },
                         )
+
+                        # Persist code snapshot to DB
+                        try:
+                            from src.dependencies import get_persistence_service
+                            from datetime import UTC, datetime
+                            persistence = get_persistence_service()
+                            persistence.enqueue_code_snapshot(
+                                session_id,
+                                code=code,
+                                language=language,
+                                timestamp=datetime.now(UTC).isoformat(),
+                                approach=result_dict.get("detected_approach"),
+                                progress_state=result_dict.get("progress_state", "unknown"),
+                            )
+                        except Exception:
+                            logger.warning("persistence_enqueue_failed", type="code_snapshot")
                     else:
                         # No active analyzer — just forward the snapshot info
                         await dashboard_manager.send_code_analysis(

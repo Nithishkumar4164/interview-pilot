@@ -18,6 +18,8 @@ COPY . .
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app
 USER appuser
 
+ENV PYTHONPATH=/app
+
 EXPOSE 8000
 
 # Gunicorn with Uvicorn workers

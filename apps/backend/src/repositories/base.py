@@ -35,7 +35,5 @@ class BaseRepository(Generic[T]):
         await self.db.flush()
 
     async def list_all(self, limit: int = 100, offset: int = 0) -> list[T]:
-        result = await self.db.execute(
-            select(self.model).limit(limit).offset(offset)
-        )
+        result = await self.db.execute(select(self.model).limit(limit).offset(offset))
         return list(result.scalars().all())

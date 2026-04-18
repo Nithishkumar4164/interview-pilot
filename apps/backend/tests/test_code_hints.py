@@ -29,13 +29,15 @@ def _mock_failover_manager() -> FailoverManager:
     health = HealthMonitor()
     fm = FailoverManager(health)
     for task_type in TaskType:
-        fm.update_mapping(TaskProviderMapping(
-            task_type=task_type,
-            primary_provider="mock",
-            primary_model="mock-v1",
-            fallback_provider="mock",
-            fallback_model="mock-v1",
-        ))
+        fm.update_mapping(
+            TaskProviderMapping(
+                task_type=task_type,
+                primary_provider="mock",
+                primary_model="mock-v1",
+                fallback_provider="mock",
+                fallback_model="mock-v1",
+            )
+        )
     return fm
 
 
@@ -173,34 +175,26 @@ class TestStuckDetection:
 
     def test_not_stuck_with_few_snapshots(self):
         for i in range(3):
-            self.service._snapshots.append(
-                CodeSnapshot(code=f"code {i}", char_count=50 + i * 10)
-            )
+            self.service._snapshots.append(CodeSnapshot(code=f"code {i}", char_count=50 + i * 10))
         assert self.service._detect_stuck() is False
 
     def test_stuck_oscillation(self):
         # Simulate adding/removing code repeatedly
         lengths = [100, 120, 95, 130, 90]
         for l in lengths:
-            self.service._snapshots.append(
-                CodeSnapshot(code="x" * l, char_count=l)
-            )
+            self.service._snapshots.append(CodeSnapshot(code="x" * l, char_count=l))
         assert self.service._detect_stuck() is True
 
     def test_stuck_no_progress(self):
         # Code length barely changes
         for _ in range(5):
-            self.service._snapshots.append(
-                CodeSnapshot(code="x" * 100, char_count=100)
-            )
+            self.service._snapshots.append(CodeSnapshot(code="x" * 100, char_count=100))
         assert self.service._detect_stuck() is True
 
     def test_not_stuck_steady_growth(self):
         for i in range(5):
             length = 50 + i * 30  # Steady growth
-            self.service._snapshots.append(
-                CodeSnapshot(code="x" * length, char_count=length)
-            )
+            self.service._snapshots.append(CodeSnapshot(code="x" * length, char_count=length))
         assert self.service._detect_stuck() is False
 
 
@@ -271,11 +265,14 @@ class TestCodeAnalysisService:
 class TestHintService:
     def setup_method(self):
         self.service = HintService("test-session")
-        self.service.register_hints("q1", {
-            1: "What data structure gives O(1) lookups?",
-            2: "A hash map could help. What would be the key and value?",
-            3: "Map each element to its index. For each element, check if target - element exists.",
-        })
+        self.service.register_hints(
+            "q1",
+            {
+                1: "What data structure gives O(1) lookups?",
+                2: "A hash map could help. What would be the key and value?",
+                3: "Map each element to its index. For each element, check if target - element exists.",
+            },
+        )
 
     def test_initial_state(self):
         assert self.service.get_current_level() == 0
@@ -349,12 +346,22 @@ class TestHintService:
 class TestHintMetrics:
     def setup_method(self):
         self.service = HintService("test-session")
-        self.service.register_hints("q1", {
-            1: "Hint 1", 2: "Hint 2", 3: "Hint 3",
-        })
-        self.service.register_hints("q2", {
-            1: "Q2 Hint 1", 2: "Q2 Hint 2", 3: "Q2 Hint 3",
-        })
+        self.service.register_hints(
+            "q1",
+            {
+                1: "Hint 1",
+                2: "Hint 2",
+                3: "Hint 3",
+            },
+        )
+        self.service.register_hints(
+            "q2",
+            {
+                1: "Q2 Hint 1",
+                2: "Q2 Hint 2",
+                3: "Q2 Hint 3",
+            },
+        )
 
     def test_empty_metrics(self):
         metrics = self.service.get_metrics()

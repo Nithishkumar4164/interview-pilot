@@ -22,6 +22,13 @@ export interface WSClientOptions {
   maxRetries?: number;
   /** Heartbeat interval in ms (default: 15000) */
   heartbeatIntervalMs?: number;
+  /**
+   * Optional async token resolver. When set, the returned bearer token
+   * is appended as a `?token=` query parameter on the WebSocket URL so
+   * the server can authenticate the upgrade. Runs on every (re)connect
+   * so a refresh can be performed before the connection is established.
+   */
+  getAuthToken?: () => Promise<string | null> | string | null;
 }
 
 export interface WSClientEvents {
@@ -101,6 +108,7 @@ export class WSClient {
       maxRetryMs: 30000,
       maxRetries: 20,
       heartbeatIntervalMs: 15000,
+      getAuthToken: () => null,
       ...options,
     };
     if (events) {
@@ -116,6 +124,14 @@ export class WSClient {
     return `${this.options.baseUrl}${this.options.endpoint}/${this.options.sessionId}`;
   }
 
+  private async buildUrl(): Promise<string> {
+    const base = this.url;
+    const token = await Promise.resolve(this.options.getAuthToken());
+    if (!token) return base;
+    const sep = base.includes('?') ? '&' : '?';
+    return `${base}${sep}token=${encodeURIComponent(token)}`;
+  }
+
   connect(): void {
     if (this.state === 'connected' || this.state === 'connecting') {
       return;
@@ -124,8 +140,17 @@ export class WSClient {
     this.intentionalClose = false;
     this.setState(this.retryCount > 0 ? 'reconnecting' : 'connecting');
 
+    this.buildUrl()
+      .then((url) => this.openSocket(url))
+      .catch((error) => {
+        this.events.onError?.(error as Event);
+        this.scheduleReconnect();
+      });
+  }
+
+  private openSocket(url: string): void {
     try {
-      this.ws = new WebSocket(this.url);
+      this.ws = new WebSocket(url);
       this.ws.binaryType = 'arraybuffer';
 
       this.ws.onopen = () => {

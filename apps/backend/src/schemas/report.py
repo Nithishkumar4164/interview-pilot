@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -18,13 +19,24 @@ class CriterionScoreSchema(BaseModel):
     trend: str
 
 
+KeyMomentType = Literal[
+    "breakthrough",
+    "struggle",
+    "hint",
+    "contradiction",
+    "code_milestone",
+    "strong_answer",
+    "weak_answer",
+]
+
+
 class KeyMomentSchema(BaseModel):
     timestamp: str
     title: str
     description: str
     sentiment: str
     impact_on_assessment: str
-    type: str = "neutral"
+    type: KeyMomentType | None = None
 
 
 class AssessmentSchema(BaseModel):

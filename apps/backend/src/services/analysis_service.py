@@ -13,19 +13,19 @@ from datetime import UTC, datetime
 from src.llm.failover import FailoverManager
 from src.llm.interface import AnalysisContext, LLMConfig, TaskType
 from src.schemas.analysis import (
+    BehavioralSignalDimension,
+    CommunicationQualityDimension,
+    ContextualConsistencyDimension,
+    DepthCompletenessDimension,
     DimensionScore,
     EnhancedAnalysisResult,
+    HintReceptionDimension,
     InsightDimensions,
     RelevanceDimension,
-    BehavioralSignalDimension,
-    ContextualConsistencyDimension,
-    HintReceptionDimension,
-    DepthCompletenessDimension,
-    CommunicationQualityDimension,
 )
 from src.services.memory_service import MemoryService
 from src.utils.logging import get_logger
-from src.utils.token_budget import BUDGET_RESPONSE, BUDGET_SYSTEM_PROMPT
+from src.utils.token_budget import BUDGET_RESPONSE
 
 logger = get_logger("analysis_service")
 
@@ -171,10 +171,12 @@ class AnalysisService:
         """Build the system prompt, conditionally including hint_reception."""
         if self._active_hint:
             return ENHANCED_ANALYSIS_SYSTEM_PROMPT.replace(
-                "HINT_RECEPTION_PLACEHOLDER", HINT_RECEPTION_BLOCK,
+                "HINT_RECEPTION_PLACEHOLDER",
+                HINT_RECEPTION_BLOCK,
             )
         return ENHANCED_ANALYSIS_SYSTEM_PROMPT.replace(
-            "    HINT_RECEPTION_PLACEHOLDER\n", "",
+            "    HINT_RECEPTION_PLACEHOLDER\n",
+            "",
         )
 
     def _build_question_plan_context(self) -> str:
@@ -226,12 +228,7 @@ class AnalysisService:
         # Append question plan context if available
         plan_context = self._build_question_plan_context()
 
-        user_content = (
-            f"{context_text}"
-            f"{plan_context}\n\n"
-            f"## Latest Utterance\n"
-            f"[{speaker}]: {text}"
-        )
+        user_content = f"{context_text}{plan_context}\n\n## Latest Utterance\n[{speaker}]: {text}"
 
         try:
             result = await self._failover.analyze(
@@ -270,9 +267,7 @@ class AnalysisService:
         self._analysis_history.append(analysis)
         return analysis
 
-    def _parse_analysis(
-        self, content: str, parsed: dict | None
-    ) -> EnhancedAnalysisResult:
+    def _parse_analysis(self, content: str, parsed: dict | None) -> EnhancedAnalysisResult:
         """Parse the LLM response into a structured EnhancedAnalysisResult."""
         data = parsed
         if not data:
@@ -312,6 +307,7 @@ class AnalysisService:
     def _build_fallback_dimensions(self, raw: dict) -> InsightDimensions | None:
         """Construct dimensions from partial LLM data."""
         try:
+
             def _score(d: dict | None) -> DimensionScore:
                 if not d or not isinstance(d, dict):
                     return DimensionScore.ADEQUATE
@@ -387,8 +383,10 @@ class AnalysisService:
                     score=_score(hint_r),
                     acted_on_hint=_bool(hint_r, "acted_on_hint", False),
                     incorporation_level=_literal(
-                        hint_r, "incorporation_level",
-                        ("full", "partial", "none"), "none",
+                        hint_r,
+                        "incorporation_level",
+                        ("full", "partial", "none"),
+                        "none",
                     ),
                     justification=_str(hint_r, "justification", "N/A"),
                 )
@@ -422,7 +420,9 @@ class AnalysisService:
             brute = qp.get("brute_force_approach")
             if brute:
                 if isinstance(brute, dict):
-                    parts.append(f"## Brute Force Approach\nName: {brute.get('name', 'N/A')}\nComplexity: {brute.get('expected_complexity', {})}\nSteps: {brute.get('key_steps', [])}")
+                    parts.append(
+                        f"## Brute Force Approach\nName: {brute.get('name', 'N/A')}\nComplexity: {brute.get('expected_complexity', {})}\nSteps: {brute.get('key_steps', [])}"
+                    )
                 else:
                     parts.append(f"## Brute Force Approach\n{brute}")
 
@@ -431,7 +431,9 @@ class AnalysisService:
                 if isinstance(approaches, list):
                     for i, a in enumerate(approaches, 1):
                         if isinstance(a, dict):
-                            parts.append(f"## Optimal Approach {i}\nName: {a.get('name', 'N/A')}\nComplexity: {a.get('expected_complexity', {})}\nSteps: {a.get('key_steps', [])}")
+                            parts.append(
+                                f"## Optimal Approach {i}\nName: {a.get('name', 'N/A')}\nComplexity: {a.get('expected_complexity', {})}\nSteps: {a.get('key_steps', [])}"
+                            )
                         else:
                             parts.append(f"## Optimal Approach {i}\n{a}")
                 else:
@@ -517,7 +519,5 @@ class AnalysisService:
             "analysis_count": len(self._analysis_history),
             "average_quality": self.get_average_quality(),
             "current_question": self._current_question,
-            "recent_analyses": [
-                a.model_dump() for a in self._analysis_history[-5:]
-            ],
+            "recent_analyses": [a.model_dump() for a in self._analysis_history[-5:]],
         }

@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Boolean, Float, ForeignKey, Index, String
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,7 +22,7 @@ class Transcript(BaseModel):
     text: Mapped[str] = mapped_column(String, nullable=False)
     is_final: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    timestamp: Mapped[str] = mapped_column(String, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     word_timestamps: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     is_retroactive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     channel: Mapped[str] = mapped_column(String(20), nullable=False, default="tab")

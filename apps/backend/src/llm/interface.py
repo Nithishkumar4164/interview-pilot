@@ -26,6 +26,7 @@ class ProviderHealthStatus(str, Enum):
 @dataclass
 class LLMConfig:
     """Configuration for a single LLM call."""
+
     max_tokens: int = 1000
     temperature: float = 0.7
     stream: bool = False
@@ -35,6 +36,7 @@ class LLMConfig:
 @dataclass
 class AnalysisContext:
     """Context assembled for analysis calls."""
+
     system_prompt: str
     user_content: str
     task_type: TaskType
@@ -44,6 +46,7 @@ class AnalysisContext:
 @dataclass
 class StructuredOutput:
     """Structured response from an LLM analysis call."""
+
     content: str
     parsed: dict[str, Any] | None = None
     model: str = ""
@@ -56,6 +59,7 @@ class StructuredOutput:
 @dataclass
 class ProviderStatus:
     """Health status of an LLM provider."""
+
     provider: str
     status: ProviderHealthStatus
     last_check_at: str

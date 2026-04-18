@@ -9,9 +9,7 @@ from src.models.base import BaseModel
 
 class SessionSnapshot(BaseModel):
     __tablename__ = "session_snapshots"
-    __table_args__ = (
-        Index("ix_session_snapshots_session_created", "session_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_session_snapshots_session_created", "session_id", "created_at"),)
 
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("interview_sessions.id"), nullable=False

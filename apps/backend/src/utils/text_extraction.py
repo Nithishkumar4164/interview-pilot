@@ -18,7 +18,7 @@ def extract_text_from_pdf(file_content: bytes) -> str:
     doc = fitz.open(stream=file_content, filetype="pdf")
     all_text: list[str] = []
 
-    for page_num, page in enumerate(doc):
+    for _page_num, page in enumerate(doc):
         # Extract text blocks with position info
         blocks = page.get_text("blocks")
 

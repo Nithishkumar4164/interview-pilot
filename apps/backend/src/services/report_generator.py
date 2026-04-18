@@ -14,15 +14,12 @@ from datetime import UTC, datetime
 
 from src.llm.failover import FailoverManager
 from src.llm.interface import AnalysisContext, LLMConfig, TaskType
-from src.schemas.hint import HintResponseMetricsSchema, HintResponseQuality
+from src.schemas.hint import HintResponseMetricsSchema
 from src.schemas.report import (
-    AssessmentSchema,
     CriterionScoreSchema,
     KeyMomentSchema,
     Recommendation,
 )
-from src.services.contradiction_service import Contradiction
-from src.services.hint_service import ActiveHint
 from src.services.memory_service import FactStore
 from src.utils.logging import get_logger
 
@@ -221,7 +218,7 @@ class ReportGenerator:
     def _build_context(self, input_data: ReportInput) -> str:
         """Assemble the full context for report generation."""
         parts = [
-            f"## Interview Details",
+            "## Interview Details",
             f"- Target Level: {input_data.target_level}",
             f"- Duration: {input_data.duration_minutes:.0f} minutes",
             f"- Session ID: {input_data.session_id}",
@@ -263,7 +260,7 @@ class ReportGenerator:
 
         # Time per question
         if input_data.time_per_question:
-            parts.append(f"\n## Time Per Question")
+            parts.append("\n## Time Per Question")
             for q_id, mins in input_data.time_per_question.items():
                 parts.append(f"- {q_id}: {mins:.1f} minutes")
 
@@ -277,7 +274,7 @@ class ReportGenerator:
                 scored = [a.answer_quality for a in analysis_results if a.answer_quality > 0]
             if scored:
                 avg = sum(scored) / len(scored)
-                parts.append(f"\n## Real-Time Analysis Summary")
+                parts.append("\n## Real-Time Analysis Summary")
                 parts.append(f"- Average answer quality: {avg:.1f}/5")
                 parts.append(f"- Total analysis points: {len(analysis_results)}")
 
@@ -299,14 +296,14 @@ class ReportGenerator:
 
         # Code analysis
         if input_data.code_progress:
-            parts.append(f"\n## Code Analysis")
+            parts.append("\n## Code Analysis")
             parts.append(f"- Final progress: {input_data.code_progress}")
             if input_data.detected_approach:
                 parts.append(f"- Detected approach: {input_data.detected_approach}")
 
         # Code progression timeline
         if input_data.code_snapshots:
-            parts.append(f"\n## Code Progression Timeline")
+            parts.append("\n## Code Progression Timeline")
             for cs in input_data.code_snapshots[-10:]:
                 ts = cs.get("timestamp", "")
                 state = cs.get("progress_state", "unknown")
@@ -316,7 +313,7 @@ class ReportGenerator:
         # Hints
         hint_events = input_data.hint_events
         if hint_events:
-            parts.append(f"\n## Hint Usage")
+            parts.append("\n## Hint Usage")
             parts.append(f"- Total hints given: {len(hint_events)}")
             if hasattr(input_data.hint_metrics, "incorporation_rate"):
                 parts.append(f"- Incorporation rate: {input_data.hint_metrics.incorporation_rate:.0%}")
@@ -325,12 +322,14 @@ class ReportGenerator:
                     parts.append(f"- Average response time: {input_data.hint_metrics.average_response_time_ms:.0f}ms")
             elif isinstance(input_data.hint_metrics, dict):
                 parts.append(f"- Incorporation rate: {input_data.hint_metrics.get('incorporation_rate', 0):.0%}")
-                parts.append(f"- Independence trajectory: {input_data.hint_metrics.get('independence_trajectory', 'unknown')}")
+                parts.append(
+                    f"- Independence trajectory: {input_data.hint_metrics.get('independence_trajectory', 'unknown')}"
+                )
 
         # Contradictions
         contradictions = input_data.contradictions
         if contradictions:
-            parts.append(f"\n## Contradictions Detected")
+            parts.append("\n## Contradictions Detected")
             for c in contradictions[:5]:
                 if isinstance(c, dict):
                     parts.append(f"- [{c.get('confidence', 0):.0%}] {c.get('explanation', '')}")
@@ -341,14 +340,14 @@ class ReportGenerator:
         if isinstance(input_data.fact_store, FactStore):
             claimed = getattr(input_data.fact_store, "claimed_experience", [])
             if claimed:
-                parts.append(f"\n## Resume Verification")
+                parts.append("\n## Resume Verification")
                 parts.append("Claimed experience:")
                 for item in claimed[:10]:
                     parts.append(f"- {item}")
         elif isinstance(input_data.fact_store, dict):
             claimed = input_data.fact_store.get("claimed_experience", [])
             if claimed:
-                parts.append(f"\n## Resume Verification")
+                parts.append("\n## Resume Verification")
                 parts.append("Claimed experience:")
                 for item in claimed[:10]:
                     parts.append(f"- {item}")
@@ -357,19 +356,19 @@ class ReportGenerator:
         if isinstance(input_data.fact_store, FactStore):
             behavioral = getattr(input_data.fact_store, "behavioral_signals", [])
             if behavioral:
-                parts.append(f"\n## Behavioral Signals")
+                parts.append("\n## Behavioral Signals")
                 for signal in behavioral[:10]:
                     parts.append(f"- {signal}")
         elif isinstance(input_data.fact_store, dict):
             behavioral = input_data.fact_store.get("behavioral_signals", [])
             if behavioral:
-                parts.append(f"\n## Behavioral Signals")
+                parts.append("\n## Behavioral Signals")
                 for signal in behavioral[:10]:
                     parts.append(f"- {signal}")
 
         # Plan adherence
         if input_data.plan_data:
-            parts.append(f"\n## Interview Plan")
+            parts.append("\n## Interview Plan")
             phases = input_data.plan_data.get("phases", [])
             for phase in phases[:5]:
                 phase_name = phase.get("phase", "")
@@ -396,32 +395,52 @@ class ReportGenerator:
         # Parse scores
         scores = []
         for s in data.get("scores", []):
-            scores.append(CriterionScoreSchema(
-                criterion=s.get("criterion", "unknown"),
-                score=min(5, max(1, int(s.get("score", 3)))),
-                evidence=s.get("evidence", []),
-                trend=s.get("trend", "stable"),
-            ))
+            scores.append(
+                CriterionScoreSchema(
+                    criterion=s.get("criterion", "unknown"),
+                    score=min(5, max(1, int(s.get("score", 3)))),
+                    evidence=s.get("evidence", []),
+                    trend=s.get("trend", "stable"),
+                )
+            )
 
         # Ensure all 7 criteria present
         criteria_present = {s.criterion for s in scores}
         for required in ALL_CRITERIA:
             if required not in criteria_present:
-                scores.append(CriterionScoreSchema(
-                    criterion=required, score=3, evidence=[], trend="stable",
-                ))
+                scores.append(
+                    CriterionScoreSchema(
+                        criterion=required,
+                        score=3,
+                        evidence=[],
+                        trend="stable",
+                    )
+                )
 
         # Parse key moments
+        valid_moment_types = {
+            "breakthrough",
+            "struggle",
+            "hint",
+            "contradiction",
+            "code_milestone",
+            "strong_answer",
+            "weak_answer",
+        }
         key_moments = []
         for m in data.get("key_moments", []):
-            key_moments.append(KeyMomentSchema(
-                timestamp=m.get("timestamp", "00:00:00"),
-                title=m.get("title", ""),
-                description=m.get("description", ""),
-                sentiment=m.get("sentiment", "neutral"),
-                impact_on_assessment=m.get("impact_on_assessment", ""),
-                type=m.get("type", "neutral"),
-            ))
+            raw_type = m.get("type")
+            moment_type = raw_type if raw_type in valid_moment_types else None
+            key_moments.append(
+                KeyMomentSchema(
+                    timestamp=m.get("timestamp", "00:00:00"),
+                    title=m.get("title", ""),
+                    description=m.get("description", ""),
+                    sentiment=m.get("sentiment", "neutral"),
+                    impact_on_assessment=m.get("impact_on_assessment", ""),
+                    type=moment_type,
+                )
+            )
 
         # Parse recommendation
         try:
@@ -479,21 +498,27 @@ class ReportGenerator:
         hint_details = []
         for h in hint_events:
             if isinstance(h, dict):
-                hint_details.append({
-                    "question_id": h.get("question_id", ""),
-                    "level": h.get("level", 0),
-                    "interviewer_used": h.get("interviewer_used", False),
-                    "response_quality": h.get("candidate_response_quality", "none"),
-                    "time_to_respond_ms": h.get("time_to_respond_ms"),
-                })
+                hint_details.append(
+                    {
+                        "question_id": h.get("question_id", ""),
+                        "level": h.get("level", 0),
+                        "interviewer_used": h.get("interviewer_used", False),
+                        "response_quality": h.get("candidate_response_quality", "none"),
+                        "time_to_respond_ms": h.get("time_to_respond_ms"),
+                    }
+                )
             else:
-                hint_details.append({
-                    "question_id": h.question_id,
-                    "level": h.level,
-                    "interviewer_used": h.interviewer_used,
-                    "response_quality": h.candidate_response_quality.value if hasattr(h.candidate_response_quality, "value") else str(h.candidate_response_quality),
-                    "time_to_respond_ms": h.time_to_respond_ms,
-                })
+                hint_details.append(
+                    {
+                        "question_id": h.question_id,
+                        "level": h.level,
+                        "interviewer_used": h.interviewer_used,
+                        "response_quality": h.candidate_response_quality.value
+                        if hasattr(h.candidate_response_quality, "value")
+                        else str(h.candidate_response_quality),
+                        "time_to_respond_ms": h.time_to_respond_ms,
+                    }
+                )
 
         if isinstance(metrics, dict):
             return {
@@ -579,28 +604,34 @@ class ReportGenerator:
             for h_ts, events in hint_by_ts.items():
                 if _timestamps_close(ts, h_ts, tolerance_sec=5):
                     for he in events:
-                        entry["annotations"].append({
-                            "type": "hint",
-                            "text": f"Level {he.get('level', '?')} hint: {he.get('text', '')[:100]}",
-                        })
+                        entry["annotations"].append(
+                            {
+                                "type": "hint",
+                                "text": f"Level {he.get('level', '?')} hint: {he.get('text', '')[:100]}",
+                            }
+                        )
 
             # Match contradictions
             for c_ts, events in contradiction_by_ts.items():
                 if _timestamps_close(ts, c_ts, tolerance_sec=10):
                     for ce in events:
-                        entry["annotations"].append({
-                            "type": "contradiction",
-                            "text": ce.get("explanation", ""),
-                        })
+                        entry["annotations"].append(
+                            {
+                                "type": "contradiction",
+                                "text": ce.get("explanation", ""),
+                            }
+                        )
 
             # Match code milestones
             for cm_ts, events in code_milestone_by_ts.items():
                 if _timestamps_close(ts, cm_ts, tolerance_sec=10):
                     for cs in events:
-                        entry["annotations"].append({
-                            "type": "code_milestone",
-                            "text": f"Code: {cs.get('progress_state', 'unknown')}",
-                        })
+                        entry["annotations"].append(
+                            {
+                                "type": "code_milestone",
+                                "text": f"Code: {cs.get('progress_state', 'unknown')}",
+                            }
+                        )
 
             annotated.append(entry)
 
@@ -644,7 +675,7 @@ def _timestamps_close(ts1: str, ts2: str, tolerance_sec: int = 5) -> bool:
         if t1 is not None and t2 is not None:
             return abs((t1 - t2).total_seconds()) <= tolerance_sec
     except Exception:
-        pass
+        logger.debug("timestamp_parse_failed", ts1=ts1, ts2=ts2, exc_info=True)
     # Fallback: exact string match
     return ts1 == ts2
 

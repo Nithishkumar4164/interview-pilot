@@ -20,6 +20,7 @@ def client():
 
 # ── Health Endpoints ───────────────────────────────────────────────────
 
+
 class TestHealthEndpoints:
     def test_health_check(self, client: TestClient):
         response = client.get("/health")
@@ -43,33 +44,43 @@ class TestHealthEndpoints:
 
 # ── Session Endpoints ──────────────────────────────────────────────────
 
+
 class TestSessionEndpoints:
     def test_start_session(self, client: TestClient):
-        response = client.post("/api/sessions/start", json={
-            "level": "sde2",
-            "duration_minutes": 45,
-            "focus_areas": ["coding", "system_design"],
-        })
+        response = client.post(
+            "/api/sessions/start",
+            json={
+                "level": "sde2",
+                "duration_minutes": 45,
+                "focus_areas": ["coding", "system_design"],
+            },
+        )
         assert response.status_code == 200
         data = response.json()
         assert "session_id" in data
         assert len(data["session_id"]) > 0
 
     def test_start_session_invalid_duration(self, client: TestClient):
-        response = client.post("/api/sessions/start", json={
-            "level": "sde2",
-            "duration_minutes": 5,  # Below minimum of 15
-            "focus_areas": ["coding"],
-        })
+        response = client.post(
+            "/api/sessions/start",
+            json={
+                "level": "sde2",
+                "duration_minutes": 5,  # Below minimum of 15
+                "focus_areas": ["coding"],
+            },
+        )
         assert response.status_code == 422  # Validation error
 
     def test_get_session(self, client: TestClient):
         # Start a session first
-        start_resp = client.post("/api/sessions/start", json={
-            "level": "sde1",
-            "duration_minutes": 30,
-            "focus_areas": ["coding"],
-        })
+        start_resp = client.post(
+            "/api/sessions/start",
+            json={
+                "level": "sde1",
+                "duration_minutes": 30,
+                "focus_areas": ["coding"],
+            },
+        )
         session_id = start_resp.json()["session_id"]
 
         # Get it — session starts in PLANNING status
@@ -87,11 +98,14 @@ class TestSessionEndpoints:
 
     def test_pause_resume_session(self, client: TestClient):
         # Start
-        start_resp = client.post("/api/sessions/start", json={
-            "level": "sde2",
-            "duration_minutes": 45,
-            "focus_areas": ["coding"],
-        })
+        start_resp = client.post(
+            "/api/sessions/start",
+            json={
+                "level": "sde2",
+                "duration_minutes": 45,
+                "focus_areas": ["coding"],
+            },
+        )
         session_id = start_resp.json()["session_id"]
 
         # Go live first
@@ -110,11 +124,14 @@ class TestSessionEndpoints:
         assert resume_resp.json()["status"] == "live"
 
     def test_end_session(self, client: TestClient):
-        start_resp = client.post("/api/sessions/start", json={
-            "level": "senior",
-            "duration_minutes": 60,
-            "focus_areas": ["system_design"],
-        })
+        start_resp = client.post(
+            "/api/sessions/start",
+            json={
+                "level": "senior",
+                "duration_minutes": 60,
+                "focus_areas": ["system_design"],
+            },
+        )
         session_id = start_resp.json()["session_id"]
 
         end_resp = client.post(f"/api/sessions/{session_id}/end")
@@ -129,11 +146,14 @@ class TestSessionEndpoints:
     def test_full_session_lifecycle(self, client: TestClient):
         """Start → Go Live → Pause → Resume → End lifecycle."""
         # Start (PLANNING status)
-        resp = client.post("/api/sessions/start", json={
-            "level": "sde2",
-            "duration_minutes": 45,
-            "focus_areas": ["coding", "behavioral"],
-        })
+        resp = client.post(
+            "/api/sessions/start",
+            json={
+                "level": "sde2",
+                "duration_minutes": 45,
+                "focus_areas": ["coding", "behavioral"],
+            },
+        )
         sid = resp.json()["session_id"]
 
         # Verify planning
@@ -160,38 +180,52 @@ class TestSessionEndpoints:
 
 # ── Hint Endpoints ─────────────────────────────────────────────────────
 
+
 class TestHintEndpoints:
     def test_trigger_hint(self, client: TestClient):
         # Start session
-        start_resp = client.post("/api/sessions/start", json={
-            "level": "sde2",
-            "duration_minutes": 45,
-            "focus_areas": ["coding"],
-        })
+        start_resp = client.post(
+            "/api/sessions/start",
+            json={
+                "level": "sde2",
+                "duration_minutes": 45,
+                "focus_areas": ["coding"],
+            },
+        )
         sid = start_resp.json()["session_id"]
 
         # Register hints for question q1
-        client.post(f"/api/sessions/{sid}/register-plan-hints", json={
-            "phases": [{
-                "phase": "coding",
-                "start_minute": 5,
-                "duration_minutes": 25,
-                "questions": [{
-                    "id": "q1",
-                    "text": "Two Sum problem",
-                    "hints": [
-                        {"level": 1, "text": "Think about data structures."},
-                        {"level": 2, "text": "A hash map gives O(1) lookups."},
-                        {"level": 3, "text": "Map each element to its index."},
-                    ],
-                }],
-            }],
-        })
+        client.post(
+            f"/api/sessions/{sid}/register-plan-hints",
+            json={
+                "phases": [
+                    {
+                        "phase": "coding",
+                        "start_minute": 5,
+                        "duration_minutes": 25,
+                        "questions": [
+                            {
+                                "id": "q1",
+                                "text": "Two Sum problem",
+                                "hints": [
+                                    {"level": 1, "text": "Think about data structures."},
+                                    {"level": 2, "text": "A hash map gives O(1) lookups."},
+                                    {"level": 3, "text": "Map each element to its index."},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
 
         # Trigger hint
-        hint_resp = client.post(f"/api/sessions/{sid}/hints/next", json={
-            "question_id": "q1",
-        })
+        hint_resp = client.post(
+            f"/api/sessions/{sid}/hints/next",
+            json={
+                "question_id": "q1",
+            },
+        )
         assert hint_resp.status_code == 200
         data = hint_resp.json()
         assert "id" in data
@@ -199,46 +233,63 @@ class TestHintEndpoints:
         assert "text" in data
 
     def test_acknowledge_hint(self, client: TestClient):
-        start_resp = client.post("/api/sessions/start", json={
-            "level": "sde2",
-            "duration_minutes": 45,
-            "focus_areas": ["coding"],
-        })
+        start_resp = client.post(
+            "/api/sessions/start",
+            json={
+                "level": "sde2",
+                "duration_minutes": 45,
+                "focus_areas": ["coding"],
+            },
+        )
         sid = start_resp.json()["session_id"]
 
         # Register hints
-        client.post(f"/api/sessions/{sid}/register-plan-hints", json={
-            "phases": [{
-                "phase": "coding",
-                "start_minute": 5,
-                "duration_minutes": 25,
-                "questions": [{
-                    "id": "q1",
-                    "text": "Two Sum",
-                    "hints": [
-                        {"level": 1, "text": "Think about data structures."},
-                        {"level": 2, "text": "A hash map gives O(1) lookups."},
-                        {"level": 3, "text": "Map each element to its index."},
-                    ],
-                }],
-            }],
-        })
+        client.post(
+            f"/api/sessions/{sid}/register-plan-hints",
+            json={
+                "phases": [
+                    {
+                        "phase": "coding",
+                        "start_minute": 5,
+                        "duration_minutes": 25,
+                        "questions": [
+                            {
+                                "id": "q1",
+                                "text": "Two Sum",
+                                "hints": [
+                                    {"level": 1, "text": "Think about data structures."},
+                                    {"level": 2, "text": "A hash map gives O(1) lookups."},
+                                    {"level": 3, "text": "Map each element to its index."},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
 
         # Trigger hint
-        hint = client.post(f"/api/sessions/{sid}/hints/next", json={
-            "question_id": "q1",
-        }).json()
+        hint = client.post(
+            f"/api/sessions/{sid}/hints/next",
+            json={
+                "question_id": "q1",
+            },
+        ).json()
 
         # Acknowledge
-        ack_resp = client.post(f"/api/sessions/{sid}/hints/{hint['id']}/ack", json={
-            "interviewer_used": True,
-            "candidate_response_quality": "full",
-        })
+        ack_resp = client.post(
+            f"/api/sessions/{sid}/hints/{hint['id']}/ack",
+            json={
+                "interviewer_used": True,
+                "candidate_response_quality": "full",
+            },
+        )
         assert ack_resp.status_code == 200
         assert ack_resp.json()["acknowledged"] is True
 
 
 # ── Upload Endpoints ───────────────────────────────────────────────────
+
 
 class TestUploadEndpoints:
     def test_upload_requires_file(self, client: TestClient):
@@ -269,6 +320,7 @@ class TestUploadEndpoints:
             }
 
         import threading
+
         t = threading.Thread(target=complete_after_delay)
         t.start()
 
@@ -279,9 +331,9 @@ class TestUploadEndpoints:
 
                 for line in response.iter_lines():
                     if line.startswith("event: "):
-                        event_type = line[len("event: "):]
+                        event_type = line[len("event: ") :]
                     elif line.startswith("data: "):
-                        data = json.loads(line[len("data: "):])
+                        data = json.loads(line[len("data: ") :])
                         events.append({"event": event_type, "data": data})
                         if event_type in ("completed", "error"):
                             break
@@ -309,9 +361,9 @@ class TestUploadEndpoints:
                 event_type = ""
                 for line in response.iter_lines():
                     if line.startswith("event: "):
-                        event_type = line[len("event: "):]
+                        event_type = line[len("event: ") :]
                     elif line.startswith("data: "):
-                        data = json.loads(line[len("data: "):])
+                        data = json.loads(line[len("data: ") :])
                         events.append({"event": event_type, "data": data})
                         if event_type in ("completed", "error"):
                             break
@@ -324,6 +376,7 @@ class TestUploadEndpoints:
 
 
 # ── Auth Endpoints ─────────────────────────────────────────────────────
+
 
 class TestAuthEndpoints:
     def test_auth_me_requires_token(self, client: TestClient):

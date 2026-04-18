@@ -19,12 +19,7 @@ class HintEventRepository(BaseRepository[HintEvent]):
         limit: int = 100,
     ) -> list[HintEvent]:
         """Get hint events for a session, ordered by display time."""
-        stmt = (
-            select(HintEvent)
-            .where(HintEvent.session_id == session_id)
-            .order_by(HintEvent.displayed_at)
-            .limit(limit)
-        )
+        stmt = select(HintEvent).where(HintEvent.session_id == session_id).order_by(HintEvent.displayed_at).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 

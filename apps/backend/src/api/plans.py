@@ -12,11 +12,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.dependencies import get_db, failover_manager
+from src.dependencies import failover_manager, get_db
 from src.models.plan import InterviewPlan
 from src.repositories.plan_repo import PlanRepository
 from src.schemas.plan import (
-    CreatePlanRequest,
     InterviewPlanSchema,
     ReorderQuestionsRequest,
     SwapQuestionRequest,
@@ -191,7 +190,7 @@ async def swap_question(
     try:
         plan = service.swap_question(plan, request.phase_index, request.question_index, request.alternate_index)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     db_plan.plan_data = service.plan_to_dict(plan)
     await plan_repo.update(db_plan)
@@ -219,7 +218,7 @@ async def reorder_questions(
     try:
         plan = service.reorder_questions(plan, request.phase_index, request.new_order)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     db_plan.plan_data = service.plan_to_dict(plan)
     await plan_repo.update(db_plan)
@@ -247,7 +246,7 @@ async def remove_question(
     try:
         plan = service.remove_question(plan, request.phase_index, request.question_index)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     db_plan.plan_data = service.plan_to_dict(plan)
     await plan_repo.update(db_plan)
@@ -285,7 +284,7 @@ async def add_question(
     try:
         plan = service.add_question(plan, request.phase_index, new_q)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     db_plan.plan_data = service.plan_to_dict(plan)
     await plan_repo.update(db_plan)

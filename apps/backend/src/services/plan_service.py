@@ -7,13 +7,16 @@ plan structuring with time-boxed phases and per-question time allocation.
 import json
 import uuid
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from src.llm.interface import AnalysisContext, LLMConfig, TaskType
 from src.schemas.session import InterviewLevel
+
+if TYPE_CHECKING:
+    from src.llm.failover import FailoverManager
 from src.services.calibration_service import (
     CalibrationProfile,
     PhaseAllocation,
-    TimeAllocation,
     build_phases_from_focus_areas,
     compute_time_allocation,
     get_calibration_profile,
@@ -144,8 +147,8 @@ class GeneratedPlan:
 class PlanService:
     """Generates and manages interview plans."""
 
-    def __init__(self, llm: object) -> None:
-        self.llm = llm  # FailoverManager
+    def __init__(self, llm: "FailoverManager") -> None:
+        self.llm = llm
 
     async def generate_plan(
         self,
@@ -205,12 +208,14 @@ class PlanService:
                 if q.category in ("coding", "system_design", "aptitude") and len(q.hints) < 3:
                     q.hints = await self._generate_hints(q)
 
-            phases.append(PlanPhaseData(
-                phase=phase_alloc.phase,
-                start_minute=current_minute,
-                duration_minutes=phase_minutes,
-                questions=questions,
-            ))
+            phases.append(
+                PlanPhaseData(
+                    phase=phase_alloc.phase,
+                    start_minute=current_minute,
+                    duration_minutes=phase_minutes,
+                    questions=questions,
+                )
+            )
             current_minute += phase_minutes
 
         plan = GeneratedPlan(
@@ -259,20 +264,22 @@ class PlanService:
                 q_time = min(bq.get("expected_time_min", 15), remaining_minutes)
                 if q_time <= 0:
                     break
-                questions.append(QuestionData(
-                    id=str(bq.get("id", uuid.uuid4())),
-                    text=bq["text"],
-                    category=bq["category"],
-                    difficulty=bq["difficulty"],
-                    time_minutes=q_time,
-                    tags=bq.get("tags", []),
-                    hints=bq.get("hints", []),
-                    brute_force_approach=bq.get("brute_force_approach"),
-                    optimal_approaches=bq.get("optimal_approaches"),
-                    common_pitfalls=bq.get("common_pitfalls"),
-                    alternates=bq.get("alternates", []),
-                    source="bank",
-                ))
+                questions.append(
+                    QuestionData(
+                        id=str(bq.get("id", uuid.uuid4())),
+                        text=bq["text"],
+                        category=bq["category"],
+                        difficulty=bq["difficulty"],
+                        time_minutes=q_time,
+                        tags=bq.get("tags", []),
+                        hints=bq.get("hints", []),
+                        brute_force_approach=bq.get("brute_force_approach"),
+                        optimal_approaches=bq.get("optimal_approaches"),
+                        common_pitfalls=bq.get("common_pitfalls"),
+                        alternates=bq.get("alternates", []),
+                        source="bank",
+                    )
+                )
                 remaining_minutes -= q_time
 
         # If we need more questions, generate them via LLM
@@ -329,15 +336,17 @@ class PlanService:
         time_budget: int,
     ) -> list[QuestionData]:
         """Generate questions via LLM when bank doesn't have enough."""
-        user_content = json.dumps({
-            "count": count,
-            "categories": categories,
-            "difficulty_range": list(difficulty_range),
-            "focus_areas": focus_areas,
-            "level": level,
-            "resume_context": resume_data or {},
-            "time_budget_minutes": time_budget,
-        })
+        user_content = json.dumps(
+            {
+                "count": count,
+                "categories": categories,
+                "difficulty_range": list(difficulty_range),
+                "focus_areas": focus_areas,
+                "level": level,
+                "resume_context": resume_data or {},
+                "time_budget_minutes": time_budget,
+            }
+        )
 
         context = AnalysisContext(
             system_prompt=QUESTION_GENERATION_SYSTEM_PROMPT,
@@ -352,20 +361,22 @@ class PlanService:
         if result.parsed and "questions" in result.parsed:
             per_q_time = time_budget // max(count, 1)
             for q_data in result.parsed["questions"][:count]:
-                questions.append(QuestionData(
-                    id=str(uuid.uuid4()),
-                    text=q_data["text"],
-                    category=q_data.get("category", categories[0]),
-                    difficulty=q_data.get("difficulty", difficulty_range[0]),
-                    time_minutes=q_data.get("time_minutes", per_q_time),
-                    tags=q_data.get("tags", []),
-                    hints=q_data.get("hints", []),
-                    brute_force_approach=q_data.get("brute_force_approach"),
-                    optimal_approaches=q_data.get("optimal_approaches"),
-                    common_pitfalls=q_data.get("common_pitfalls"),
-                    alternates=q_data.get("alternates", []),
-                    source="generated",
-                ))
+                questions.append(
+                    QuestionData(
+                        id=str(uuid.uuid4()),
+                        text=q_data["text"],
+                        category=q_data.get("category", categories[0]),
+                        difficulty=q_data.get("difficulty", difficulty_range[0]),
+                        time_minutes=q_data.get("time_minutes", per_q_time),
+                        tags=q_data.get("tags", []),
+                        hints=q_data.get("hints", []),
+                        brute_force_approach=q_data.get("brute_force_approach"),
+                        optimal_approaches=q_data.get("optimal_approaches"),
+                        common_pitfalls=q_data.get("common_pitfalls"),
+                        alternates=q_data.get("alternates", []),
+                        source="generated",
+                    )
+                )
 
         return questions
 
@@ -373,10 +384,12 @@ class PlanService:
         """Pre-generate 3-level hints for a coding question."""
         context = AnalysisContext(
             system_prompt=HINT_PRECOMPUTE_SYSTEM_PROMPT,
-            user_content=json.dumps({
-                "question": question.text,
-                "optimal_approaches": question.optimal_approaches,
-            }),
+            user_content=json.dumps(
+                {
+                    "question": question.text,
+                    "optimal_approaches": question.optimal_approaches,
+                }
+            ),
             task_type=TaskType.HINT_GENERATION,
         )
         config = LLMConfig(max_tokens=500, temperature=0.5, response_format="json")
@@ -555,26 +568,30 @@ class PlanService:
         for p_data in data.get("phases", []):
             questions = []
             for q_data in p_data.get("questions", []):
-                questions.append(QuestionData(
-                    id=q_data["id"],
-                    text=q_data["text"],
-                    category=q_data["category"],
-                    difficulty=q_data["difficulty"],
-                    time_minutes=q_data["time_minutes"],
-                    tags=q_data.get("tags", []),
-                    hints=q_data.get("hints", []),
-                    brute_force_approach=q_data.get("brute_force_approach"),
-                    optimal_approaches=q_data.get("optimal_approaches"),
-                    common_pitfalls=q_data.get("common_pitfalls"),
-                    alternates=q_data.get("alternates", []),
-                    source=q_data.get("source", "bank"),
-                ))
-            phases.append(PlanPhaseData(
-                phase=p_data["phase"],
-                start_minute=p_data["start_minute"],
-                duration_minutes=p_data["duration_minutes"],
-                questions=questions,
-            ))
+                questions.append(
+                    QuestionData(
+                        id=q_data["id"],
+                        text=q_data["text"],
+                        category=q_data["category"],
+                        difficulty=q_data["difficulty"],
+                        time_minutes=q_data["time_minutes"],
+                        tags=q_data.get("tags", []),
+                        hints=q_data.get("hints", []),
+                        brute_force_approach=q_data.get("brute_force_approach"),
+                        optimal_approaches=q_data.get("optimal_approaches"),
+                        common_pitfalls=q_data.get("common_pitfalls"),
+                        alternates=q_data.get("alternates", []),
+                        source=q_data.get("source", "bank"),
+                    )
+                )
+            phases.append(
+                PlanPhaseData(
+                    phase=p_data["phase"],
+                    start_minute=p_data["start_minute"],
+                    duration_minutes=p_data["duration_minutes"],
+                    questions=questions,
+                )
+            )
 
         return GeneratedPlan(
             session_id=data["session_id"],

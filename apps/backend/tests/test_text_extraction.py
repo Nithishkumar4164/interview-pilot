@@ -101,8 +101,9 @@ class TestDocxExtraction:
         assert "Python" in text
 
     def test_docx_with_bullet_points(self):
-        from docx import Document
         from io import BytesIO
+
+        from docx import Document
 
         doc = Document()
         doc.add_heading("Skills", level=2)
@@ -119,8 +120,9 @@ class TestDocxExtraction:
         assert "Java" in text
 
     def test_docx_with_table(self):
-        from docx import Document
         from io import BytesIO
+
+        from docx import Document
 
         doc = Document()
         doc.add_heading("Experience", level=1)

@@ -6,9 +6,9 @@ os.environ.setdefault("INTERVIEW_PILOT_OPENAI_API_KEY", "test-key")
 
 import pytest
 
-from src.llm.providers.mock import MockProvider
-from src.llm.health import HealthMonitor
 from src.llm.failover import FailoverManager
+from src.llm.health import HealthMonitor
+from src.llm.providers.mock import MockProvider
 
 
 @pytest.fixture

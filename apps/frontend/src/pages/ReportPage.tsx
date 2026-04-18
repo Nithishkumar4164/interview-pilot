@@ -22,7 +22,7 @@ interface KeyMoment {
   description: string;
   sentiment: string;
   impact_on_assessment: string;
-  type: string;
+  type: string | null;
 }
 
 interface HintSummary {

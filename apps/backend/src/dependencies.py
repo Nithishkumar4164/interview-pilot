@@ -15,6 +15,7 @@ _has_openai = bool(settings.openai_api_key)
 # If no LLM keys, fall back to mock provider for development
 if not _has_anthropic and not _has_openai:
     import logging
+
     logging.getLogger("dependencies").warning(
         "No LLM API keys configured — activating mock provider mode. "
         "Set INTERVIEW_PILOT_ANTHROPIC_API_KEY and/or INTERVIEW_PILOT_OPENAI_API_KEY for real analysis."
@@ -76,6 +77,7 @@ def get_persistence_service():
     Lazy import to avoid circular dependency with main.py.
     """
     from src.main import persistence_service
+
     return persistence_service
 
 
@@ -85,4 +87,5 @@ def get_session_state_service():
     Lazy import to avoid circular dependency with main.py.
     """
     from src.main import session_state_service
+
     return session_state_service

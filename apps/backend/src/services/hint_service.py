@@ -136,31 +136,32 @@ class HintService:
         self._hint_events.append(active)
 
         # Persist hint event to DB
-        try:
-            from src.dependencies import get_persistence_service
-            persistence = get_persistence_service()
-            persistence.enqueue_hint(
-                self.session_id,
-                question_id=qid,
-                level=next_level,
-                text=hint_text,
-                displayed_at=active.displayed_at,
-                hint_id=active.hint_id,
-            )
-        except Exception:
-            logger.warning("persistence_enqueue_failed", type="hint")
+        from src.services.persistence_service import safe_enqueue
+
+        safe_enqueue(
+            "hint",
+            self.session_id,
+            question_id=qid,
+            level=next_level,
+            text=hint_text,
+            displayed_at=active.displayed_at,
+            hint_id=active.hint_id,
+        )
 
         # Update session state with hint history
         try:
             from src.dependencies import get_session_state_service
+
             sss = get_session_state_service()
             state = sss.get_state(self.session_id)
-            state.hint_history.append({
-                "hint_id": active.hint_id,
-                "question_id": qid,
-                "level": next_level,
-                "displayed_at": active.displayed_at,
-            })
+            state.hint_history.append(
+                {
+                    "hint_id": active.hint_id,
+                    "question_id": qid,
+                    "level": next_level,
+                    "displayed_at": active.displayed_at,
+                }
+            )
             state.mark_dirty()
         except Exception:
             logger.warning("session_state_hint_update_failed")
@@ -179,6 +180,13 @@ class HintService:
         if not self._hint_events:
             return None
         return self._hint_events[-1]
+
+    def get_events(self) -> list[ActiveHint]:
+        """Return the full list of hint events for this session (read-only).
+
+        Prefer this over reaching into ``_hint_events`` from callers.
+        """
+        return self._hint_events
 
     def get_current_level(self) -> int:
         """Get the current hint level (0 = no hint shown)."""
@@ -213,16 +221,13 @@ class HintService:
             )
 
         # Response times
-        response_times = [
-            h.time_to_respond_ms
-            for h in self._hint_events
-            if h.time_to_respond_ms is not None
-        ]
+        response_times = [h.time_to_respond_ms for h in self._hint_events if h.time_to_respond_ms is not None]
         avg_time = (sum(response_times) / len(response_times)) if response_times else None
 
         # Incorporation rate
         incorporated = sum(
-            1 for h in self._hint_events
+            1
+            for h in self._hint_events
             if h.candidate_response_quality in (HintResponseQuality.PARTIAL, HintResponseQuality.FULL)
         )
         rate = incorporated / total
@@ -295,7 +300,9 @@ class HintService:
             text=text,
             displayed_at=datetime.now(UTC).isoformat(),
             interviewer_used=True,
-            candidate_response_quality=HintResponseQuality(quality) if quality in ("none", "partial", "full") else HintResponseQuality.NONE,
+            candidate_response_quality=HintResponseQuality(quality)
+            if quality in ("none", "partial", "full")
+            else HintResponseQuality.NONE,
         )
         self._hint_events.append(active)
 

@@ -32,9 +32,7 @@ class AuthService:
     def verify_token(self, token: str, expected_type: str = "access") -> str | None:
         """Returns user_id if token is valid, None otherwise."""
         try:
-            payload = jwt.decode(
-                token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
-            )
+            payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
             if payload.get("type") != expected_type:
                 return None
             return payload.get("sub")

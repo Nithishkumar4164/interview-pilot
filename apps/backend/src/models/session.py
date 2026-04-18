@@ -11,9 +11,7 @@ from src.models.base import BaseModel
 class InterviewSession(BaseModel):
     __tablename__ = "interview_sessions"
 
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
-    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="planning")
     level: Mapped[str] = mapped_column(String(20), nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -34,7 +32,7 @@ class InterviewSession(BaseModel):
 
 
 # Avoid circular imports — these are resolved by SQLAlchemy's string-based relationship lookup
-from src.models.plan import InterviewPlan  # noqa: E402, F401
-from src.models.transcript import Transcript  # noqa: E402, F401
 from src.models.hint import HintEvent  # noqa: E402, F401
+from src.models.plan import InterviewPlan  # noqa: E402, F401
 from src.models.report import Report  # noqa: E402, F401
+from src.models.transcript import Transcript  # noqa: E402, F401

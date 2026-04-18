@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,11 +21,9 @@ class HintEvent(BaseModel):
     question_id: Mapped[str] = mapped_column(String, nullable=False)
     level: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[str] = mapped_column(String, nullable=False)
-    displayed_at: Mapped[str] = mapped_column(String, nullable=False)
+    displayed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     interviewer_used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    candidate_response_quality: Mapped[str] = mapped_column(
-        String(10), nullable=False, default="none"
-    )
+    candidate_response_quality: Mapped[str] = mapped_column(String(10), nullable=False, default="none")
     time_to_respond_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     session: Mapped["InterviewSession"] = relationship(back_populates="hint_events")

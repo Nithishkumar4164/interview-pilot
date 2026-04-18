@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -24,14 +24,34 @@ class SessionRepository(BaseRepository[InterviewSession]):
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    async def get_sessions_enriched(self, user_id: uuid.UUID) -> list[InterviewSession]:
-        """Get all sessions with reports and plans eagerly loaded."""
-        stmt = (
-            select(InterviewSession)
-            .where(InterviewSession.user_id == user_id)
-            .options(selectinload(InterviewSession.reports))
+    async def get_sessions_enriched(
+        self,
+        user_id: uuid.UUID,
+        *,
+        status_filter: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[InterviewSession], int]:
+        """Return a page of sessions with reports and plans eagerly loaded,
+        plus the total row count.
+
+        Pagination lives in SQL (``LIMIT``/``OFFSET``) so we don't hydrate
+        every session just to slice it in Python — scans stay bounded as
+        a user's history grows.
+        """
+        base = select(InterviewSession).where(InterviewSession.user_id == user_id)
+        if status_filter:
+            base = base.where(InterviewSession.status == status_filter)
+
+        count_stmt = select(func.count()).select_from(base.subquery())
+        total = (await self.db.execute(count_stmt)).scalar_one()
+
+        page_stmt = (
+            base.options(selectinload(InterviewSession.reports))
             .options(selectinload(InterviewSession.plans))
             .order_by(InterviewSession.created_at.desc())
+            .offset(offset)
+            .limit(limit)
         )
-        result = await self.db.execute(stmt)
-        return list(result.scalars().unique().all())
+        page = (await self.db.execute(page_stmt)).scalars().unique().all()
+        return list(page), total

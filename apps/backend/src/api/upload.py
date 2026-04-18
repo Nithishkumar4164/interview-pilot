@@ -11,7 +11,12 @@ from src.config import settings
 from src.dependencies import failover_manager
 from src.schemas.upload import ExtractionStatusResponse, UploadResponse
 from src.services.resume_service import ResumeService
-from src.services.storage_service import ALLOWED_CONTENT_TYPES, MAX_FILE_SIZE_BYTES, StorageService
+from src.services.storage_service import (
+    ALLOWED_CONTENT_TYPES,
+    MAX_FILE_SIZE_BYTES,
+    StorageService,
+    sanitize_filename,
+)
 from src.utils.logging import get_logger
 
 router = APIRouter(prefix="/upload", tags=["upload"])
@@ -70,16 +75,17 @@ async def upload_resume(
     if len(content) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large. Maximum size: {MAX_FILE_SIZE_BYTES // (1024*1024)}MB",
+            detail=f"File too large. Maximum size: {MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB",
         )
 
     service = _get_resume_service()
+    safe_name = sanitize_filename(file.filename)
 
     # Generate reference ID locally (skip S3 if unavailable)
     reference_id = str(uuid.uuid4())
     if service.storage is not None:
         try:
-            reference_id = service.upload_resume(content, file.content_type, file.filename or "resume")
+            reference_id = service.upload_resume(content, file.content_type, safe_name)
         except Exception as e:
             logger.warning("s3_upload_failed", error=str(e), detail="Continuing with local extraction only")
 
@@ -98,7 +104,7 @@ async def upload_resume(
 
     return UploadResponse(
         reference_id=reference_id,
-        filename=file.filename or "resume",
+        filename=safe_name,
         file_type=file.content_type,
         size_bytes=len(content),
     )

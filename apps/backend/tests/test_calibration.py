@@ -4,8 +4,6 @@ import pytest
 
 from src.schemas.session import InterviewLevel
 from src.services.calibration_service import (
-    CALIBRATION_PROFILES,
-    CalibrationProfile,
     compute_time_allocation,
     get_calibration_profile,
 )

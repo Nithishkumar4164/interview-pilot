@@ -10,15 +10,16 @@ Provides rate limiting to avoid analyzing every interim result.
 """
 
 import asyncio
+import contextlib
 from collections.abc import Callable
-from datetime import UTC, datetime
 
 from src.llm.failover import FailoverManager
-from src.schemas.transcript import SpeakerRole, TranscriptEventSchema
 from src.schemas.hint import RuntimeHintRequest
+from src.schemas.transcript import SpeakerRole, TranscriptEventSchema
 from src.services.analysis_service import AnalysisService
 from src.services.contradiction_service import ContradictionService
 from src.services.memory_service import MemoryService
+from src.services.persistence_service import safe_enqueue, safe_update_session_state
 from src.services.runtime_hint_service import RuntimeHintService
 from src.utils.logging import get_logger
 from src.websocket.manager import dashboard_manager
@@ -59,6 +60,7 @@ class AnalysisWorker:
         # Rate limiting
         self._last_analysis_time: float = 0
         self._pending_analysis: bool = False
+        self._pending_snapshot: tuple[str, str] | None = None
         self._analysis_lock = asyncio.Lock()
 
         # Background analysis task tracking
@@ -66,7 +68,7 @@ class AnalysisWorker:
 
         # Throttle interim transcript pushes (max once per 300ms)
         self._last_interim_push: float = 0
-        _INTERIM_THROTTLE_S = 0.3
+        self._INTERIM_THROTTLE_S = 0.3
 
         # Transcript history for catch-up on dashboard connect
         self._transcript_history: list[dict] = []
@@ -131,23 +133,19 @@ class AnalysisWorker:
             self._transcript_history.append(transcript_event)
 
             # Persist final transcripts to DB
-            try:
-                from src.dependencies import get_persistence_service
-                persistence = get_persistence_service()
-                persistence.enqueue_transcript(
-                    self.session_id,
-                    speaker_role=speaker,
-                    text=event.text,
-                    is_final=True,
-                    confidence=event.confidence,
-                    timestamp=event.timestamp,
-                    channel=event.channel,
-                    is_retroactive=event.is_retroactive,
-                    root_speaker_id=event.root_speaker_id,
-                    speech_vector_id=event.speech_vector_id,
-                )
-            except Exception:
-                logger.warning("persistence_enqueue_failed", type="transcript")
+            safe_enqueue(
+                "transcript",
+                self.session_id,
+                speaker_role=speaker,
+                text=event.text,
+                is_final=True,
+                confidence=event.confidence,
+                timestamp=event.timestamp,
+                channel=event.channel,
+                is_retroactive=event.is_retroactive,
+                root_speaker_id=event.root_speaker_id,
+                speech_vector_id=event.speech_vector_id,
+            )
 
         # 3. Only run analysis on final candidate utterances with rate limiting
         if (
@@ -163,22 +161,43 @@ class AnalysisWorker:
         elapsed = now - self._last_analysis_time
 
         if elapsed < MIN_ANALYSIS_INTERVAL_S:
-            # Too soon — mark pending and schedule after delay
+            # Always refresh the pending snapshot so the deferred analysis
+            # picks up the latest utterance, not the first one that opened
+            # the pending window.
+            self._pending_snapshot = (speaker, text)
             if not self._pending_analysis:
                 self._pending_analysis = True
                 delay = MIN_ANALYSIS_INTERVAL_S - elapsed
                 asyncio.get_event_loop().call_later(
                     delay,
-                    lambda: asyncio.ensure_future(
-                        self._run_analysis(speaker, text)
-                    ),
+                    lambda: asyncio.ensure_future(self._run_pending_analysis()),
                 )
             return
 
         # Fire-and-forget — _analysis_lock prevents overlapping runs
-        self._bg_analysis_task = asyncio.create_task(
-            self._run_analysis(speaker, text)
-        )
+        self._bg_analysis_task = asyncio.create_task(self._run_analysis(speaker, text))
+
+    async def _run_pending_analysis(self) -> None:
+        """Consume pending snapshots until none remain.
+
+        The loop closes a race: an utterance arriving after the snapshot
+        is read but before ``_run_analysis`` resets ``_pending_analysis``
+        under its lock would see the flag still True and skip scheduling
+        a new timer, leaving the new utterance orphaned. By re-checking
+        after each ``_run_analysis`` completes (which reset the flag as
+        its first action), we pick up any such late arrivals.
+        """
+        while True:
+            snapshot = self._pending_snapshot
+            self._pending_snapshot = None
+            if snapshot is None:
+                # Defensive: the flag is reset inside ``_run_analysis``,
+                # but a trailing ``_run_pending_analysis`` with no work
+                # should still leave the flag clean for the next window.
+                self._pending_analysis = False
+                return
+            speaker, text = snapshot
+            await self._run_analysis(speaker, text)
 
     async def _run_analysis(self, speaker: str, text: str) -> None:
         """Execute the analysis + contradiction pipeline."""
@@ -197,58 +216,59 @@ class AnalysisWorker:
             await dashboard_manager.send_analysis(self.session_id, result.model_dump())
 
             # Persist analysis event to DB
-            try:
-                from src.dependencies import get_persistence_service
-                persistence = get_persistence_service()
-                persistence.enqueue_analysis(
-                    self.session_id,
-                    answer_quality=result.answer_quality,
-                    on_track=result.on_track,
-                    insight=result.insight,
-                    red_flags=result.red_flags if result.red_flags else None,
-                    suggestion=result.suggestion_for_interviewer or None,
-                    hint_signal=result.hint_signal,
-                    dimensions=result.dimensions.model_dump() if result.dimensions else None,
-                )
-            except Exception:
-                logger.warning("persistence_enqueue_failed", type="analysis")
+            safe_enqueue(
+                "analysis",
+                self.session_id,
+                answer_quality=result.answer_quality,
+                on_track=result.on_track,
+                insight=result.insight,
+                red_flags=result.red_flags if result.red_flags else None,
+                suggestion=result.suggestion_for_interviewer or None,
+                hint_signal=result.hint_signal,
+                dimensions=result.dimensions.model_dump() if result.dimensions else None,
+            )
 
             # Update session state
-            try:
-                from src.dependencies import get_session_state_service
-                sss = get_session_state_service()
-                sss.update_from_worker(self.session_id, self.to_dict())
-            except Exception:
-                logger.warning("session_state_update_failed")
+            safe_update_session_state(self.session_id, self.to_dict())
 
             # Check for red flags
             if result.red_flags:
-                await dashboard_manager.send_red_flag(self.session_id, {
-                    "flags": result.red_flags,
-                    "timestamp": result.timestamp,
-                })
+                await dashboard_manager.send_red_flag(
+                    self.session_id,
+                    {
+                        "flags": result.red_flags,
+                        "timestamp": result.timestamp,
+                    },
+                )
 
             # Check for contradictions against known facts
             contradictions = await self.contradictions.check(
-                text, self.memory.fact_store,
+                text,
+                self.memory.fact_store,
             )
             for c in contradictions:
-                await dashboard_manager.send_red_flag(self.session_id, {
-                    "type": "contradiction",
-                    "claim": c.claim,
-                    "new_statement": c.new_statement,
-                    "explanation": c.explanation,
-                    "suggested_probe": c.suggested_probe,
-                    "confidence": c.confidence,
-                    "timestamp": c.detected_at,
-                })
+                await dashboard_manager.send_red_flag(
+                    self.session_id,
+                    {
+                        "type": "contradiction",
+                        "claim": c.claim,
+                        "new_statement": c.new_statement,
+                        "explanation": c.explanation,
+                        "suggested_probe": c.suggested_probe,
+                        "confidence": c.confidence,
+                        "timestamp": c.detected_at,
+                    },
+                )
 
             # Check hint signal
             if result.hint_signal != "none":
-                await dashboard_manager.send_hint(self.session_id, {
-                    "signal": result.hint_signal,
-                    "timestamp": result.timestamp,
-                })
+                await dashboard_manager.send_hint(
+                    self.session_id,
+                    {
+                        "signal": result.hint_signal,
+                        "timestamp": result.timestamp,
+                    },
+                )
 
     def set_current_question(self, question_text: str) -> None:
         """Update the current question context."""
@@ -263,9 +283,7 @@ class AnalysisWorker:
         self.analysis.set_question_plan(question_data)
         self.runtime_hints.set_question(question_data)
 
-    async def on_question_change(
-        self, question_text: str, question_plan: dict, question_index: int = 0
-    ) -> None:
+    async def on_question_change(self, question_text: str, question_plan: dict, question_index: int = 0) -> None:
         """Handle a question navigation event from the dashboard.
 
         Resets stale context so the analysis pipeline evaluates against the new question.
@@ -291,6 +309,7 @@ class AnalysisWorker:
         # 5. Update session state with new question context
         try:
             from src.dependencies import get_session_state_service
+
             sss = get_session_state_service()
             state = sss.get_state(self.session_id)
             state.plan_progress["current_question_index"] = question_index
@@ -321,15 +340,16 @@ class AnalysisWorker:
         hint_id = data.get("hint_id", "")
         quality = data.get("quality", "none")
         question_id = data.get("question_id", "")
-        text = data.get("text", "")
 
         # Record in memory service
-        self.memory.add_hint_interaction({
-            "type": "runtime",
-            "hint_id": hint_id,
-            "question_id": question_id,
-            "quality": quality,
-        })
+        self.memory.add_hint_interaction(
+            {
+                "type": "runtime",
+                "hint_id": hint_id,
+                "question_id": question_id,
+                "quality": quality,
+            }
+        )
 
     def get_recent_transcripts(self, limit: int = 50) -> list[dict]:
         """Return recent transcript events for catch-up replay."""
@@ -342,10 +362,8 @@ class AnalysisWorker:
         """
         await self.memory.drain()
         if self._bg_analysis_task and not self._bg_analysis_task.done():
-            try:
+            with contextlib.suppress(Exception):
                 await asyncio.wait_for(self._bg_analysis_task, timeout=10.0)
-            except (asyncio.TimeoutError, Exception):
-                pass
 
     def stop(self) -> None:
         """Stop the worker."""

@@ -74,7 +74,9 @@ class CodeAnalysisResult:
                 "confidence": self.detected_approach.confidence,
                 "data_structures": self.detected_approach.data_structures,
                 "expected_complexity": self.detected_approach.expected_complexity,
-            } if self.detected_approach else None,
+            }
+            if self.detected_approach
+            else None,
             "is_stuck": self.is_stuck,
             "bugs": self.bugs,
             "complexity_estimate": self.complexity_estimate,
@@ -92,7 +94,15 @@ APPROACH_PATTERNS: dict[str, list[str]] = {
     "binary_search": ["binary search", "bisect", "lo =", "hi =", "mid ="],
     "dfs": ["dfs", "depth first", "stack", "visited", "recursive"],
     "bfs": ["bfs", "breadth first", "queue", "deque"],
-    "dynamic_programming": ["dp[", "memo", "tabulation", "cache", "memoize", "bottom_up", "top_down"],
+    "dynamic_programming": [
+        "dp[",
+        "memo",
+        "tabulation",
+        "cache",
+        "memoize",
+        "bottom_up",
+        "top_down",
+    ],
     "sorting": ["sort(", "sorted(", "heapq", "heap", "priority"],
     "greedy": ["greedy", "max(", "min(", "optimal"],
     "recursion": ["recursive", "base case"],
@@ -229,7 +239,11 @@ class CodeAnalysisService:
         if not code.strip():
             return ProgressState.EMPTY
 
-        lines = [l for l in code.splitlines() if l.strip() and not l.strip().startswith("#") and not l.strip().startswith("//")]
+        lines = [
+            l
+            for l in code.splitlines()
+            if l.strip() and not l.strip().startswith("#") and not l.strip().startswith("//")
+        ]
         non_comment_lines = len(lines)
 
         if non_comment_lines <= 3:
@@ -318,10 +332,7 @@ class CodeAnalysisService:
 
         # Check for oscillation: length goes up-down-up-down
         deltas = [lengths[i + 1] - lengths[i] for i in range(len(lengths) - 1)]
-        sign_changes = sum(
-            1 for i in range(len(deltas) - 1)
-            if deltas[i] * deltas[i + 1] < 0
-        )
+        sign_changes = sum(1 for i in range(len(deltas) - 1) if deltas[i] * deltas[i + 1] < 0)
 
         # If sign changes >= 3 in last 4 deltas, candidate is oscillating
         if sign_changes >= 3:
@@ -330,10 +341,7 @@ class CodeAnalysisService:
         # Also stuck if code length hasn't changed significantly
         max_len = max(lengths)
         min_len = min(lengths)
-        if max_len > 0 and (max_len - min_len) / max_len < 0.05:
-            return True
-
-        return False
+        return bool(max_len > 0 and (max_len - min_len) / max_len < 0.05)
 
     def _should_run_llm_analysis(self, snapshot: CodeSnapshot) -> bool:
         """Determine if we should run expensive LLM analysis."""

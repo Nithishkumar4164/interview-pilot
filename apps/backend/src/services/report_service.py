@@ -4,6 +4,7 @@ Collects data from all session services and delegates to ReportGenerator.
 """
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +18,21 @@ from src.services.report_generator import GeneratedReport, ReportGenerator, Repo
 from src.utils.logging import get_logger
 
 logger = get_logger("report_service")
+
+
+def _coerce_datetime(value: str | datetime | None) -> datetime:
+    """Best-effort conversion of a transcript-timestamp value to a datetime.
+
+    Accepts a ``datetime`` (returned as-is when tz-aware), an ISO-8601
+    string (with or without trailing ``Z``), or ``None`` — the caller
+    handles the resulting ``TypeError`` for ``None``.
+    """
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    if value is None:
+        raise TypeError("timestamp is None")
+    text = value.replace("Z", "+00:00") if value.endswith("Z") else value
+    return datetime.fromisoformat(text)
 
 
 class ReportService:
@@ -58,10 +74,10 @@ class ReportService:
             target_level=target_level,
             fact_store=memory.fact_store,
             analysis_results=analysis.get_recent_analyses(count=50),
-            hint_events=hints._hint_events,
+            hint_events=hints.get_events(),
             hint_metrics=hints.get_metrics(),
             contradictions=contradictions.contradictions,
-            transcript_summary=memory._rolling_summary,
+            transcript_summary=memory.get_summary(),
             code_progress=code_progress,
             detected_approach=detected_approach,
         )
@@ -85,14 +101,42 @@ class ReportService:
     ) -> GeneratedReport:
         """Generate a report using DB data + captured snapshots.
 
-        This is called from the background task after session end.
-        Queries DB for transcripts, analysis events, code snapshots, hints,
-        and plan data to build a comprehensive report.
+        NOTE: holds ``db`` open across the LLM call. Prefer
+        :meth:`load_inputs` + :meth:`generate_from_inputs` when you need to
+        release the DB connection during the LLM request.
         """
-        from src.repositories.transcript_repo import TranscriptRepository
+        report_input = await self.load_inputs(session_id, snapshots, db)
+        return await self.generate_from_inputs(report_input)
+
+    async def generate_from_inputs(self, report_input: ReportInput) -> GeneratedReport:
+        """Run the LLM call. No DB access — safe to invoke without a session."""
+        report = await self._generator.generate(report_input)
+
+        logger.info(
+            "report_generated_from_db",
+            session_id=report_input.session_id,
+            recommendation=report.recommendation.value,
+            confidence=report.confidence_level,
+        )
+
+        return report
+
+    async def load_inputs(
+        self,
+        session_id: str,
+        snapshots: dict,
+        db: AsyncSession,
+    ) -> ReportInput:
+        """Load all DB data needed for report generation into a ReportInput.
+
+        Callers should close their DB session after this returns and before
+        invoking :meth:`generate_from_inputs` so the LLM call does not hold
+        a connection.
+        """
         from src.repositories.analysis_repo import AnalysisEventRepository
         from src.repositories.code_snapshot_repo import CodeSnapshotRepository
         from src.repositories.hint_repo import HintEventRepository
+        from src.repositories.transcript_repo import TranscriptRepository
 
         sid = uuid.UUID(session_id)
 
@@ -111,7 +155,9 @@ class ReportService:
 
         # Fetch plan data
         from sqlalchemy import select
+
         from src.models.plan import InterviewPlan
+
         plan_result = await db.execute(
             select(InterviewPlan)
             .where(InterviewPlan.session_id == sid)
@@ -126,7 +172,7 @@ class ReportService:
             {
                 "speaker_role": t.speaker_role,
                 "text": t.text,
-                "timestamp": t.timestamp,
+                "timestamp": (t.timestamp.isoformat() if isinstance(t.timestamp, datetime) else t.timestamp),
                 "is_final": t.is_final,
             }
             for t in transcripts
@@ -149,7 +195,7 @@ class ReportService:
         # Build code snapshots list
         code_snaps = [
             {
-                "timestamp": cs.timestamp,
+                "timestamp": (cs.timestamp.isoformat() if isinstance(cs.timestamp, datetime) else cs.timestamp),
                 "progress_state": cs.progress_state,
                 "approach": cs.approach,
                 "language": cs.language,
@@ -163,7 +209,9 @@ class ReportService:
                 "question_id": h.question_id,
                 "level": h.level,
                 "text": h.text,
-                "displayed_at": h.displayed_at,
+                "displayed_at": (
+                    h.displayed_at.isoformat() if isinstance(h.displayed_at, datetime) else h.displayed_at
+                ),
                 "interviewer_used": h.interviewer_used,
                 "candidate_response_quality": h.candidate_response_quality,
                 "time_to_respond_ms": h.time_to_respond_ms,
@@ -180,13 +228,16 @@ class ReportService:
         snapshot_analysis = snapshots.get("analysis_results", [])
         snapshot_contradictions = snapshots.get("contradictions", [])
         snapshot_hints = snapshots.get("hint_events", [])
-        hint_metrics = snapshots.get("hint_metrics", {
-            "total_hints_given": len(hint_events_list),
-            "incorporation_rate": 0,
-            "average_response_time_ms": None,
-            "independence_trajectory": "unknown",
-            "level_distribution": {},
-        })
+        hint_metrics = snapshots.get(
+            "hint_metrics",
+            {
+                "total_hints_given": len(hint_events_list),
+                "incorporation_rate": 0,
+                "average_response_time_ms": None,
+                "independence_trajectory": "unknown",
+                "level_distribution": {},
+            },
+        )
 
         report_input = ReportInput(
             session_id=session_id,
@@ -209,18 +260,14 @@ class ReportService:
             plan_data=plan.plan_data if plan else None,
         )
 
-        report = await self._generator.generate(report_input)
-
         logger.info(
-            "report_generated_from_db",
+            "report_inputs_loaded",
             session_id=session_id,
-            recommendation=report.recommendation.value,
-            confidence=report.confidence_level,
             transcript_count=len(full_transcript),
             analysis_count=len(all_analysis),
         )
 
-        return report
+        return report_input
 
     @staticmethod
     def _derive_time_per_question(transcripts, plan) -> dict[str, float]:
@@ -246,16 +293,16 @@ class ReportService:
         if total_transcripts == 0:
             return {}
 
-        from datetime import datetime
-
         try:
             first_ts = transcripts[0].timestamp
             last_ts = transcripts[-1].timestamp
 
-            first_dt = datetime.fromisoformat(first_ts.replace("Z", "+00:00"))
-            last_dt = datetime.fromisoformat(last_ts.replace("Z", "+00:00"))
+            # ``timestamp`` is stored as timestamptz now, but historic
+            # rows (and tests) may still carry ISO strings — accept both.
+            first_dt = _coerce_datetime(first_ts)
+            last_dt = _coerce_datetime(last_ts)
             total_minutes = (last_dt - first_dt).total_seconds() / 60.0
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, TypeError):
             total_minutes = 0
 
         if total_minutes <= 0:

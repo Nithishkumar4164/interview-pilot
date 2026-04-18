@@ -11,6 +11,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from src.dependencies import failover_manager
 from src.services.transcription_service import TranscriptionService
 from src.utils.logging import get_logger
+from src.websocket.auth import authenticate_ws
 from src.websocket.manager import dashboard_manager
 from src.workers.analysis_worker import AnalysisWorker
 
@@ -54,6 +55,8 @@ async def audio_websocket(websocket: WebSocket, session_id: str) -> None:
     Receives binary audio frames with a 12-byte header containing
     channel, timestamp, sample rate, and buffered flag.
     """
+    if await authenticate_ws(websocket, session_id) is None:
+        return
     await websocket.accept()
 
     service = get_transcription_service(session_id)
@@ -102,32 +105,43 @@ async def audio_websocket(websocket: WebSocket, session_id: str) -> None:
                     continue
 
                 msg_type = message.get("type")
-                logger.info("audio_ws_text_msg", session_id=session_id, msg_type=msg_type, detail=message.get("event") or message.get("error"))
+                logger.info(
+                    "audio_ws_text_msg",
+                    session_id=session_id,
+                    msg_type=msg_type,
+                    detail=message.get("event") or message.get("error"),
+                )
 
                 if msg_type == "ping":
-                    await websocket.send_json({
-                        "type": "pong",
-                        "timestamp": message.get("timestamp"),
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "pong",
+                            "timestamp": message.get("timestamp"),
+                        }
+                    )
 
                 elif msg_type == "calibrate_speakers":
                     service.calibrate_speakers(
                         interviewer_speaker_id=message["interviewer_speaker_id"],
                         candidate_speaker_id=message.get("candidate_speaker_id"),
                     )
-                    await websocket.send_json({
-                        "type": "calibration_complete",
-                        "speakers": service.get_detected_speakers(),
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "calibration_complete",
+                            "speakers": service.get_detected_speakers(),
+                        }
+                    )
                     # Broadcast updated speaker snapshot to dashboard
                     snapshot = service.speaker_service.get_speaker_snapshot()
                     await dashboard_manager.send_speaker_snapshot(session_id, snapshot)
 
                 elif msg_type == "get_speakers":
-                    await websocket.send_json({
-                        "type": "detected_speakers",
-                        "speakers": service.get_detected_speakers(),
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "detected_speakers",
+                            "speakers": service.get_detected_speakers(),
+                        }
+                    )
 
     except WebSocketDisconnect:
         logger.info(

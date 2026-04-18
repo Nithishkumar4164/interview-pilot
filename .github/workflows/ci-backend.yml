@@ -52,11 +52,14 @@ jobs:
 
       - name: Lint
         run: |
-          ruff check src/
-          ruff format --check src/
+          ruff check src/ tests/
+          ruff format --check src/ tests/
 
       - name: Type check
-        run: mypy src/ || true  # Non-blocking initially
+        # Non-blocking for now — ~23 residual union/attr errors remain
+        # from legacy dict/pydantic duality. Tighten once those are
+        # paid down.
+        run: mypy src/ || true
 
       - name: Run tests
         env:

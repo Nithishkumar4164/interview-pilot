@@ -17,9 +17,7 @@ class ProviderFactory:
     def create(provider_type: str, model: str) -> ILLMProvider:
         cls = _PROVIDER_REGISTRY.get(provider_type)
         if cls is None:
-            raise ValueError(
-                f"Unknown provider '{provider_type}'. Available: {list(_PROVIDER_REGISTRY.keys())}"
-            )
+            raise ValueError(f"Unknown provider '{provider_type}'. Available: {list(_PROVIDER_REGISTRY.keys())}")
         return cls(model=model)
 
     @staticmethod

@@ -13,7 +13,6 @@ from src.llm.failover import FailoverManager
 from src.llm.interface import AnalysisContext, LLMConfig, TaskType
 from src.schemas.analysis import EnhancedAnalysisResult
 from src.schemas.hint import (
-    RegenerationReason,
     RuntimeHintDirectness,
     RuntimeHintRequest,
     RuntimeHintResponse,
@@ -74,7 +73,8 @@ class RuntimeHintService:
         self._recent_insights = self._recent_insights[-5:]
 
     async def generate_hint(
-        self, request: RuntimeHintRequest,
+        self,
+        request: RuntimeHintRequest,
     ) -> RuntimeHintResponse:
         """Generate a contextual hint for the current question."""
         start = datetime.now(UTC)
@@ -167,7 +167,8 @@ class RuntimeHintService:
         return response
 
     def _resolve_directness(
-        self, request: RuntimeHintRequest,
+        self,
+        request: RuntimeHintRequest,
     ) -> RuntimeHintDirectness:
         """Determine hint directness from request, insight, or default."""
         if request.preferred_directness:
@@ -178,9 +179,9 @@ class RuntimeHintService:
             signal = self._recent_insights[-1].hint_signal
             if signal == "direct":
                 return RuntimeHintDirectness.DIRECT
-            elif signal == "guide":
+            if signal == "guide":
                 return RuntimeHintDirectness.MODERATE
-            elif signal == "nudge":
+            if signal == "nudge":
                 return RuntimeHintDirectness.SUBTLE
 
         return RuntimeHintDirectness.MODERATE
@@ -200,15 +201,12 @@ class RuntimeHintService:
                 parts.append(f"## Current Question\n{q_text}")
 
             # Expected approaches
-            approaches = (
-                self._current_question.get("optimal_approaches")
-                or self._current_question.get("optimal_approach")
+            approaches = self._current_question.get("optimal_approaches") or self._current_question.get(
+                "optimal_approach"
             )
             if approaches:
                 if isinstance(approaches, list):
-                    parts.append(
-                        "## Expected Approaches\n" + "\n".join(f"- {a}" for a in approaches)
-                    )
+                    parts.append("## Expected Approaches\n" + "\n".join(f"- {a}" for a in approaches))
                 else:
                     parts.append(f"## Expected Approach\n{approaches}")
 
@@ -218,16 +216,15 @@ class RuntimeHintService:
             parts.append(f"## Recent Candidate Transcript\n{working_mem}")
 
         # Rolling summary
-        if self._memory._rolling_summary:
-            parts.append(f"## Interview Summary\n{self._memory._rolling_summary}")
+        summary = self._memory.get_summary()
+        if summary:
+            parts.append(f"## Interview Summary\n{summary}")
 
         # Recent insights
         if self._recent_insights:
             insight_texts = []
             for ins in self._recent_insights[-3:]:
-                insight_texts.append(
-                    f"- Quality {ins.answer_quality}/5: {ins.insight}"
-                )
+                insight_texts.append(f"- Quality {ins.answer_quality}/5: {ins.insight}")
             parts.append("## Recent Analysis\n" + "\n".join(insight_texts))
 
         # Directness instruction
@@ -236,11 +233,7 @@ class RuntimeHintService:
         # Regeneration context
         if request.regenerate and self._generation_history:
             prev = self._generation_history[-1]
-            reason_text = (
-                request.regeneration_reason.value
-                if request.regeneration_reason
-                else "unspecified"
-            )
+            reason_text = request.regeneration_reason.value if request.regeneration_reason else "unspecified"
             parts.append(
                 f"## Regeneration Context\n"
                 f"Previous hint was rejected (reason: {reason_text}):\n"

@@ -24,7 +24,7 @@ def _strip_code_fences(text: str) -> str:
     stripped = text.strip()
     if stripped.startswith("```"):
         first_newline = stripped.index("\n")
-        stripped = stripped[first_newline + 1:]
+        stripped = stripped[first_newline + 1 :]
     if stripped.endswith("```"):
         stripped = stripped[:-3]
     return stripped.strip()

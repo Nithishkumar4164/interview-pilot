@@ -68,13 +68,15 @@ class FailoverManager:
             from_provider=mapping.primary_provider,
             to_provider=mapping.fallback_provider,
         )
-        self._failover_log.append({
-            "timestamp": datetime.now(UTC).isoformat(),
-            "task_type": task_type.value,
-            "from_provider": mapping.primary_provider,
-            "to_provider": mapping.fallback_provider,
-            "reason": "primary_unavailable",
-        })
+        self._failover_log.append(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "task_type": task_type.value,
+                "from_provider": mapping.primary_provider,
+                "to_provider": mapping.fallback_provider,
+                "reason": "primary_unavailable",
+            }
+        )
         return self._get_provider(mapping.fallback_provider, mapping.fallback_model), True
 
     async def analyze(
@@ -106,13 +108,15 @@ class FailoverManager:
             # Try failover
             mapping = self._mappings[context.task_type]
             fallback = self._get_provider(mapping.fallback_provider, mapping.fallback_model)
-            self._failover_log.append({
-                "timestamp": datetime.now(UTC).isoformat(),
-                "task_type": context.task_type.value,
-                "from_provider": mapping.primary_provider,
-                "to_provider": mapping.fallback_provider,
-                "reason": f"primary_error: {e!s}",
-            })
+            self._failover_log.append(
+                {
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "task_type": context.task_type.value,
+                    "from_provider": mapping.primary_provider,
+                    "to_provider": mapping.fallback_provider,
+                    "reason": f"primary_error: {e!s}",
+                }
+            )
             result = await fallback.analyze(context, config)
             self.health_monitor.record_success(fallback.provider_name, result.latency_ms)
             return result

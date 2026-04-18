@@ -11,20 +11,20 @@ from src.schemas.session import InterviewLevel
 # ── Focus-area → section mapping ────────────────────────────────────────────
 
 FOCUS_AREA_TO_SECTION: dict[str, str] = {
-    "coding":        "coding",
-    "dsa":           "coding",
-    "debugging":     "coding",
+    "coding": "coding",
+    "dsa": "coding",
+    "debugging": "coding",
     "system_design": "system_design",
-    "api_design":    "system_design",
-    "behavioral":    "behavioral",
-    "aptitude":      "aptitude",
+    "api_design": "system_design",
+    "behavioral": "behavioral",
+    "aptitude": "aptitude",
 }
 
 SECTION_DEFAULTS: dict[str, dict] = {
-    "coding":        {"categories": ["coding"],        "min_q": 1, "max_q": 3},
+    "coding": {"categories": ["coding"], "min_q": 1, "max_q": 3},
     "system_design": {"categories": ["system_design"], "min_q": 1, "max_q": 2},
-    "behavioral":    {"categories": ["behavioral"],    "min_q": 1, "max_q": 2},
-    "aptitude":      {"categories": ["aptitude"],      "min_q": 1, "max_q": 3},
+    "behavioral": {"categories": ["behavioral"], "min_q": 1, "max_q": 2},
+    "aptitude": {"categories": ["aptitude"], "min_q": 1, "max_q": 3},
 }
 
 
@@ -246,15 +246,17 @@ def build_phases_from_focus_areas(focus_areas: list[str]) -> list[PhaseAllocatio
 
     fraction = 1.0 / len(seen) if seen else 1.0
     phases = []
-    for section, areas in seen.items():
+    for section, _areas in seen.items():
         defaults = SECTION_DEFAULTS.get(section, {"categories": [section], "min_q": 1, "max_q": 2})
-        phases.append(PhaseAllocation(
-            phase=section,
-            fraction=fraction,
-            categories=defaults["categories"],
-            min_questions=defaults["min_q"],
-            max_questions=defaults["max_q"],
-        ))
+        phases.append(
+            PhaseAllocation(
+                phase=section,
+                fraction=fraction,
+                categories=defaults["categories"],
+                min_questions=defaults["min_q"],
+                max_questions=defaults["max_q"],
+            )
+        )
     return phases
 
 
@@ -295,11 +297,8 @@ def compute_time_allocation(
     phase_minutes: dict[str, int] = {}
     allocated = 0
     for i, phase in enumerate(phases):
-        if i == len(phases) - 1:
-            # Last phase gets the remainder to avoid rounding loss
-            minutes = available - allocated
-        else:
-            minutes = int(available * phase.fraction)
+        # Last phase gets the remainder to avoid rounding loss.
+        minutes = available - allocated if i == len(phases) - 1 else int(available * phase.fraction)
         phase_minutes[phase.phase] = max(minutes, 1)
         allocated += phase_minutes[phase.phase]
 

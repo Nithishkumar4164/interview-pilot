@@ -20,9 +20,7 @@ def setup_logging() -> None:
             if settings.environment == "development"
             else structlog.processors.JSONRenderer(),
         ],
-        wrapper_class=structlog.make_filtering_bound_logger(
-            logging.getLevelName(settings.log_level)
-        ),
+        wrapper_class=structlog.make_filtering_bound_logger(logging.getLevelName(settings.log_level)),
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
         cache_logger_on_first_use=True,

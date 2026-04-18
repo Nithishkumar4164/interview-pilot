@@ -1,7 +1,7 @@
 import json
 
-from src.llm.interface import AnalysisContext, LLMConfig, TaskType
 from src.llm.failover import FailoverManager
+from src.llm.interface import AnalysisContext, LLMConfig, TaskType
 from src.services.storage_service import StorageService
 from src.utils.logging import get_logger
 from src.utils.text_extraction import (
@@ -56,15 +56,11 @@ Return ONLY valid JSON, no markdown fences or explanation."""
 class ResumeService:
     """Orchestrates resume upload, text extraction, and LLM-powered structured extraction."""
 
-    def __init__(
-        self, storage: StorageService | None, llm: FailoverManager
-    ) -> None:
+    def __init__(self, storage: StorageService | None, llm: FailoverManager) -> None:
         self.storage = storage
         self.llm = llm
 
-    def upload_resume(
-        self, file_content: bytes, content_type: str, filename: str
-    ) -> str:
+    def upload_resume(self, file_content: bytes, content_type: str, filename: str) -> str:
         """Upload a resume file and return its reference ID."""
         return self.storage.upload_file(file_content, content_type, filename)
 
@@ -112,9 +108,9 @@ class ResumeService:
                 content = content.split("\n", 1)[1]
                 content = content.rsplit("```", 1)[0]
             return json.loads(content)
-        except (json.JSONDecodeError, IndexError):
+        except (json.JSONDecodeError, IndexError) as e:
             logger.error("resume_extraction_parse_failed", content=result.content[:500])
-            raise ValueError("Failed to parse LLM response as structured resume data")
+            raise ValueError("Failed to parse LLM response as structured resume data") from e
 
     async def process_resume(self, file_content: bytes) -> dict:
         """Full pipeline: extract text → extract structured data."""

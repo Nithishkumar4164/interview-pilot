@@ -10,13 +10,14 @@ Endpoints:
 
 import asyncio
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.dependencies import get_db, async_session_factory, failover_manager
+from src.api.auth import get_request_user
+from src.dependencies import async_session_factory, failover_manager, get_db
 from src.models.report import Report, ReportNote
+from src.models.user import User
 from src.repositories.report_repo import ReportNoteRepository, ReportRepository
 from src.schemas.report import AddNoteRequest
 from src.utils.logging import get_logger
@@ -24,9 +25,6 @@ from src.utils.logging import get_logger
 logger = get_logger("api.reports")
 
 router = APIRouter(prefix="/reports", tags=["reports"])
-
-# Default dev user UUID
-_DEV_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
 
 
 @router.post("/generate/{session_id}")
@@ -56,7 +54,7 @@ async def generate_report_for_session(
         return {"report_id": str(existing.id), "status": "already_exists"}
 
     # Calculate duration
-    duration_minutes = session.duration_minutes
+    duration_minutes: float = session.duration_minutes
     if session.started_at and session.ended_at:
         elapsed = (session.ended_at - session.started_at).total_seconds() / 60.0
         duration_minutes = round(elapsed, 1)
@@ -233,6 +231,7 @@ async def add_note(
     report_id: str,
     request: AddNoteRequest,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_request_user),
 ) -> dict:
     """Add a note to a report."""
     # Verify report exists
@@ -249,7 +248,7 @@ async def add_note(
     note = ReportNote(
         id=uuid.uuid4(),
         report_id=uuid.UUID(report_id),
-        user_id=_DEV_USER_ID,
+        user_id=user.id,
         note_text=request.note_text,
     )
     await note_repo.create(note)

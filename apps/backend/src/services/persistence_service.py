@@ -5,6 +5,7 @@ in an asyncio queue and flushing them in batches.
 """
 
 import asyncio
+import contextlib
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -20,6 +21,25 @@ logger = get_logger("persistence")
 
 FLUSH_INTERVAL_S = 2.0
 MAX_BATCH_SIZE = 50
+
+
+def _to_datetime(value: str | datetime | None) -> datetime:
+    """Coerce an event-time field to a timezone-aware :class:`datetime`.
+
+    Accepts ISO-8601 strings (with or without trailing ``Z``), existing
+    ``datetime`` instances (naive ones are assumed UTC), or ``None`` which
+    defaults to ``datetime.now(UTC)``.
+    """
+    if value is None:
+        return datetime.now(UTC)
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    text = value.replace("Z", "+00:00") if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return datetime.now(UTC)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 class PersistenceService:
@@ -50,10 +70,8 @@ class PersistenceService:
         self._running = False
         if self._flush_task and not self._flush_task.done():
             self._flush_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._flush_task
-            except asyncio.CancelledError:
-                pass
         # Final drain
         await self._flush_batch()
         logger.info("persistence_service_stopped")
@@ -66,7 +84,7 @@ class PersistenceService:
         text: str,
         is_final: bool,
         confidence: float,
-        timestamp: str,
+        timestamp: str | datetime,
         channel: str = "tab",
         is_retroactive: bool = False,
         word_timestamps: dict | None = None,
@@ -81,7 +99,7 @@ class PersistenceService:
             text=text,
             is_final=is_final,
             confidence=confidence,
-            timestamp=timestamp,
+            timestamp=_to_datetime(timestamp),
             channel=channel,
             is_retroactive=is_retroactive,
             word_timestamps=word_timestamps,
@@ -123,7 +141,7 @@ class PersistenceService:
         question_id: str,
         level: int,
         text: str,
-        displayed_at: str,
+        displayed_at: str | datetime,
         hint_id: str | None = None,
     ) -> None:
         """Enqueue a hint event for persistence."""
@@ -133,7 +151,7 @@ class PersistenceService:
             question_id=question_id,
             level=level,
             text=text,
-            displayed_at=displayed_at,
+            displayed_at=_to_datetime(displayed_at),
         )
         self._queue.put_nowait(entity)
 
@@ -143,7 +161,7 @@ class PersistenceService:
         *,
         code: str,
         language: str,
-        timestamp: str,
+        timestamp: str | datetime,
         diff: str | None = None,
         approach: str | None = None,
         progress_state: str = "unknown",
@@ -154,7 +172,7 @@ class PersistenceService:
             session_id=uuid.UUID(session_id),
             code=code,
             language=language,
-            timestamp=timestamp,
+            timestamp=_to_datetime(timestamp),
             diff=diff,
             approach=approach,
             progress_state=progress_state,
@@ -187,3 +205,49 @@ class PersistenceService:
             logger.info("batch_flushed", count=len(batch))
         except Exception as e:
             logger.error("batch_flush_failed", count=len(batch), error=str(e))
+
+
+_VALID_ENQUEUE_EVENTS: frozenset[str] = frozenset({"transcript", "analysis", "hint", "code_snapshot"})
+
+
+def safe_enqueue(event_type: str, session_id: str, **kwargs: Any) -> None:
+    """Fire-and-forget helper that dispatches to the global
+    PersistenceService.
+
+    Replaces the 5+ duplicated try/import/enqueue blocks across workers,
+    services, and handlers.
+
+    ``event_type`` MUST be one of :data:`_VALID_ENQUEUE_EVENTS`
+    (``transcript``, ``analysis``, ``hint``, ``code_snapshot``). Unknown
+    values raise :class:`ValueError` — the whitelist catches typos like
+    ``"transcrpt"`` that would otherwise be silently swallowed by the
+    fire-and-forget except below.
+
+    Downstream runtime errors (bad UUID strings from test fixtures, full
+    queue, model-constructor mismatches) are logged and swallowed so a
+    single malformed event can't crash the hot transcript path.
+    """
+    if event_type not in _VALID_ENQUEUE_EVENTS:
+        raise ValueError(f"Unknown event_type {event_type!r}. Valid: {sorted(_VALID_ENQUEUE_EVENTS)}")
+    try:
+        from src.dependencies import get_persistence_service
+
+        service = get_persistence_service()
+        method = getattr(service, f"enqueue_{event_type}")
+        method(session_id, **kwargs)
+    except Exception:
+        logger.warning("persistence_enqueue_failed", type=event_type, exc_info=True)
+
+
+def safe_update_session_state(session_id: str, snapshot: dict[str, Any]) -> None:
+    """Fire-and-forget helper that pushes a worker snapshot to the
+    session-state service. Wiring and runtime errors are logged and
+    swallowed so the hot path isn't interrupted by a failed snapshot.
+    """
+    try:
+        from src.dependencies import get_session_state_service
+
+        sss = get_session_state_service()
+        sss.update_from_worker(session_id, snapshot)
+    except Exception:
+        logger.warning("session_state_update_failed", exc_info=True)

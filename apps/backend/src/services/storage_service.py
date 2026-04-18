@@ -1,3 +1,4 @@
+import re
 import uuid
 from io import BytesIO
 
@@ -14,6 +15,25 @@ ALLOWED_CONTENT_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
 }
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10MB
+
+_SAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9._\- ]+")
+
+
+def sanitize_filename(name: str | None, *, max_len: int = 120) -> str:
+    """Return a filename safe to store in S3 metadata or echo back to a
+    client. Strips path separators and non-alphanumeric characters,
+    collapses whitespace, and bounds the length.
+
+    Returns ``"resume"`` for empty or all-filtered inputs so downstream
+    code never has to handle an empty filename.
+    """
+    if not name:
+        return "resume"
+    # Drop any directory components a client might try to smuggle in.
+    base = name.replace("\\", "/").split("/")[-1]
+    cleaned = _SAFE_FILENAME_CHARS.sub("_", base).strip()
+    cleaned = re.sub(r"_+", "_", cleaned)
+    return cleaned[:max_len] if cleaned else "resume"
 
 
 class StorageService:
@@ -38,24 +58,18 @@ class StorageService:
             self.client.create_bucket(Bucket=self.bucket)
             logger.info("bucket_created", bucket=self.bucket)
 
-    def upload_file(
-        self, file_content: bytes, content_type: str, original_filename: str
-    ) -> str:
+    def upload_file(self, file_content: bytes, content_type: str, original_filename: str) -> str:
         """Upload a file and return its reference ID."""
         if content_type not in ALLOWED_CONTENT_TYPES:
-            raise ValueError(
-                f"Unsupported file type: {content_type}. "
-                f"Allowed: {list(ALLOWED_CONTENT_TYPES.keys())}"
-            )
+            raise ValueError(f"Unsupported file type: {content_type}. Allowed: {list(ALLOWED_CONTENT_TYPES.keys())}")
 
         if len(file_content) > MAX_FILE_SIZE_BYTES:
-            raise ValueError(
-                f"File too large: {len(file_content)} bytes. Max: {MAX_FILE_SIZE_BYTES}"
-            )
+            raise ValueError(f"File too large: {len(file_content)} bytes. Max: {MAX_FILE_SIZE_BYTES}")
 
         ext = ALLOWED_CONTENT_TYPES[content_type]
         reference_id = str(uuid.uuid4())
         key = f"resumes/{reference_id}{ext}"
+        safe_filename = sanitize_filename(original_filename)
 
         self.client.upload_fileobj(
             BytesIO(file_content),
@@ -63,7 +77,7 @@ class StorageService:
             key,
             ExtraArgs={
                 "ContentType": content_type,
-                "Metadata": {"original_filename": original_filename},
+                "Metadata": {"original_filename": safe_filename},
             },
         )
 

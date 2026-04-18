@@ -22,13 +22,15 @@ def _mock_failover_manager() -> FailoverManager:
     health = HealthMonitor()
     fm = FailoverManager(health)
     for task_type in TaskType:
-        fm.update_mapping(TaskProviderMapping(
-            task_type=task_type,
-            primary_provider="mock",
-            primary_model="mock-v1",
-            fallback_provider="mock",
-            fallback_model="mock-v1",
-        ))
+        fm.update_mapping(
+            TaskProviderMapping(
+                task_type=task_type,
+                primary_provider="mock",
+                primary_model="mock-v1",
+                fallback_provider="mock",
+                fallback_model="mock-v1",
+            )
+        )
     return fm
 
 
@@ -136,9 +138,7 @@ class TestPlanGeneration:
         assert plan.total_minutes == 45
         assert len(plan.phases) > 0
         assert plan.level == "sde2"
-        total_question_time = sum(
-            q.time_minutes for p in plan.phases for q in p.questions
-        )
+        total_question_time = sum(q.time_minutes for p in plan.phases for q in p.questions)
         # Questions should fit within available time
         assert total_question_time <= plan.total_minutes
 
@@ -208,7 +208,7 @@ class TestPlanGeneration:
         assert restored.session_id == plan.session_id
         assert restored.total_minutes == plan.total_minutes
         assert len(restored.phases) == len(plan.phases)
-        for orig_p, rest_p in zip(plan.phases, restored.phases):
+        for orig_p, rest_p in zip(plan.phases, restored.phases, strict=False):
             assert len(rest_p.questions) == len(orig_p.questions)
 
 

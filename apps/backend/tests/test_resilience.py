@@ -12,13 +12,11 @@ import pytest
 
 from src.llm.config import TaskProviderMapping
 from src.llm.failover import FailoverManager
-from src.llm.health import HealthMonitor, FAILURE_THRESHOLD
+from src.llm.health import FAILURE_THRESHOLD, HealthMonitor
 from src.llm.interface import (
     AnalysisContext,
     LLMConfig,
     ProviderHealthStatus,
-    ProviderStatus,
-    StructuredOutput,
     TaskType,
 )
 from src.llm.providers.mock import MockProvider
@@ -34,17 +32,20 @@ def _mock_failover_manager() -> FailoverManager:
     health = HealthMonitor()
     fm = FailoverManager(health)
     for task_type in TaskType:
-        fm.update_mapping(TaskProviderMapping(
-            task_type=task_type,
-            primary_provider="mock",
-            primary_model="mock-v1",
-            fallback_provider="mock",
-            fallback_model="mock-v1",
-        ))
+        fm.update_mapping(
+            TaskProviderMapping(
+                task_type=task_type,
+                primary_provider="mock",
+                primary_model="mock-v1",
+                fallback_provider="mock",
+                fallback_model="mock-v1",
+            )
+        )
     return fm
 
 
 # ── LLM Failover ──────────────────────────────────────────────────────
+
 
 class TestLLMFailover:
     """Tests for LLM provider failover behavior."""
@@ -125,6 +126,7 @@ class TestLLMFailover:
 
 # ── Analysis with Failover ─────────────────────────────────────────────
 
+
 class TestAnalysisWithFailover:
     """Tests that analysis service handles provider failures gracefully."""
 
@@ -135,10 +137,13 @@ class TestAnalysisWithFailover:
         memory = MemoryService("sess-af", fm)
         analysis_svc = AnalysisService("sess-af", fm, memory)
 
-        await memory.add_utterance("candidate", "I would use dynamic programming for this problem.", "2024-01-01T00:00:00Z")
+        await memory.add_utterance(
+            "candidate", "I would use dynamic programming for this problem.", "2024-01-01T00:00:00Z"
+        )
 
         result = await analysis_svc.analyze_utterance(
-            "candidate", "I would use dynamic programming for this problem.",
+            "candidate",
+            "I would use dynamic programming for this problem.",
         )
 
         assert result is not None
@@ -152,7 +157,8 @@ class TestAnalysisWithFailover:
         analysis_svc = AnalysisService("sess-empty", fm, memory)
 
         result = await analysis_svc.analyze_utterance(
-            "candidate", "Let me start by understanding the problem.",
+            "candidate",
+            "Let me start by understanding the problem.",
         )
 
         assert result is not None
@@ -160,6 +166,7 @@ class TestAnalysisWithFailover:
 
 
 # ── Session State Recovery ─────────────────────────────────────────────
+
 
 class TestSessionRecovery:
     """Tests for session state snapshot and recovery."""
@@ -236,6 +243,7 @@ class TestSessionRecovery:
 
 # ── Memory Service Recovery ────────────────────────────────────────────
 
+
 class TestMemoryRecovery:
     """Tests for memory service state preservation."""
 
@@ -246,7 +254,9 @@ class TestMemoryRecovery:
         memory = MemoryService("sess-mr", fm)
 
         await memory.add_utterance("candidate", "I have 5 years of Python experience.", "2024-01-01T00:00:00Z")
-        await memory.add_utterance("candidate", "I built a microservices platform at my last job.", "2024-01-01T00:00:01Z")
+        await memory.add_utterance(
+            "candidate", "I built a microservices platform at my last job.", "2024-01-01T00:00:01Z"
+        )
         await memory.add_utterance("candidate", "The platform handled 10K requests per second.", "2024-01-01T00:00:02Z")
 
         state = memory.to_dict()
@@ -270,6 +280,7 @@ class TestMemoryRecovery:
 
 
 # ── Graceful Degradation ──────────────────────────────────────────────
+
 
 class TestGracefulDegradation:
     """Tests for graceful behavior during outages."""
@@ -309,11 +320,14 @@ def solve(nums, target):
         """Hint service should serve pre-computed hints without LLM."""
         hint_svc = HintService("sess-cached")
 
-        hint_svc.register_hints("q1", {
-            1: "Pre-computed nudge",
-            2: "Pre-computed guide",
-            3: "Pre-computed direct",
-        })
+        hint_svc.register_hints(
+            "q1",
+            {
+                1: "Pre-computed nudge",
+                2: "Pre-computed guide",
+                3: "Pre-computed direct",
+            },
+        )
         hint_svc.activate_question("q1")
 
         # All 3 hints should work without any LLM call

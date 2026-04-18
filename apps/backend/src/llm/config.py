@@ -6,6 +6,7 @@ from src.llm.interface import TaskType
 @dataclass
 class TaskProviderMapping:
     """Maps a task type to its primary and fallback provider/model pairs."""
+
     task_type: TaskType
     primary_provider: str
     primary_model: str

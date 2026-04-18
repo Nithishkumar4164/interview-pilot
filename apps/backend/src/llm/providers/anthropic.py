@@ -25,7 +25,7 @@ def _strip_code_fences(text: str) -> str:
     if stripped.startswith("```"):
         # Remove opening fence (```json or ```)
         first_newline = stripped.index("\n")
-        stripped = stripped[first_newline + 1:]
+        stripped = stripped[first_newline + 1 :]
     if stripped.endswith("```"):
         stripped = stripped[:-3]
     return stripped.strip()
@@ -123,7 +123,7 @@ class AnthropicProvider(ILLMProvider):
                 last_check_at=datetime.now(UTC).isoformat(),
                 average_latency_ms=latency,
             )
-        except Exception as e:
+        except Exception:
             return ProviderStatus(
                 provider="anthropic",
                 status=ProviderHealthStatus.DOWN,

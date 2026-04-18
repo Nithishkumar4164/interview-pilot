@@ -12,7 +12,6 @@ Deepgram speaker segments at both vector and transcript granularity.
 """
 
 import uuid
-from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -31,6 +30,7 @@ MAX_TRANSCRIPT_IDS = 20
 
 
 # ── Dataclasses ──────────────────────────────────────────────────────
+
 
 @dataclass
 class RootSpeaker:
@@ -126,6 +126,7 @@ class SpeakerProfile:
 
 
 # ── Service ──────────────────────────────────────────────────────────
+
 
 class SpeakerService:
     """Identifies speakers across three layers of identification
@@ -265,10 +266,7 @@ class SpeakerService:
         deepgram_speaker: int | None,
     ) -> None:
         """Assign a speech vector to a root speaker based on channel heuristic."""
-        if channel == "mic":
-            target_rs = self.DEFAULT_INTERVIEWER_RS
-        else:
-            target_rs = self.DEFAULT_CANDIDATE_RS
+        target_rs = self.DEFAULT_INTERVIEWER_RS if channel == "mic" else self.DEFAULT_CANDIDATE_RS
 
         sv.root_speaker_id = target_rs
         self._sv_to_rs[sv.id] = target_rs
@@ -409,14 +407,8 @@ class SpeakerService:
     def get_speaker_snapshot(self) -> dict:
         """Return the full speaker state for the frontend."""
         return {
-            "root_speakers": {
-                rs_id: rs.to_dict()
-                for rs_id, rs in self._root_speakers.items()
-            },
-            "speech_vectors": {
-                sv_id: sv.to_dict()
-                for sv_id, sv in self._speech_vectors.items()
-            },
+            "root_speakers": {rs_id: rs.to_dict() for rs_id, rs in self._root_speakers.items()},
+            "speech_vectors": {sv_id: sv.to_dict() for sv_id, sv in self._speech_vectors.items()},
         }
 
     # ── Calibration (preserved from legacy) ──────────────────────────
@@ -504,9 +496,7 @@ class SpeakerService:
         ]
 
     def _track_speaker(self, speaker_id: int) -> None:
-        self._speaker_utterance_counts[speaker_id] = (
-            self._speaker_utterance_counts.get(speaker_id, 0) + 1
-        )
+        self._speaker_utterance_counts[speaker_id] = self._speaker_utterance_counts.get(speaker_id, 0) + 1
 
     def _heuristic_role(self, speaker_id: int) -> SpeakerRole:
         if len(self._speaker_utterance_counts) <= 1:
@@ -533,18 +523,10 @@ class SpeakerService:
                 "calibrated_at": self.calibration.calibrated_at,
                 "confidence": self.calibration.confidence,
             },
-            "diarization_map": {
-                str(k): v.value for k, v in self._diarization_map.items()
-            },
+            "diarization_map": {str(k): v.value for k, v in self._diarization_map.items()},
             "speaker_counts": dict(self._speaker_utterance_counts),
-            "root_speakers": {
-                rs_id: rs.to_dict()
-                for rs_id, rs in self._root_speakers.items()
-            },
-            "speech_vectors": {
-                sv_id: sv.to_dict()
-                for sv_id, sv in self._speech_vectors.items()
-            },
+            "root_speakers": {rs_id: rs.to_dict() for rs_id, rs in self._root_speakers.items()},
+            "speech_vectors": {sv_id: sv.to_dict() for sv_id, sv in self._speech_vectors.items()},
             "sv_to_rs": dict(self._sv_to_rs),
             "transcript_sv_override": dict(self._transcript_sv_override),
         }
@@ -563,9 +545,7 @@ class SpeakerService:
         )
         for spk_str, role_str in data.get("diarization_map", {}).items():
             service._diarization_map[int(spk_str)] = SpeakerRole(role_str)
-        service._speaker_utterance_counts = {
-            int(k): v for k, v in data.get("speaker_counts", {}).items()
-        }
+        service._speaker_utterance_counts = {int(k): v for k, v in data.get("speaker_counts", {}).items()}
 
         # Restore root speakers (overwriting defaults if present)
         for rs_id, rs_data in data.get("root_speakers", {}).items():

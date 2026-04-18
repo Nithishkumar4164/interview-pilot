@@ -8,15 +8,14 @@ Covers:
 - WebSocket manager (connection tracking)
 """
 
-import asyncio
 import struct
 import uuid
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
 from src.schemas.transcript import SpeakerRole
-from src.services.speaker_service import SpeakerCalibration, SpeakerService
+from src.services.speaker_service import SpeakerService
 from src.services.transcription_service import (
     AUDIO_HEADER_SIZE,
     TranscriptionService,
@@ -29,9 +28,7 @@ from src.workers.deepgram_worker import (
     StreamState,
     TranscriptResult,
     TranscriptWord,
-    UtteranceEnd,
 )
-
 
 # ── Audio Frame Parsing ──────────────────────────────────────────────
 
@@ -83,7 +80,7 @@ class TestAudioFrameParsing:
         assert result["pcm_data"] == b""
 
     def test_parse_large_pcm(self):
-        pcm = b"\xAB" * 8000  # 250ms at 16kHz 16-bit
+        pcm = b"\xab" * 8000  # 250ms at 16kHz 16-bit
         frame = self._build_frame(pcm=pcm)
         result = parse_audio_frame(frame)
         assert len(result["pcm_data"]) == 8000
@@ -272,8 +269,11 @@ class TestTranscriptionService:
 
     def test_event_has_uuid(self):
         result = TranscriptResult(
-            channel_index=0, is_final=True, speech_final=True,
-            text="test", confidence=0.9,
+            channel_index=0,
+            is_final=True,
+            speech_final=True,
+            text="test",
+            confidence=0.9,
         )
         event = self.service._result_to_event("tab", result)
         # Should be a valid UUID string
@@ -290,8 +290,11 @@ class TestTranscriptionService:
 
         # Simulate processing by directly calling the internal method
         result = TranscriptResult(
-            channel_index=0, is_final=True, speech_final=True,
-            text="test callback", confidence=0.9,
+            channel_index=0,
+            is_final=True,
+            speech_final=True,
+            text="test callback",
+            confidence=0.9,
         )
         event = self.service._result_to_event("tab", result)
         for cb in self.service._event_callbacks:
@@ -329,14 +332,28 @@ class TestDeepgramResultParsing:
             "start": 1.5,
             "duration": 2.0,
             "channel": {
-                "alternatives": [{
-                    "transcript": "Hello world",
-                    "confidence": 0.95,
-                    "words": [
-                        {"word": "Hello", "start": 1.5, "end": 1.8, "confidence": 0.98, "speaker": 0},
-                        {"word": "world", "start": 1.9, "end": 2.3, "confidence": 0.93, "speaker": 0},
-                    ],
-                }],
+                "alternatives": [
+                    {
+                        "transcript": "Hello world",
+                        "confidence": 0.95,
+                        "words": [
+                            {
+                                "word": "Hello",
+                                "start": 1.5,
+                                "end": 1.8,
+                                "confidence": 0.98,
+                                "speaker": 0,
+                            },
+                            {
+                                "word": "world",
+                                "start": 1.9,
+                                "end": 2.3,
+                                "confidence": 0.93,
+                                "speaker": 0,
+                            },
+                        ],
+                    }
+                ],
             },
         }
 
@@ -367,11 +384,13 @@ class TestDeepgramResultParsing:
             "start": 0.0,
             "duration": 0.5,
             "channel": {
-                "alternatives": [{
-                    "transcript": "hel",
-                    "confidence": 0.7,
-                    "words": [],
-                }],
+                "alternatives": [
+                    {
+                        "transcript": "hel",
+                        "confidence": 0.7,
+                        "words": [],
+                    }
+                ],
             },
         }
         result = self.stream._parse_result(data)
@@ -475,6 +494,7 @@ class TestConnectionManager:
         await self.manager.send_transcript("session-1", {"text": "hello"})
         ws.send_text.assert_called_once()
         import json
+
         sent = json.loads(ws.send_text.call_args[0][0])
         assert sent["type"] == "transcript"
         assert sent["session_id"] == "session-1"
@@ -487,6 +507,7 @@ class TestConnectionManager:
 
         await self.manager.send_error("session-1", "something broke")
         import json
+
         sent = json.loads(ws.send_text.call_args[0][0])
         assert sent["type"] == "error"
         assert sent["payload"]["message"] == "something broke"

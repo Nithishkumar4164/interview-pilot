@@ -15,12 +15,10 @@ from src.llm.config import TaskProviderMapping
 from src.llm.failover import FailoverManager
 from src.llm.health import HealthMonitor
 from src.llm.interface import TaskType
-from src.llm.providers.mock import MockProvider
 from src.schemas.hint import HintResponseQuality
 from src.schemas.transcript import SpeakerRole, TranscriptEventSchema
 from src.services.analysis_service import AnalysisService
 from src.services.code_analysis_service import CodeAnalysisService, ProgressState
-from src.services.contradiction_service import ContradictionService
 from src.services.hint_service import HintService
 from src.services.memory_service import MemoryService
 from src.services.report_generator import ReportGenerator, ReportInput
@@ -33,17 +31,21 @@ def _mock_failover_manager() -> FailoverManager:
     health = HealthMonitor()
     fm = FailoverManager(health)
     for task_type in TaskType:
-        fm.update_mapping(TaskProviderMapping(
-            task_type=task_type,
-            primary_provider="mock",
-            primary_model="mock-v1",
-            fallback_provider="mock",
-            fallback_model="mock-v1",
-        ))
+        fm.update_mapping(
+            TaskProviderMapping(
+                task_type=task_type,
+                primary_provider="mock",
+                primary_model="mock-v1",
+                fallback_provider="mock",
+                fallback_model="mock-v1",
+            )
+        )
     return fm
 
 
-def _make_transcript(text: str, speaker: SpeakerRole = SpeakerRole.CANDIDATE, is_final: bool = True) -> TranscriptEventSchema:
+def _make_transcript(
+    text: str, speaker: SpeakerRole = SpeakerRole.CANDIDATE, is_final: bool = True
+) -> TranscriptEventSchema:
     return TranscriptEventSchema(
         id="t-" + str(hash(text) % 10000),
         session_id="sess-e2e",
@@ -57,6 +59,7 @@ def _make_transcript(text: str, speaker: SpeakerRole = SpeakerRole.CANDIDATE, is
 
 
 # ── Full Pipeline E2E ─────────────────────────────────────────────────
+
 
 class TestE2EPipeline:
     """Simulates a complete interview segment."""
@@ -72,11 +75,14 @@ class TestE2EPipeline:
         report_gen = ReportGenerator(fm)
 
         # 1. Register hints for a question
-        hint_svc.register_hints("q1", {
-            1: "Think about data structures.",
-            2: "A hash map gives O(1) lookups.",
-            3: "Map each element to its index.",
-        })
+        hint_svc.register_hints(
+            "q1",
+            {
+                1: "Think about data structures.",
+                2: "A hash map gives O(1) lookups.",
+                3: "Map each element to its index.",
+            },
+        )
         hint_svc.activate_question("q1")
 
         # 2. Process interviewer question
@@ -123,7 +129,11 @@ def two_sum(nums, target):
                 return [i, j]
 """
         result1 = await code_svc.analyze_snapshot(code_v1, "python")
-        assert result1.progress_state in (ProgressState.SKELETON, ProgressState.PARTIAL, ProgressState.NEAR_COMPLETE)
+        assert result1.progress_state in (
+            ProgressState.SKELETON,
+            ProgressState.PARTIAL,
+            ProgressState.NEAR_COMPLETE,
+        )
 
         code_v2 = """
 def two_sum(nums, target):
@@ -136,7 +146,11 @@ def two_sum(nums, target):
     return []
 """
         result2 = await code_svc.analyze_snapshot(code_v2, "python")
-        assert result2.progress_state in (ProgressState.PARTIAL, ProgressState.NEAR_COMPLETE, ProgressState.COMPLETE)
+        assert result2.progress_state in (
+            ProgressState.PARTIAL,
+            ProgressState.NEAR_COMPLETE,
+            ProgressState.COMPLETE,
+        )
 
         # 5. Hint progression
         hint1 = hint_svc.advance_hint()
@@ -168,7 +182,13 @@ def two_sum(nums, target):
         )
 
         report = await report_gen.generate(report_input)
-        assert report.recommendation in ("strong_hire", "hire", "lean_hire", "lean_no_hire", "no_hire")
+        assert report.recommendation in (
+            "strong_hire",
+            "hire",
+            "lean_hire",
+            "lean_no_hire",
+            "no_hire",
+        )
         assert len(report.scores) >= 4
         assert report.confidence_level > 0
 
@@ -206,7 +226,10 @@ def two_sum(nums, target):
         # Process transcript events
         events = [
             _make_transcript("Let me think about this problem for a moment.", speaker=SpeakerRole.CANDIDATE),
-            _make_transcript("I think a hash map approach would work well here for efficiency.", speaker=SpeakerRole.CANDIDATE),
+            _make_transcript(
+                "I think a hash map approach would work well here for efficiency.",
+                speaker=SpeakerRole.CANDIDATE,
+            ),
         ]
 
         for event in events:
@@ -223,12 +246,12 @@ def two_sum(nums, target):
 
         # Simulate oscillation (editing back and forth)
         codes = [
-            "x = 1\n" * 17,   # ~100 chars
-            "x = 1\n" * 20,   # ~120 chars
-            "x = 1\n" * 18,   # ~105 chars
-            "x = 1\n" * 20,   # ~118 chars
-            "x = 1\n" * 17,   # ~103 chars
-            "x = 1\n" * 19,   # ~115 chars
+            "x = 1\n" * 17,  # ~100 chars
+            "x = 1\n" * 20,  # ~120 chars
+            "x = 1\n" * 18,  # ~105 chars
+            "x = 1\n" * 20,  # ~118 chars
+            "x = 1\n" * 17,  # ~103 chars
+            "x = 1\n" * 19,  # ~115 chars
         ]
         for code in codes:
             await code_svc.analyze_snapshot(code, "python")
@@ -242,11 +265,14 @@ def two_sum(nums, target):
         """Verify hint progression through all 3 levels."""
         hint_svc = HintService("sess-hints")
 
-        hint_svc.register_hints("q1", {
-            1: "Nudge: Think about complexity.",
-            2: "Guide: Consider a hash map.",
-            3: "Direct: Use dict with complement lookup.",
-        })
+        hint_svc.register_hints(
+            "q1",
+            {
+                1: "Nudge: Think about complexity.",
+                2: "Guide: Consider a hash map.",
+                3: "Direct: Use dict with complement lookup.",
+            },
+        )
         hint_svc.activate_question("q1")
 
         # Level 1

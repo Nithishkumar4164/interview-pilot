@@ -9,14 +9,13 @@ Token budgets enforce context window limits per tier.
 """
 
 import asyncio
+import contextlib
 import json
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any
 
 from src.llm.failover import FailoverManager
 from src.llm.interface import AnalysisContext, LLMConfig, TaskType
-from src.schemas.transcript import SpeakerRole
 from src.utils.logging import get_logger
 from src.utils.token_budget import (
     BUDGET_FACT_STORE,
@@ -77,7 +76,12 @@ class FactStore:
 
     def merge(self, extracted: dict) -> None:
         """Merge newly extracted facts, avoiding duplicates."""
-        for key in ("claimed_experience", "technical_positions", "behavioral_signals", "key_numbers"):
+        for key in (
+            "claimed_experience",
+            "technical_positions",
+            "behavioral_signals",
+            "key_numbers",
+        ):
             existing = getattr(self, key)
             for item in extracted.get(key, []):
                 if item and item not in existing:
@@ -203,24 +207,15 @@ class MemoryService:
         buffer_snapshot = list(self._unsummarized_buffer)
         self._unsummarized_buffer.clear()
 
-        self._bg_compress_task = asyncio.create_task(
-            self._compress_summary_from_snapshot(buffer_snapshot)
-        )
+        self._bg_compress_task = asyncio.create_task(self._compress_summary_from_snapshot(buffer_snapshot))
 
-    async def _compress_summary_from_snapshot(
-        self, buffer_snapshot: list[Utterance]
-    ) -> None:
+    async def _compress_summary_from_snapshot(self, buffer_snapshot: list[Utterance]) -> None:
         """Run LLM compression on a provided buffer snapshot (background)."""
         if not buffer_snapshot:
             return
 
-        buffer_text = "\n".join(
-            f"[{u.speaker}]: {u.text}" for u in buffer_snapshot
-        )
-        user_content = (
-            f"Current summary:\n{self._rolling_summary or '(empty)'}\n\n"
-            f"New utterances:\n{buffer_text}"
-        )
+        buffer_text = "\n".join(f"[{u.speaker}]: {u.text}" for u in buffer_snapshot)
+        user_content = f"Current summary:\n{self._rolling_summary or '(empty)'}\n\nNew utterances:\n{buffer_text}"
 
         try:
             result = await self._failover.analyze(
@@ -256,9 +251,7 @@ class MemoryService:
         if not self._unsummarized_buffer:
             return
 
-        buffer_text = "\n".join(
-            f"[{u.speaker}]: {u.text}" for u in self._unsummarized_buffer
-        )
+        buffer_text = "\n".join(f"[{u.speaker}]: {u.text}" for u in self._unsummarized_buffer)
 
         user_content = f"Current summary:\n{self._rolling_summary or '(empty)'}\n\nNew utterances:\n{buffer_text}"
 
@@ -339,10 +332,8 @@ class MemoryService:
 
         # Wait for in-flight compression so we don't lose its result
         if self._is_compress_running():
-            try:
+            with contextlib.suppress(TimeoutError, Exception):
                 await asyncio.wait_for(self._bg_compress_task, timeout=10.0)
-            except (asyncio.TimeoutError, Exception):
-                pass
 
         # Schedule compression of remaining buffer in background
         if self._unsummarized_buffer:
@@ -400,9 +391,7 @@ class MemoryService:
             parts.append(f"## Active Hints\n{hint_text}")
 
         # Tier 3: Fact Store (most compressed, highest signal)
-        facts_text = truncate_to_budget(
-            self.fact_store.to_text(), BUDGET_FACT_STORE
-        )
+        facts_text = truncate_to_budget(self.fact_store.to_text(), BUDGET_FACT_STORE)
         if facts_text:
             parts.append(f"## Key Facts\n{facts_text}")
 
@@ -412,9 +401,7 @@ class MemoryService:
             parts.append(f"## Interview Summary\n{summary}")
 
         # Tier 1: Recent Utterances
-        recent_text = "\n".join(
-            f"[{u.speaker}]: {u.text}" for u in self._working_memory
-        )
+        recent_text = "\n".join(f"[{u.speaker}]: {u.text}" for u in self._working_memory)
         if recent_text:
             recent_text = truncate_to_budget(recent_text, BUDGET_WORKING_MEMORY)
             parts.append(f"## Recent Conversation\n{recent_text}")
@@ -423,9 +410,14 @@ class MemoryService:
 
     def get_working_memory_text(self) -> str:
         """Get the current working memory as formatted text."""
-        return "\n".join(
-            f"[{u.speaker}]: {u.text}" for u in self._working_memory
-        )
+        return "\n".join(f"[{u.speaker}]: {u.text}" for u in self._working_memory)
+
+    def get_summary(self) -> str:
+        """Return the current tier-2 rolling summary text (may be empty).
+
+        Preferred over reaching into ``_rolling_summary`` from callers.
+        """
+        return self._rolling_summary
 
     # ── State Serialization ──────────────────────────────────────────
 
@@ -433,8 +425,7 @@ class MemoryService:
         return {
             "session_id": self.session_id,
             "working_memory": [
-                {"speaker": u.speaker, "text": u.text, "timestamp": u.timestamp}
-                for u in self._working_memory
+                {"speaker": u.speaker, "text": u.text, "timestamp": u.timestamp} for u in self._working_memory
             ],
             "rolling_summary": self._rolling_summary,
             "unsummarized_count": len(self._unsummarized_buffer),
@@ -443,14 +434,10 @@ class MemoryService:
         }
 
     @classmethod
-    def from_dict(
-        cls, data: dict, failover_manager: FailoverManager
-    ) -> "MemoryService":
+    def from_dict(cls, data: dict, failover_manager: FailoverManager) -> "MemoryService":
         service = cls(data["session_id"], failover_manager)
         for u in data.get("working_memory", []):
-            service._working_memory.append(
-                Utterance(speaker=u["speaker"], text=u["text"], timestamp=u["timestamp"])
-            )
+            service._working_memory.append(Utterance(speaker=u["speaker"], text=u["text"], timestamp=u["timestamp"]))
         service._rolling_summary = data.get("rolling_summary", "")
         service.fact_store = FactStore.from_dict(data.get("fact_store", {}))
         service._total_utterances = data.get("total_utterances", 0)

@@ -11,6 +11,7 @@ import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from src.utils.logging import get_logger
+from src.websocket.auth import authenticate_ws
 from src.websocket.manager import dashboard_manager
 
 logger = get_logger("ws.code")
@@ -34,6 +35,8 @@ async def code_websocket(websocket: WebSocket, session_id: str) -> None:
         "timestamp": "..."
     }
     """
+    if await authenticate_ws(websocket, session_id) is None:
+        return
     await websocket.accept()
 
     logger.info("code_ws_connected", session_id=session_id)
@@ -51,10 +54,12 @@ async def code_websocket(websocket: WebSocket, session_id: str) -> None:
                 msg_type = message.get("type")
 
                 if msg_type == "ping":
-                    await websocket.send_json({
-                        "type": "pong",
-                        "timestamp": message.get("timestamp"),
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "pong",
+                            "timestamp": message.get("timestamp"),
+                        }
+                    )
 
                 elif msg_type in ("code_snapshot", "code_update"):
                     # Extract from payload envelope (extension wraps in payload)
@@ -67,6 +72,7 @@ async def code_websocket(websocket: WebSocket, session_id: str) -> None:
                     if session_id not in _active_analyzers:
                         from src.dependencies import failover_manager
                         from src.services.code_analysis_service import CodeAnalysisService
+
                         _active_analyzers[session_id] = CodeAnalysisService(session_id, failover_manager)
                         logger.info("code_analyzer_created", session_id=session_id)
 
@@ -88,20 +94,19 @@ async def code_websocket(websocket: WebSocket, session_id: str) -> None:
                         )
 
                         # Persist code snapshot to DB
-                        try:
-                            from src.dependencies import get_persistence_service
-                            from datetime import UTC, datetime
-                            persistence = get_persistence_service()
-                            persistence.enqueue_code_snapshot(
-                                session_id,
-                                code=code,
-                                language=language,
-                                timestamp=datetime.now(UTC).isoformat(),
-                                approach=result_dict.get("detected_approach"),
-                                progress_state=result_dict.get("progress_state", "unknown"),
-                            )
-                        except Exception:
-                            logger.warning("persistence_enqueue_failed", type="code_snapshot")
+                        from datetime import UTC, datetime
+
+                        from src.services.persistence_service import safe_enqueue
+
+                        safe_enqueue(
+                            "code_snapshot",
+                            session_id,
+                            code=code,
+                            language=language,
+                            timestamp=datetime.now(UTC).isoformat(),
+                            approach=result_dict.get("detected_approach"),
+                            progress_state=result_dict.get("progress_state", "unknown"),
+                        )
                     else:
                         # No active analyzer — just forward the snapshot info
                         await dashboard_manager.send_code_analysis(

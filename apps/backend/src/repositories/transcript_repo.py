@@ -25,13 +25,7 @@ class TranscriptRepository(BaseRepository[Transcript]):
         if final_only:
             conditions.append(Transcript.is_final == True)  # noqa: E712
 
-        stmt = (
-            select(Transcript)
-            .where(*conditions)
-            .order_by(Transcript.timestamp)
-            .limit(limit)
-            .offset(offset)
-        )
+        stmt = select(Transcript).where(*conditions).order_by(Transcript.timestamp).limit(limit).offset(offset)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
@@ -46,12 +40,7 @@ class TranscriptRepository(BaseRepository[Transcript]):
         if final_only:
             conditions.append(Transcript.is_final == True)  # noqa: E712
 
-        stmt = (
-            select(Transcript)
-            .where(*conditions)
-            .order_by(Transcript.timestamp.desc())
-            .limit(count)
-        )
+        stmt = select(Transcript).where(*conditions).order_by(Transcript.timestamp.desc()).limit(count)
         result = await self.db.execute(stmt)
         # Return in chronological order
         return list(reversed(result.scalars().all()))

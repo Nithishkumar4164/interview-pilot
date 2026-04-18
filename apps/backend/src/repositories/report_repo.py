@@ -28,22 +28,13 @@ class ReportRepository(BaseRepository[Report]):
 
     async def get_by_id_with_notes(self, report_id: uuid.UUID) -> Report | None:
         """Get a report by ID, including notes."""
-        stmt = (
-            select(Report)
-            .where(Report.id == report_id)
-            .options(selectinload(Report.notes))
-        )
+        stmt = select(Report).where(Report.id == report_id).options(selectinload(Report.notes))
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
     async def list_reports(self, limit: int = 20, offset: int = 0) -> list[Report]:
         """List reports ordered by creation date descending."""
-        stmt = (
-            select(Report)
-            .order_by(Report.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
+        stmt = select(Report).order_by(Report.created_at.desc()).limit(limit).offset(offset)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
@@ -57,11 +48,7 @@ class ReportRepository(BaseRepository[Report]):
         """Fetch multiple reports by ID."""
         if not report_ids:
             return []
-        stmt = (
-            select(Report)
-            .where(Report.id.in_(report_ids))
-            .order_by(Report.created_at.desc())
-        )
+        stmt = select(Report).where(Report.id.in_(report_ids)).order_by(Report.created_at.desc())
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
@@ -72,10 +59,6 @@ class ReportNoteRepository(BaseRepository[ReportNote]):
 
     async def get_notes_for_report(self, report_id: uuid.UUID) -> list[ReportNote]:
         """Get all notes for a report."""
-        stmt = (
-            select(ReportNote)
-            .where(ReportNote.report_id == report_id)
-            .order_by(ReportNote.created_at)
-        )
+        stmt = select(ReportNote).where(ReportNote.report_id == report_id).order_by(ReportNote.created_at)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())

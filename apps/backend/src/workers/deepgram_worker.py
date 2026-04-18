@@ -6,9 +6,9 @@ both live and buffered audio transcription.
 """
 
 import asyncio
+import contextlib
 import json
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from enum import Enum
 
 import websockets
@@ -165,22 +165,22 @@ class DeepgramStream:
         try:
             # Send close stream message per Deepgram protocol
             await self._ws.send(json.dumps({"type": "CloseStream"}))
-            # Wait briefly for final responses
+            # Deepgram doesn't publish a strict deadline; 500ms is long
+            # enough to receive trailing finals without noticeably delaying
+            # session teardown.
             await asyncio.sleep(0.5)
         except Exception:
-            pass
+            logger.warning("deepgram_close_send_failed", exc_info=True)
 
         if self._recv_task and not self._recv_task.done():
             self._recv_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._recv_task
-            except asyncio.CancelledError:
-                pass
 
         try:
             await self._ws.close()
         except Exception:
-            pass
+            logger.warning("deepgram_ws_close_failed", exc_info=True)
 
         self._ws = None
         self.state = StreamState.DISCONNECTED
@@ -197,7 +197,7 @@ class DeepgramStream:
             try:
                 await self._ws.send(json.dumps({"type": "KeepAlive"}))
             except Exception:
-                pass
+                logger.warning("deepgram_keepalive_failed", exc_info=True)
 
     async def _receive_loop(self) -> None:
         """Continuously receive and parse transcript results from Deepgram."""
@@ -384,7 +384,7 @@ class DeepgramWorker:
                 try:
                     result = await asyncio.wait_for(stream.transcript_queue.get(), timeout=1.0)
                     await self._result_queue.put((channel, result))
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     if stream.state == StreamState.DISCONNECTED:
                         break
         except asyncio.CancelledError:

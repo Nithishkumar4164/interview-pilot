@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from src.llm.config import TaskProviderMapping
@@ -7,7 +5,7 @@ from src.llm.failover import FailoverManager
 from src.llm.health import HealthMonitor
 from src.llm.interface import AnalysisContext, LLMConfig, TaskType
 from src.llm.providers.mock import MockProvider
-from src.services.resume_service import ResumeService, RESUME_EXTRACTION_SYSTEM_PROMPT
+from src.services.resume_service import ResumeService
 
 
 class FakeStorage:
@@ -18,6 +16,7 @@ class FakeStorage:
 
     def upload_file(self, file_content: bytes, content_type: str, original_filename: str) -> str:
         import uuid
+
         ref = str(uuid.uuid4())
         self.files[ref] = file_content
         return ref
@@ -29,13 +28,15 @@ def _mock_failover_manager() -> FailoverManager:
     fm = FailoverManager(health)
     # Override all task mappings to use mock provider
     for task_type in TaskType:
-        fm.update_mapping(TaskProviderMapping(
-            task_type=task_type,
-            primary_provider="mock",
-            primary_model="mock-v1",
-            fallback_provider="mock",
-            fallback_model="mock-v1",
-        ))
+        fm.update_mapping(
+            TaskProviderMapping(
+                task_type=task_type,
+                primary_provider="mock",
+                primary_model="mock-v1",
+                fallback_provider="mock",
+                fallback_model="mock-v1",
+            )
+        )
     return fm
 
 
@@ -60,8 +61,9 @@ class TestResumeService:
         assert "Senior Engineer" in text
 
     def test_extract_text_from_docx(self, service: ResumeService):
-        from docx import Document
         from io import BytesIO
+
+        from docx import Document
 
         doc = Document()
         doc.add_paragraph("Bob Johnson")

@@ -4,6 +4,8 @@ Session management API routes.
 Endpoints for starting, pausing, resuming, and ending interview sessions.
 Also handles hint registration from plans and hint progression during interviews.
 """
+
+import contextlib
 import uuid
 from datetime import UTC, datetime
 
@@ -11,21 +13,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.auth import get_request_user
 from src.dependencies import get_db
 from src.models.session import InterviewSession
+from src.models.user import User
 from src.repositories.session_repo import SessionRepository
+from src.schemas.hint import AcknowledgeHintRequest, TriggerHintRequest
 from src.schemas.session import (
     CreateSessionRequest,
-    SessionResponse,
     SessionStatus,
 )
-from src.schemas.hint import TriggerHintRequest, AcknowledgeHintRequest
 from src.services.hint_service import HintService
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
-
-# Default dev user UUID — matches the seeded row in the users table.
-_DEV_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
 
 # Per-session HintService instances (kept in-memory; stateless across restarts)
 _hint_services: dict[str, HintService] = {}
@@ -45,11 +45,12 @@ class RegisterPlanHintsRequest(BaseModel):
 async def start_session(
     req: CreateSessionRequest,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_request_user),
 ) -> dict:
     session_repo = SessionRepository(db)
 
     db_session = InterviewSession(
-        user_id=_DEV_USER_ID,
+        user_id=user.id,
         status=SessionStatus.PLANNING,
         level=req.level,
         duration_minutes=req.duration_minutes,
@@ -125,24 +126,27 @@ async def get_session_state(
 
     # Fetch recent transcripts from DB
     from src.repositories.transcript_repo import TranscriptRepository
+
     transcript_repo = TranscriptRepository(db)
-    transcripts = await transcript_repo.get_session_transcripts(
-        uuid.UUID(session_id), final_only=True, limit=200
-    )
+    transcripts = await transcript_repo.get_session_transcripts(uuid.UUID(session_id), final_only=True, limit=200)
 
     # Fetch recent analyses from DB
     from src.repositories.analysis_repo import AnalysisEventRepository
+
     analysis_repo = AnalysisEventRepository(db)
     analyses = await analysis_repo.get_recent(uuid.UUID(session_id), count=50)
 
     # Fetch hint events from DB
     from src.repositories.hint_repo import HintEventRepository
+
     hint_repo = HintEventRepository(db)
     hints = await hint_repo.get_session_hints(uuid.UUID(session_id))
 
     # Fetch plan data
     from sqlalchemy import select
+
     from src.models.plan import InterviewPlan
+
     plan_result = await db.execute(
         select(InterviewPlan)
         .where(InterviewPlan.session_id == uuid.UUID(session_id))
@@ -156,8 +160,9 @@ async def get_session_state(
     snapshot_data = None
     try:
         from src.dependencies import get_session_state_service
+
         sss = get_session_state_service()
-        state = sss._states.get(session_id)
+        state = sss.get_state_or_none(session_id)
         if state:
             snapshot_data = state.to_snapshot()
         else:
@@ -165,7 +170,9 @@ async def get_session_state(
             if recovered:
                 snapshot_data = recovered.to_snapshot()
     except Exception:
-        pass
+        import logging
+
+        logging.getLogger("api.sessions").warning("session_snapshot_recover_failed", exc_info=True)
 
     return {
         "session": {
@@ -325,11 +332,15 @@ async def end_session(
     # Create placeholder report and launch background generation
     report_id = None
     try:
-        from src.websocket.audio_handler import _active_workers
-        from src.websocket.code_handler import _active_analyzers
-        from src.dependencies import failover_manager, async_session_factory, get_session_state_service
+        from src.dependencies import (
+            async_session_factory,
+            failover_manager,
+            get_session_state_service,
+        )
         from src.models.report import Report
         from src.repositories.report_repo import ReportRepository
+        from src.websocket.audio_handler import _active_workers
+        from src.websocket.code_handler import _active_analyzers
 
         worker = _active_workers.get(session_id)
         hint_service = _hint_services.get(session_id)
@@ -338,14 +349,13 @@ async def end_session(
         # Drain in-flight background tasks so snapshots capture complete data
         # Use a hard timeout so the endpoint never hangs
         import asyncio
+
         if worker:
-            try:
+            with contextlib.suppress(TimeoutError, Exception):
                 await asyncio.wait_for(worker.drain(), timeout=5.0)
-            except (asyncio.TimeoutError, Exception):
-                pass
 
         # Calculate duration
-        duration_minutes = db_session.duration_minutes
+        duration_minutes: float = db_session.duration_minutes
         if db_session.started_at:
             elapsed = (now - db_session.started_at).total_seconds() / 60.0
             duration_minutes = round(elapsed, 1)
@@ -362,21 +372,20 @@ async def end_session(
                 if hasattr(worker.memory.fact_store, "to_dict")
                 else worker.memory.fact_store.to_text()
             )
-            snapshots["rolling_summary"] = worker.memory._rolling_summary
+            snapshots["rolling_summary"] = worker.memory.get_summary()
             snapshots["analysis_results"] = [
                 {
                     "answer_quality": a.answer_quality,
                     "on_track": a.on_track,
                     "insight": a.insight,
                     "red_flags": a.red_flags,
-                    "suggestion": a.suggestion,
+                    "suggestion": a.suggestion_for_interviewer,
                     "hint_signal": a.hint_signal,
                 }
                 for a in worker.analysis.get_recent_analyses(count=50)
             ]
             snapshots["contradictions"] = [
-                {"explanation": c.explanation, "confidence": c.confidence}
-                for c in worker.contradictions.contradictions
+                {"explanation": c.explanation, "confidence": c.confidence} for c in worker.contradictions.contradictions
             ]
         if hint_service:
             snapshots["hint_events"] = [
@@ -393,7 +402,7 @@ async def end_session(
                     "hint_id": h.hint_id,
                     "text": h.text,
                 }
-                for h in hint_service._hint_events
+                for h in hint_service.get_events()
             ]
             snapshots["hint_metrics"] = hint_service.get_metrics().model_dump()
         if code_analyzer:
@@ -424,7 +433,7 @@ async def end_session(
             sss = get_session_state_service()
             await asyncio.wait_for(sss.save_snapshot(session_id, db), timeout=3.0)
             sss.remove_state(session_id)
-        except (asyncio.TimeoutError, Exception):
+        except (TimeoutError, Exception):
             pass
 
         await db.commit()
@@ -445,6 +454,7 @@ async def end_session(
 
     except Exception as e:
         import logging
+
         logging.getLogger("api.sessions").error(f"Report setup failed: {e}")
         await db.commit()
         _hint_services.pop(session_id, None)
@@ -462,23 +472,37 @@ async def _generate_report_background(
     fm,
     session_factory,
 ) -> None:
-    """Background task: generate report and update DB row."""
+    """Background task: generate report and update DB row.
+
+    Uses three distinct DB sessions — load inputs, release the connection,
+    run the LLM call unattached to any DB session, then open a fresh
+    session to persist the result. Prevents long-running LLM calls (which
+    can take minutes on provider failover) from holding a connection from
+    the pool.
+    """
     import logging
+
     logger = logging.getLogger("api.sessions.background_report")
 
-    try:
-        from src.services.report_service import ReportService
+    from src.repositories.report_repo import ReportRepository
+    from src.services.report_service import ReportService
 
+    report_service = ReportService(fm)
+
+    try:
+        # Phase 1 — load inputs from DB and release the connection.
         async with session_factory() as db:
-            report_service = ReportService(fm)
-            generated = await report_service.generate_report_from_db(
+            report_input = await report_service.load_inputs(
                 session_id=session_id,
                 snapshots=snapshots,
                 db=db,
             )
 
-            # Update the placeholder report row
-            from src.repositories.report_repo import ReportRepository
+        # Phase 2 — LLM call with no DB session attached.
+        generated = await report_service.generate_from_inputs(report_input)
+
+        # Phase 3 — persist the result in a fresh session.
+        async with session_factory() as db:
             report_repo = ReportRepository(db)
             report = await report_repo.get_by_id(uuid.UUID(report_id))
             if report:
@@ -497,7 +521,6 @@ async def _generate_report_background(
                 report.is_final = True
                 report.status = "completed"
                 await report_repo.update(report)
-
             await db.commit()
             logger.info(f"Report {report_id} generation completed for session {session_id}")
 
@@ -505,7 +528,6 @@ async def _generate_report_background(
         logger.error(f"Background report generation failed for {report_id}: {e}")
         try:
             async with session_factory() as db:
-                from src.repositories.report_repo import ReportRepository
                 report_repo = ReportRepository(db)
                 report = await report_repo.get_by_id(uuid.UUID(report_id))
                 if report:
@@ -566,6 +588,7 @@ async def trigger_next_hint(session_id: str, req: TriggerHintRequest) -> dict:
     # Inform the analysis worker so subsequent LLM calls include
     # the hint_reception scoring dimension.
     from src.websocket.audio_handler import _active_workers
+
     worker = _active_workers.get(session_id)
     if worker:
         worker.set_active_hint(active.text)
@@ -618,19 +641,24 @@ async def acknowledge_hint(
     # 2. Update DB record
     try:
         from src.repositories.hint_repo import HintEventRepository
+
         hint_repo = HintEventRepository(db)
-        quality_str = req.candidate_response_quality.value if hasattr(req.candidate_response_quality, "value") else str(req.candidate_response_quality)
+        quality_str = (
+            req.candidate_response_quality.value
+            if hasattr(req.candidate_response_quality, "value")
+            else str(req.candidate_response_quality)
+        )
 
         # Try exact ID match first (works if frontend and backend IDs happen to align)
         updated = False
-        try:
+        with contextlib.suppress(ValueError):
+            # hint_id may not be a valid UUID — fall through to the
+            # latest-unacked lookup below.
             updated = await hint_repo.update_acknowledgment(
                 hint_id=uuid.UUID(hint_id),
                 interviewer_used=req.interviewer_used,
                 candidate_response_quality=quality_str,
             )
-        except ValueError:
-            pass  # hint_id not a valid UUID
 
         # Fall back: find latest unacknowledged hint for this session
         if not updated:
@@ -640,7 +668,10 @@ async def acknowledge_hint(
                 candidate_response_quality=quality_str,
             )
     except Exception:
-        pass  # Row may not be flushed yet; in-memory state is authoritative
+        # Row may not be flushed yet; in-memory state is authoritative.
+        import logging
+
+        logging.getLogger("api.sessions").warning("hint_ack_row_update_failed", exc_info=True)
 
     return {
         "hint_id": hint_id,

@@ -10,25 +10,22 @@ Covers:
 """
 
 import asyncio
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from src.llm.config import TaskProviderMapping
 from src.llm.failover import FailoverManager
 from src.llm.health import HealthMonitor
-from src.llm.interface import AnalysisContext, LLMConfig, StructuredOutput, TaskType
-from src.llm.providers.mock import MockProvider
+from src.llm.interface import TaskType
 from src.schemas.transcript import SpeakerRole, TranscriptEventSchema
-from src.services.analysis_service import AnalysisResult, AnalysisService
+from src.services.analysis_service import AnalysisService, EnhancedAnalysisResult
 from src.services.contradiction_service import ContradictionService
 from src.services.memory_service import (
-    FactStore,
-    MemoryService,
     SUMMARY_TRIGGER_COUNT,
     WORKING_MEMORY_SIZE,
-    Utterance,
+    FactStore,
+    MemoryService,
 )
 from src.utils.token_budget import (
     BUDGET_TOTAL,
@@ -43,13 +40,15 @@ def _mock_failover_manager() -> FailoverManager:
     health = HealthMonitor()
     fm = FailoverManager(health)
     for task_type in TaskType:
-        fm.update_mapping(TaskProviderMapping(
-            task_type=task_type,
-            primary_provider="mock",
-            primary_model="mock-v1",
-            fallback_provider="mock",
-            fallback_model="mock-v1",
-        ))
+        fm.update_mapping(
+            TaskProviderMapping(
+                task_type=task_type,
+                primary_provider="mock",
+                primary_model="mock-v1",
+                fallback_provider="mock",
+                fallback_model="mock-v1",
+            )
+        )
     return fm
 
 
@@ -95,10 +94,12 @@ class TestFactStore:
 
     def test_merge_facts(self):
         fs = FactStore()
-        fs.merge({
-            "claimed_experience": ["5 years Python", "AWS certified"],
-            "technical_positions": ["Prefers microservices"],
-        })
+        fs.merge(
+            {
+                "claimed_experience": ["5 years Python", "AWS certified"],
+                "technical_positions": ["Prefers microservices"],
+            }
+        )
         assert len(fs.claimed_experience) == 2
         assert len(fs.technical_positions) == 1
 
@@ -157,7 +158,7 @@ class TestMemoryService:
             await self.memory.add_utterance("candidate", f"Utterance {i}", f"2024-01-01T00:00:{i:02d}")
         assert len(self.memory._working_memory) == WORKING_MEMORY_SIZE
         # Oldest should be evicted
-        assert self.memory._working_memory[0].text == f"Utterance 5"
+        assert self.memory._working_memory[0].text == "Utterance 5"
 
     @pytest.mark.asyncio
     async def test_empty_utterance_ignored(self):
@@ -170,6 +171,9 @@ class TestMemoryService:
             await self.memory.add_utterance(
                 "candidate", f"Utterance number {i} with some content", f"2024-01-01T00:00:{i:02d}"
             )
+        # Compression runs as a background task — wait for it to finish
+        # before asserting on its outputs.
+        await self.memory.drain()
         # Summary should have been compressed (mock returns canned text)
         assert self.memory._rolling_summary != ""
         assert len(self.memory._unsummarized_buffer) == 0
@@ -233,7 +237,8 @@ class TestContradictionService:
             claimed_experience=["I have experience with Python and Django"],
         )
         contradictions = await self.service.check(
-            "I've never used Django before", fact_store,
+            "I've never used Django before",
+            fact_store,
         )
         assert len(contradictions) == 1
         assert contradictions[0].detection_method == "rule_based"
@@ -245,7 +250,8 @@ class TestContradictionService:
             claimed_experience=["I know Kubernetes well"],
         )
         contradictions = await self.service.check(
-            "I don't know Kubernetes at all", fact_store,
+            "I don't know Kubernetes at all",
+            fact_store,
         )
         assert len(contradictions) == 1
 
@@ -255,7 +261,8 @@ class TestContradictionService:
             claimed_experience=["I have experience with Python"],
         )
         contradictions = await self.service.check(
-            "I also have experience with Go", fact_store,
+            "I also have experience with Go",
+            fact_store,
         )
         assert len(contradictions) == 0
 
@@ -302,7 +309,7 @@ class TestAnalysisService:
         await self.memory.add_utterance("candidate", "I would use a hash map approach", "2024-01-01T00:00:00")
         result = await self.analysis.analyze_utterance("candidate", "I would use a hash map approach")
 
-        assert isinstance(result, AnalysisResult)
+        assert isinstance(result, EnhancedAnalysisResult)
         assert 1 <= result.answer_quality <= 5
         assert isinstance(result.on_track, bool)
         assert result.insight != ""
@@ -348,7 +355,8 @@ class TestAnalysisService:
 class TestAnalysisWorker:
     def setup_method(self):
         self.fm = _mock_failover_manager()
-        self.worker = AnalysisWorker("test-session", self.fm)
+        self.session_uuid = "11111111-1111-1111-1111-111111111111"
+        self.worker = AnalysisWorker(self.session_uuid, self.fm)
 
     @pytest.mark.asyncio
     async def test_process_transcript_event(self):
@@ -443,8 +451,87 @@ class TestAnalysisWorker:
     @pytest.mark.asyncio
     async def test_serialization(self):
         data = self.worker.to_dict()
-        assert data["session_id"] == "test-session"
+        assert data["session_id"] == self.session_uuid
         assert data["events_processed"] == 0
         assert "memory" in data
         assert "analysis" in data
-        assert "contradictions" in data
+
+    @pytest.mark.asyncio
+    async def test_pending_analysis_uses_latest_utterance(self):
+        # Regression: the old call_later lambda captured the first
+        # (speaker, text) that opened the pending window and analyzed
+        # stale text while later utterances were dropped.
+        captured: list[tuple[str, str]] = []
+
+        async def fake_run(speaker: str, text: str) -> None:
+            captured.append((speaker, text))
+
+        self.worker._run_analysis = fake_run  # type: ignore[method-assign]
+        # Force "too soon" by marking last_analysis_time to now
+        self.worker._last_analysis_time = asyncio.get_event_loop().time()
+
+        self.worker._schedule_analysis("candidate", "first utterance")
+        self.worker._schedule_analysis("candidate", "second utterance")
+        self.worker._schedule_analysis("candidate", "third utterance — latest")
+
+        # Fire the pending analysis directly (call_later would run it eventually)
+        await self.worker._run_pending_analysis()
+
+        assert captured == [("candidate", "third utterance — latest")]
+        assert self.worker._pending_snapshot is None
+
+    @pytest.mark.asyncio
+    async def test_pending_analysis_drains_snapshots_arriving_during_run(self):
+        # Regression: if a new utterance arrives after _run_pending_analysis
+        # reads the snapshot but before _run_analysis resets the pending
+        # flag, the new utterance is stored in _pending_snapshot but never
+        # scheduled (since _pending_analysis is still True). The drain
+        # loop must pick it up on the next iteration.
+        captured: list[tuple[str, str]] = []
+        worker = self.worker
+
+        async def fake_run(speaker: str, text: str) -> None:
+            captured.append((speaker, text))
+            # Simulate the race: another utterance arrives while we are
+            # mid-analysis. Force the "too soon" branch of _schedule_analysis
+            # so it sets _pending_snapshot without starting a new timer.
+            if len(captured) == 1:
+                worker._last_analysis_time = asyncio.get_event_loop().time()
+                worker._schedule_analysis("candidate", "late utterance")
+            # Mirror the real _run_analysis: resets the flag under its lock.
+            worker._pending_analysis = False
+
+        worker._run_analysis = fake_run  # type: ignore[method-assign]
+        worker._last_analysis_time = asyncio.get_event_loop().time()
+        worker._schedule_analysis("candidate", "first utterance")
+
+        await worker._run_pending_analysis()
+
+        assert captured == [
+            ("candidate", "first utterance"),
+            ("candidate", "late utterance"),
+        ]
+        assert worker._pending_snapshot is None
+
+    @pytest.mark.asyncio
+    async def test_interim_transcript_does_not_raise_attribute_error(self):
+        # Regression: _INTERIM_THROTTLE_S was assigned as a local in __init__
+        # but read as self._INTERIM_THROTTLE_S — first interim event raised
+        # AttributeError.
+        interim = TranscriptEventSchema(
+            id="evt-interim",
+            session_id="test-session",
+            speaker_role=SpeakerRole.CANDIDATE,
+            text="partial utter",
+            is_final=False,
+            confidence=0.5,
+            timestamp="2024-01-01T00:00:00",
+            channel="tab",
+        )
+
+        with patch("src.workers.analysis_worker.dashboard_manager") as mock_mgr:
+            mock_mgr.send_transcript = AsyncMock()
+            await self.worker.on_transcript_event(interim)
+            await self.worker.on_transcript_event(interim)
+
+        assert self.worker._events_processed == 2

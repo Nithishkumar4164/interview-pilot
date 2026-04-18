@@ -8,21 +8,22 @@ Handles both live and buffered (retroactive) transcription.
 """
 
 import asyncio
+import contextlib
 import struct
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 from src.config import settings
-from src.schemas.transcript import SpeakerRole, TranscriptEventSchema
+from src.schemas.transcript import TranscriptEventSchema
 from src.services.speaker_service import SpeakerService
+from src.utils.logging import get_logger
 from src.workers.deepgram_worker import (
     DeepgramWorker,
     TranscriptResult,
     UtteranceEnd,
 )
 from src.workers.mock_deepgram_worker import MockDeepgramWorker
-from src.utils.logging import get_logger
 
 logger = get_logger("transcription_service")
 
@@ -102,10 +103,8 @@ class TranscriptionService:
 
         if self._processor_task and not self._processor_task.done():
             self._processor_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._processor_task
-            except asyncio.CancelledError:
-                pass
 
         if self._deepgram_worker:
             await self._deepgram_worker.stop()
@@ -152,7 +151,7 @@ class TranscriptionService:
                         self._deepgram_worker.result_queue.get(),
                         timeout=1.0,
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
                 if isinstance(result, UtteranceEnd):

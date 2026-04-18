@@ -23,12 +23,30 @@ logger = get_logger("contradiction_service")
 
 # Negation pairs: (positive pattern, negative pattern)
 NEGATION_PAIRS = [
-    (r"\b(?:I have|I've)\s+(?:experience|worked|used)\b", r"\b(?:I(?:'ve)? never|I haven't|I don't have experience)\b"),
-    (r"\b(?:I led|I managed|I was (?:the )?lead)\b", r"\b(?:I(?:'ve)? never (?:led|managed)|wasn't (?:the )?lead)\b"),
-    (r"\b(?:we used|our team used|I used)\b", r"\b(?:I(?:'ve)? never used|we didn't use|I'm not familiar with)\b"),
-    (r"\b(?:I know|I'm familiar|I understand)\b", r"\b(?:I don't know|I'm not familiar|I don't understand)\b"),
-    (r"\b(?:I built|I implemented|I created|I designed)\b", r"\b(?:I(?:'ve)? never built|I didn't implement|I didn't create)\b"),
-    (r"\b(\d+)\s*(?:years?|months?)\s+(?:of )?experience\b", r"\b(?:just started|new to|beginner|learning)\b"),
+    (
+        r"\b(?:I have|I've)\s+(?:experience|worked|used)\b",
+        r"\b(?:I(?:'ve)? never|I haven't|I don't have experience)\b",
+    ),
+    (
+        r"\b(?:I led|I managed|I was (?:the )?lead)\b",
+        r"\b(?:I(?:'ve)? never (?:led|managed)|wasn't (?:the )?lead)\b",
+    ),
+    (
+        r"\b(?:we used|our team used|I used)\b",
+        r"\b(?:I(?:'ve)? never used|we didn't use|I'm not familiar with)\b",
+    ),
+    (
+        r"\b(?:I know|I'm familiar|I understand)\b",
+        r"\b(?:I don't know|I'm not familiar|I don't understand)\b",
+    ),
+    (
+        r"\b(?:I built|I implemented|I created|I designed)\b",
+        r"\b(?:I(?:'ve)? never built|I didn't implement|I didn't create)\b",
+    ),
+    (
+        r"\b(\d+)\s*(?:years?|months?)\s+(?:of )?experience\b",
+        r"\b(?:just started|new to|beginner|learning)\b",
+    ),
 ]
 
 # Technology name extractor
@@ -102,11 +120,7 @@ class ContradictionService:
         new_contradictions: list[Contradiction] = []
 
         # Check against claimed experience
-        all_claims = (
-            fact_store.claimed_experience
-            + fact_store.technical_positions
-            + fact_store.key_numbers
-        )
+        all_claims = fact_store.claimed_experience + fact_store.technical_positions + fact_store.key_numbers
 
         for claim in all_claims:
             # Skip already-checked pairs
@@ -179,7 +193,8 @@ class ContradictionService:
     async def _llm_check(self, claim: str, new_statement: str) -> Contradiction | None:
         """LLM-based contradiction check for ambiguous cases."""
         prompt = LLM_CONTRADICTION_PROMPT.format(
-            claim=claim, new_statement=new_statement,
+            claim=claim,
+            new_statement=new_statement,
         )
         try:
             result = await self._failover.analyze(

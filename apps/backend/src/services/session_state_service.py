@@ -1,5 +1,4 @@
 import asyncio
-import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -96,6 +95,13 @@ class SessionStateService:
         if session_id not in self._states:
             self._states[session_id] = SessionState(session_id)
         return self._states[session_id]
+
+    def get_state_or_none(self, session_id: str) -> SessionState | None:
+        """Return the cached state for ``session_id`` without creating a new
+        empty one. Callers that just want to read should use this instead
+        of reaching into ``_states``.
+        """
+        return self._states.get(session_id)
 
     def remove_state(self, session_id: str) -> None:
         self._states.pop(session_id, None)

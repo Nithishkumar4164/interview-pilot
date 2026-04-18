@@ -6,12 +6,12 @@ to dashboard clients. Supports multiple tabs per session.
 Endpoint: ws://{host}/ws/dashboard/{session_id}
 """
 
-import asyncio
 import json
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from src.utils.logging import get_logger
+from src.websocket.auth import authenticate_ws
 from src.websocket.manager import dashboard_manager
 
 logger = get_logger("ws.dashboard")
@@ -37,18 +37,23 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
     - ping: heartbeat (server responds with pong)
     - subscribe_events: filter which event types to receive
     """
+    if await authenticate_ws(websocket, session_id) is None:
+        return
     await dashboard_manager.connect(session_id, websocket)
 
     # Send catch-up transcripts if session is already active
-    from src.websocket.audio_handler import _active_workers, _active_sessions
+    from src.websocket.audio_handler import _active_sessions, _active_workers
 
     worker = _active_workers.get(session_id)
     if worker:
         recent = worker.get_recent_transcripts()
         if recent:
-            await dashboard_manager.send_catchup(session_id, {
-                "events": recent,
-            })
+            await dashboard_manager.send_catchup(
+                session_id,
+                {
+                    "events": recent,
+                },
+            )
             logger.info(
                 "dashboard_catchup_sent",
                 session_id=session_id,
@@ -77,20 +82,24 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                 msg_type = message.get("type")
 
                 if msg_type == "ping":
-                    await websocket.send_json({
-                        "type": "pong",
-                        "timestamp": message.get("timestamp"),
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "pong",
+                            "timestamp": message.get("timestamp"),
+                        }
+                    )
 
                 elif msg_type == "subscribe_events":
                     # Allow clients to filter event types
                     event_types = message.get("event_types", [])
                     if isinstance(event_types, list):
                         subscribed_types = set(event_types)
-                        await websocket.send_json({
-                            "type": "subscribed",
-                            "event_types": list(subscribed_types),
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "subscribed",
+                                "event_types": list(subscribed_types),
+                            }
+                        )
 
                 # ── Speaker management handlers ──────────────────────
                 elif msg_type == "get_speaker_snapshot":
@@ -101,6 +110,7 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                         # No audio session yet — return defaults so the
                         # panel is never empty.
                         from src.services.speaker_service import SpeakerService
+
                         snap = SpeakerService(session_id).get_speaker_snapshot()
                     await dashboard_manager.send_speaker_snapshot(session_id, snap)
 
@@ -170,7 +180,8 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                         try:
                             rating_result = await worker.handle_code_rating(message)
                             await dashboard_manager.send_code_rating(
-                                session_id, rating_result,
+                                session_id,
+                                rating_result,
                             )
                         except Exception as e:
                             logger.error(
@@ -179,7 +190,8 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                                 error=str(e),
                             )
                             await dashboard_manager.send_error(
-                                session_id, f"Code rating failed: {e}",
+                                session_id,
+                                f"Code rating failed: {e}",
                             )
 
                 # ── Runtime hint handlers ─────────────────────────
@@ -189,7 +201,8 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                         try:
                             hint_result = await worker.handle_runtime_hint_request(message)
                             await dashboard_manager.send_runtime_hint(
-                                session_id, hint_result,
+                                session_id,
+                                hint_result,
                             )
                         except Exception as e:
                             logger.error(
@@ -198,7 +211,8 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                                 error=str(e),
                             )
                             await dashboard_manager.send_error(
-                                session_id, f"Runtime hint failed: {e}",
+                                session_id,
+                                f"Runtime hint failed: {e}",
                             )
 
                 elif msg_type == "acknowledge_runtime_hint":
@@ -242,7 +256,9 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                                 if t["id"] in tid_set
                             ]
                             await dashboard_manager.send_sv_transcripts(
-                                session_id, sv_id, matching,
+                                session_id,
+                                sv_id,
+                                matching,
                             )
 
     except WebSocketDisconnect:

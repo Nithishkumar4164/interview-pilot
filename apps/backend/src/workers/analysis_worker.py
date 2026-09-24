@@ -355,6 +355,31 @@ class AnalysisWorker:
         """Return recent transcript events for catch-up replay."""
         return self._transcript_history[-limit:]
 
+    def get_transcripts_by_ids(self, transcript_ids: set[str]) -> list[dict]:
+        """Return final transcripts whose id is in ``transcript_ids``, in arrival order."""
+        return [t for t in self._transcript_history if t["id"] in transcript_ids]
+
+    def report_snapshot(self) -> dict:
+        """Session-derived inputs for report generation."""
+        return {
+            "fact_store": self.memory.fact_store.to_dict(),
+            "rolling_summary": self.memory.get_summary(),
+            "analysis_results": [
+                {
+                    "answer_quality": a.answer_quality,
+                    "on_track": a.on_track,
+                    "insight": a.insight,
+                    "red_flags": a.red_flags,
+                    "suggestion": a.suggestion_for_interviewer,
+                    "hint_signal": a.hint_signal,
+                }
+                for a in self.analysis.get_recent_analyses(count=50)
+            ],
+            "contradictions": [
+                {"explanation": c.explanation, "confidence": c.confidence} for c in self.contradictions.contradictions
+            ],
+        }
+
     async def drain(self) -> None:
         """Flush all in-flight background work for safe shutdown.
 

@@ -13,7 +13,7 @@ from src.services.transcription_service import TranscriptionService
 from src.utils.logging import get_logger
 from src.websocket.auth import authenticate_ws
 from src.websocket.manager import dashboard_manager
-from src.workers.analysis_worker import AnalysisWorker
+from src.workers.session_pipeline import SessionPipeline, create_session_pipeline
 
 logger = get_logger("ws.audio")
 
@@ -21,14 +21,14 @@ router = APIRouter()
 
 # Active transcription sessions (shared with other handlers)
 _active_sessions: dict[str, TranscriptionService] = {}
-_active_workers: dict[str, AnalysisWorker] = {}
+_active_workers: dict[str, SessionPipeline] = {}
 
 
 def get_transcription_service(session_id: str) -> TranscriptionService:
     """Get or create a TranscriptionService for a session."""
     if session_id not in _active_sessions:
         service = TranscriptionService(session_id)
-        worker = AnalysisWorker(
+        worker = create_session_pipeline(
             session_id,
             failover_manager,
             get_speaker_snapshot=service.speaker_service.get_speaker_snapshot,

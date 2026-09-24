@@ -367,26 +367,7 @@ async def end_session(
             "target_level": db_session.level,
         }
         if worker:
-            snapshots["fact_store"] = (
-                worker.memory.fact_store.to_dict()
-                if hasattr(worker.memory.fact_store, "to_dict")
-                else worker.memory.fact_store.to_text()
-            )
-            snapshots["rolling_summary"] = worker.memory.get_summary()
-            snapshots["analysis_results"] = [
-                {
-                    "answer_quality": a.answer_quality,
-                    "on_track": a.on_track,
-                    "insight": a.insight,
-                    "red_flags": a.red_flags,
-                    "suggestion": a.suggestion_for_interviewer,
-                    "hint_signal": a.hint_signal,
-                }
-                for a in worker.analysis.get_recent_analyses(count=50)
-            ]
-            snapshots["contradictions"] = [
-                {"explanation": c.explanation, "confidence": c.confidence} for c in worker.contradictions.contradictions
-            ]
+            snapshots.update(worker.report_snapshot())
         if hint_service:
             snapshots["hint_events"] = [
                 {

@@ -1,0 +1,61 @@
+{
+  "meta": {
+    "id": "03-contradiction-resume-vs-response",
+    "description": "Candidate claims five years of Kafka experience, then cannot explain partitions when probed. Designed to exercise the contradiction-detection path; meaningful only under --llm real, but the worker should not crash under --llm mock.",
+    "tags": ["behavioral", "contradiction", "kafka"]
+  },
+  "events": [
+    {
+      "type": "question_change",
+      "question_text": "Tell me about your experience operating Kafka in production.",
+      "question_index": 0,
+      "question_plan": {
+        "id": "q-kafka-experience",
+        "text": "Kafka production experience",
+        "optimal_approaches": [
+          "Discusses partition strategy, replication, consumer groups, retention with concrete numbers"
+        ],
+        "common_pitfalls": [
+          "Vague claims without operational specifics",
+          "Confuses partitions with replicas"
+        ]
+      }
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "How long have you worked with Kafka?",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "I have around five years of hands-on Kafka experience. I led the streaming platform at my last company and we processed over a billion events per day across many topics.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Great. Walk me through how you'd think about partition count for a high-throughput topic.",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Honestly partitions are something the ops team usually handled. I think a partition is basically the same as a replica. You add more of them to make the topic bigger. I've never had to set that myself.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Can you describe a time you had to debug a consumer-group rebalance issue?",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Rebalances, hmm. I don't remember the specifics. I think we just restarted the consumers when something went wrong. It wasn't really my area.",
+      "channel": "microphone"
+    }
+  ]
+}

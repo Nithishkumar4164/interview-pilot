@@ -1,0 +1,80 @@
+{
+  "meta": {
+    "id": "02-stuck-candidate-needs-hints",
+    "description": "Candidate stalls on Two Sum, requests three progressively more direct hints, and ultimately submits a brute-force solution.",
+    "tags": ["coding", "weak", "hint-progression", "two-sum"]
+  },
+  "events": [
+    {
+      "type": "question_change",
+      "question_text": "Given an array of integers nums and an integer target, return the indices of the two numbers that add up to target.",
+      "question_index": 0,
+      "question_plan": {
+        "id": "q-two-sum",
+        "text": "Two Sum",
+        "optimal_approaches": [
+          {
+            "name": "hash_map",
+            "expected_complexity": {"time": "O(n)", "space": "O(n)"}
+          }
+        ],
+        "brute_force_approach": {
+          "name": "nested_loops",
+          "expected_complexity": {"time": "O(n^2)", "space": "O(1)"}
+        },
+        "common_pitfalls": ["Using the same index twice"]
+      }
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Take your time and walk me through any approach that comes to mind.",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Hmm, I'm not entirely sure. I guess we could try every pair and check if they add up to the target, but that feels slow. Let me think.",
+      "channel": "microphone"
+    },
+    {
+      "type": "hint_request",
+      "question_id": "q-two-sum",
+      "preferred_directness": "subtle"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Okay so a nested loop would work, I think that's O of n squared. I'm trying to think if there's something better but I don't see it right now.",
+      "channel": "microphone"
+    },
+    {
+      "type": "hint_request",
+      "question_id": "q-two-sum",
+      "preferred_directness": "moderate"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "I'm still not seeing the trick. Should I just go ahead with the brute force and we can optimize after?",
+      "channel": "microphone"
+    },
+    {
+      "type": "hint_request",
+      "question_id": "q-two-sum",
+      "preferred_directness": "direct"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Right, so let me just code up the nested loop version for now and we can come back to optimize.",
+      "channel": "microphone"
+    },
+    {
+      "type": "code_snapshot",
+      "question_id": "q-two-sum",
+      "language": "python",
+      "code": "def two_sum(nums, target):\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                return [i, j]\n    return []\n"
+    }
+  ]
+}

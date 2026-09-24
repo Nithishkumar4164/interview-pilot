@@ -1,0 +1,68 @@
+{
+  "meta": {
+    "id": "01-strong-candidate-two-sum",
+    "description": "Strong candidate solves Two Sum with a hash-map approach on the first pass; no hints requested.",
+    "tags": ["coding", "strong", "optimal", "two-sum"]
+  },
+  "events": [
+    {
+      "type": "question_change",
+      "question_text": "Given an array of integers nums and an integer target, return the indices of the two numbers that add up to target. Each input has exactly one solution; you may not use the same element twice.",
+      "question_index": 0,
+      "question_plan": {
+        "id": "q-two-sum",
+        "text": "Two Sum",
+        "optimal_approaches": [
+          {
+            "name": "hash_map",
+            "expected_complexity": {"time": "O(n)", "space": "O(n)"},
+            "key_steps": [
+              "Iterate the array once",
+              "For each element, check if (target - element) is in the map",
+              "Otherwise store element -> index"
+            ]
+          }
+        ],
+        "brute_force_approach": {
+          "name": "nested_loops",
+          "expected_complexity": {"time": "O(n^2)", "space": "O(1)"},
+          "key_steps": ["For each i, for each j > i, check if nums[i]+nums[j]==target"]
+        },
+        "common_pitfalls": [
+          "Using the same index twice",
+          "Returning values instead of indices"
+        ]
+      }
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Walk me through how you'd approach this problem.",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "I would use a hash map. As I iterate through the array, for each element I check whether the complement, which is target minus the current value, has already been stored. If it has, I return the two indices. Otherwise I store the current value mapped to its index. That gives O of n time and O of n space.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Sounds reasonable. What's the worst-case complexity, and can you handle duplicates?",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Worst case is O of n because we visit every element once and each hash map operation is O of one on average. Duplicates work because I check the map before inserting, so if target is twice the current value and we've already seen it, we get a valid pair.",
+      "channel": "microphone"
+    },
+    {
+      "type": "code_snapshot",
+      "question_id": "q-two-sum",
+      "language": "python",
+      "code": "def two_sum(nums, target):\n    seen = {}\n    for i, num in enumerate(nums):\n        complement = target - num\n        if complement in seen:\n            return [seen[complement], i]\n        seen[num] = i\n    return []\n"
+    }
+  ]
+}

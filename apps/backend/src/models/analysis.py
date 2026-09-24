@@ -10,11 +10,16 @@ from src.models.base import BaseModel
 
 class AnalysisEvent(BaseModel):
     __tablename__ = "analysis_events"
-    __table_args__ = (Index("ix_analysis_events_session_created", "session_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_analysis_events_session_created", "session_id", "created_at"),
+        Index("uq_analysis_events_idempotency_key", "idempotency_key", unique=True),
+    )
 
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("interview_sessions.id"), nullable=False
     )
+    # Deterministic key from the producer; a re-emitted event is skipped on insert.
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     transcript_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("transcripts.id"), nullable=True, index=True
     )

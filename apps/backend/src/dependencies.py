@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.config import settings
+from src.graphs.checkpointer import Checkpointer
 from src.llm import FailoverManager, HealthMonitor
 from src.llm.config import DEFAULT_TASK_MAPPINGS, TaskProviderMapping
 
@@ -24,6 +25,7 @@ if not _has_anthropic and not _has_openai:
 # Global singletons — avoids circular import from main.py
 health_monitor = HealthMonitor()
 failover_manager = FailoverManager(health_monitor)
+checkpointer = Checkpointer()  # opened in main.lifespan
 
 # Override mappings so only providers with valid keys are used.
 # If no keys at all, use mock provider. If only one key, use that provider for both.
@@ -69,6 +71,11 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 def get_failover_manager() -> FailoverManager:
     """FastAPI dependency for the LLM failover manager."""
     return failover_manager
+
+
+def get_checkpointer() -> Checkpointer:
+    """FastAPI dependency for the LangGraph Postgres checkpointer."""
+    return checkpointer
 
 
 def get_persistence_service():

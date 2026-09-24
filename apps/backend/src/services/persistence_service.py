@@ -8,8 +8,11 @@ import asyncio
 import contextlib
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
+from sqlalchemy import CursorResult
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.models.analysis import AnalysisEvent, CodeSnapshot
@@ -40,6 +43,23 @@ def _to_datetime(value: str | datetime | None) -> datetime:
     except ValueError:
         return datetime.now(UTC)
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _row(entity: Any) -> dict[str, Any]:
+    """Column values of an un-flushed ORM entity, with Python-side scalar defaults applied.
+
+    Server-side defaults (created_at/updated_at) are omitted so the DB fills them.
+    """
+    row: dict[str, Any] = {}
+    for attr in sa_inspect(type(entity)).column_attrs:
+        column = attr.columns[0]
+        value = getattr(entity, attr.key)
+        if value is None and column.default is not None and column.default.is_scalar:
+            value = column.default.arg
+        if value is None and column.server_default is not None:
+            continue
+        row[column.key] = value
+    return row
 
 
 class PersistenceService:
@@ -90,6 +110,7 @@ class PersistenceService:
         word_timestamps: dict | None = None,
         root_speaker_id: str = "",
         speech_vector_id: str = "",
+        idempotency_key: str | None = None,
     ) -> None:
         """Enqueue a transcript for persistence."""
         entity = Transcript(
@@ -105,6 +126,7 @@ class PersistenceService:
             word_timestamps=word_timestamps,
             root_speaker_id=root_speaker_id,
             speech_vector_id=speech_vector_id,
+            idempotency_key=idempotency_key,
         )
         self._queue.put_nowait(entity)
 
@@ -119,6 +141,7 @@ class PersistenceService:
         suggestion: str | None = None,
         hint_signal: str | None = None,
         dimensions: dict | None = None,
+        idempotency_key: str | None = None,
     ) -> None:
         """Enqueue an analysis event for persistence."""
         entity = AnalysisEvent(
@@ -131,6 +154,7 @@ class PersistenceService:
             suggestion=suggestion,
             hint_signal=hint_signal,
             dimensions=dimensions,
+            idempotency_key=idempotency_key,
         )
         self._queue.put_nowait(entity)
 
@@ -143,6 +167,7 @@ class PersistenceService:
         text: str,
         displayed_at: str | datetime,
         hint_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> None:
         """Enqueue a hint event for persistence."""
         entity = HintEvent(
@@ -152,6 +177,7 @@ class PersistenceService:
             level=level,
             text=text,
             displayed_at=_to_datetime(displayed_at),
+            idempotency_key=idempotency_key,
         )
         self._queue.put_nowait(entity)
 
@@ -198,11 +224,21 @@ class PersistenceService:
         if not batch:
             return
 
+        # One INSERT ... ON CONFLICT DO NOTHING per table, in first-seen order.
+        # A re-emitted event (same idempotency_key or primary key) is skipped
+        # instead of failing the transaction and losing the whole batch.
+        rows_by_model: dict[type, list[dict[str, Any]]] = {}
+        for entity in batch:
+            rows_by_model.setdefault(type(entity), []).append(_row(entity))
+
         try:
+            inserted = 0
             async with self._session_factory() as db:
-                db.add_all(batch)
+                for model, rows in rows_by_model.items():
+                    result = await db.execute(pg_insert(model).values(rows).on_conflict_do_nothing())
+                    inserted += cast(CursorResult[Any], result).rowcount
                 await db.commit()
-            logger.info("batch_flushed", count=len(batch))
+            logger.info("batch_flushed", count=len(batch), inserted=inserted, skipped=len(batch) - inserted)
         except Exception as e:
             logger.error("batch_flush_failed", count=len(batch), error=str(e))
 

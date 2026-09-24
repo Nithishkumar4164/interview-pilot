@@ -13,11 +13,14 @@ class Transcript(BaseModel):
     __table_args__ = (
         Index("ix_transcripts_session_timestamp", "session_id", "timestamp"),
         Index("ix_transcripts_session_final", "session_id", "is_final"),
+        Index("uq_transcripts_idempotency_key", "idempotency_key", unique=True),
     )
 
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("interview_sessions.id"), nullable=False
     )
+    # Deterministic key from the producer; a re-emitted event is skipped on insert.
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     speaker_role: Mapped[str] = mapped_column(String(30), nullable=False)
     text: Mapped[str] = mapped_column(String, nullable=False)
     is_final: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

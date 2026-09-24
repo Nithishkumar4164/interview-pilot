@@ -249,11 +249,9 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                     if svc and worker and sv_id:
                         sv = svc.speaker_service._speech_vectors.get(sv_id)
                         if sv:
-                            tid_set = set(sv.transcript_ids)
                             matching = [
                                 {"id": t["id"], "text": t["text"]}
-                                for t in worker._transcript_history
-                                if t["id"] in tid_set
+                                for t in worker.get_transcripts_by_ids(set(sv.transcript_ids))
                             ]
                             await dashboard_manager.send_sv_transcripts(
                                 session_id,

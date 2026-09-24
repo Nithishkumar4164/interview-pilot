@@ -6,10 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.router import api_router
 from src.config import settings
-from src.dependencies import async_session_factory, health_monitor
+from src.dependencies import async_session_factory, checkpointer, health_monitor
 from src.services.persistence_service import PersistenceService
 from src.services.session_state_service import SessionStateService
 from src.utils.logging import setup_logging
+from src.utils.tracing import setup_tracing, shutdown_tracing
 from src.websocket.audio_handler import router as audio_ws_router
 from src.websocket.code_handler import router as code_ws_router
 from src.websocket.dashboard_handler import router as dashboard_ws_router
@@ -22,6 +23,7 @@ persistence_service = PersistenceService(async_session_factory)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Startup
     setup_logging()
+    setup_tracing()
 
     # Start health monitoring for LLM providers
     health_monitor.start()
@@ -32,12 +34,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Start persistence service
     await persistence_service.start()
 
+    # LangGraph checkpointer (creates/migrates its own tables)
+    await checkpointer.open(settings.database_url_sync)
+
     yield
 
     # Shutdown
+    await checkpointer.close()
     await persistence_service.stop()
     health_monitor.stop()
     session_state_service.stop_periodic_snapshots()
+    shutdown_tracing()
 
 
 app = FastAPI(

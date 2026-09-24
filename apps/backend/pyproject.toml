@@ -24,6 +24,11 @@ dependencies = [
     "authlib>=1.4.0",
     "httpx>=0.28.0",
 
+    # Orchestration (pinned exactly: checkpoint format and serde behavior are version-sensitive)
+    "langgraph==1.2.12",
+    "langgraph-checkpoint-postgres==3.1.2",
+    "psycopg[binary,pool]==3.3.6",
+
     # LLM Providers
     "anthropic>=0.42.0",
     "openai>=1.60.0",
@@ -41,6 +46,7 @@ dependencies = [
     "opentelemetry-api>=1.29.0",
     "opentelemetry-sdk>=1.29.0",
     "opentelemetry-instrumentation-fastapi>=0.50b0",
+    "opentelemetry-exporter-otlp-proto-http>=1.39.1",
     "prometheus-client>=0.21.0",
 
     # Config

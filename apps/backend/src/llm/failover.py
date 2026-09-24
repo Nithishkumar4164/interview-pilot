@@ -1,6 +1,8 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
+from opentelemetry.trace import Span
+
 from src.llm.config import DEFAULT_TASK_MAPPINGS, TaskProviderMapping
 from src.llm.factory import ProviderFactory
 from src.llm.health import HealthMonitor
@@ -12,8 +14,18 @@ from src.llm.interface import (
     TaskType,
 )
 from src.utils.logging import get_logger
+from src.utils.tracing import get_tracer
 
 logger = get_logger("llm.failover")
+tracer = get_tracer("llm.failover")
+
+
+def _record_result(span: Span, result: StructuredOutput) -> None:
+    span.set_attribute("llm.provider", result.provider)
+    span.set_attribute("llm.model", result.model)
+    span.set_attribute("llm.input_tokens", result.input_tokens)
+    span.set_attribute("llm.output_tokens", result.output_tokens)
+    span.set_attribute("llm.latency_ms", result.latency_ms)
 
 
 class FailoverManager:
@@ -89,10 +101,30 @@ class FailoverManager:
         if config is None:
             config = LLMConfig()
 
+        # Metadata only: prompts carry candidate PII and never go on spans.
+        with tracer.start_as_current_span(
+            "llm.analyze",
+            attributes={
+                "llm.task_type": context.task_type.value,
+                "llm.max_tokens": config.max_tokens,
+                "session.id": session_id or "",
+            },
+        ) as span:
+            # start_as_current_span records the exception and sets ERROR status.
+            return await self._analyze_with_failover(context, config, span)
+
+    async def _analyze_with_failover(
+        self,
+        context: AnalysisContext,
+        config: LLMConfig,
+        span: Span,
+    ) -> StructuredOutput:
         provider, is_failover = self._select_provider(context.task_type)
+        span.set_attribute("llm.failover", is_failover)
         try:
             result = await provider.analyze(context, config)
             self.health_monitor.record_success(provider.provider_name, result.latency_ms)
+            _record_result(span, result)
             return result
         except Exception as e:
             self.health_monitor.record_failure(provider.provider_name)
@@ -117,8 +149,18 @@ class FailoverManager:
                     "reason": f"primary_error: {e!s}",
                 }
             )
+            span.add_event(
+                "llm.failover",
+                {
+                    "from_provider": mapping.primary_provider,
+                    "to_provider": mapping.fallback_provider,
+                    "reason": type(e).__name__,
+                },
+            )
+            span.set_attribute("llm.failover", True)
             result = await fallback.analyze(context, config)
             self.health_monitor.record_success(fallback.provider_name, result.latency_ms)
+            _record_result(span, result)
             return result
 
     async def complete(

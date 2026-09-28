@@ -1,0 +1,629 @@
+{
+  "intern-coding-30": {
+    "llm_calls": [
+      {
+        "kind": "hint",
+        "max_tokens": 500,
+        "response_format": "json",
+        "system_prompt_sha": "cbbe9e3e80f5",
+        "task_type": "hint_generation",
+        "temperature": 0.5,
+        "user_content": "{\"question\": \"Implement a function to find two numbers that add up to a target.\", \"optimal_approaches\": null}"
+      },
+      {
+        "kind": "question_generation",
+        "max_tokens": 2000,
+        "response_format": "json",
+        "system_prompt_sha": "8e06818dd10e",
+        "task_type": "question_generation",
+        "temperature": 0.7,
+        "user_content": "{\"count\": 1, \"categories\": [\"coding\"], \"difficulty_range\": [1, 2], \"focus_areas\": [\"coding\"], \"level\": \"intern\", \"resume_context\": {}, \"time_budget_minutes\": 17}"
+      }
+    ],
+    "plan": {
+      "buffer_minutes": 3,
+      "focus_areas": [
+        "coding"
+      ],
+      "intro_minutes": 5,
+      "level": "intern",
+      "phases": [
+        {
+          "duration_minutes": 17,
+          "phase": "coding",
+          "questions": [
+            {
+              "alternates": [],
+              "brute_force_approach": null,
+              "category": "coding",
+              "common_pitfalls": null,
+              "difficulty": 2,
+              "hints": [
+                {
+                  "level": 1,
+                  "text": "scripted-hint-L1-817"
+                },
+                {
+                  "level": 2,
+                  "text": "scripted-hint-L2-817"
+                },
+                {
+                  "level": 3,
+                  "text": "scripted-hint-L3-817"
+                }
+              ],
+              "id": "p0q0",
+              "optimal_approaches": null,
+              "source": "generated",
+              "tags": [],
+              "text": "Implement a function to find two numbers that add up to a target.",
+              "time_minutes": 17
+            }
+          ],
+          "start_minute": 5
+        }
+      ],
+      "session_id": "golden-session",
+      "total_minutes": 30,
+      "wrap_up_minutes": 5
+    }
+  },
+  "sde1-with-bank-45": {
+    "llm_calls": [],
+    "plan": {
+      "buffer_minutes": 4,
+      "focus_areas": [
+        "coding",
+        "behavioral"
+      ],
+      "intro_minutes": 3,
+      "level": "sde1",
+      "phases": [
+        {
+          "duration_minutes": 16,
+          "phase": "coding",
+          "questions": [
+            {
+              "alternates": [
+                "LFU Cache"
+              ],
+              "brute_force_approach": null,
+              "category": "coding",
+              "common_pitfalls": [
+                "Sync issues"
+              ],
+              "difficulty": 3,
+              "hints": [
+                {
+                  "level": 1,
+                  "text": "Two data structures together."
+                },
+                {
+                  "level": 2,
+                  "text": "Hash map + doubly linked list."
+                },
+                {
+                  "level": 3,
+                  "text": "Map keys to DLL nodes."
+                }
+              ],
+              "id": "p0q0",
+              "optimal_approaches": null,
+              "source": "bank",
+              "tags": [
+                "data_structures",
+                "design_patterns",
+                "hash_map"
+              ],
+              "text": "LRU Cache: O(1) get and put.",
+              "time_minutes": 16
+            }
+          ],
+          "start_minute": 3
+        },
+        {
+          "duration_minutes": 17,
+          "phase": "behavioral",
+          "questions": [
+            {
+              "alternates": [],
+              "brute_force_approach": null,
+              "category": "behavioral",
+              "common_pitfalls": [
+                "Being vague"
+              ],
+              "difficulty": 2,
+              "hints": [],
+              "id": "p1q0",
+              "optimal_approaches": null,
+              "source": "bank",
+              "tags": [
+                "incident_response",
+                "debugging"
+              ],
+              "text": "Tell me about a production incident you handled.",
+              "time_minutes": 17
+            }
+          ],
+          "start_minute": 19
+        }
+      ],
+      "session_id": "golden-session",
+      "total_minutes": 45,
+      "wrap_up_minutes": 5
+    }
+  },
+  "sde2-coding-sysdesign-behavioral-60": {
+    "llm_calls": [
+      {
+        "kind": "hint",
+        "max_tokens": 500,
+        "response_format": "json",
+        "system_prompt_sha": "cbbe9e3e80f5",
+        "task_type": "hint_generation",
+        "temperature": 0.5,
+        "user_content": "{\"question\": \"Implement a function to find two numbers that add up to a target.\", \"optimal_approaches\": null}"
+      },
+      {
+        "kind": "hint",
+        "max_tokens": 500,
+        "response_format": "json",
+        "system_prompt_sha": "cbbe9e3e80f5",
+        "task_type": "hint_generation",
+        "temperature": 0.5,
+        "user_content": "{\"question\": \"Implement a function to find two numbers that add up to a target.\", \"optimal_approaches\": null}"
+      },
+      {
+        "kind": "hint",
+        "max_tokens": 500,
+        "response_format": "json",
+        "system_prompt_sha": "cbbe9e3e80f5",
+        "task_type": "hint_generation",
+        "temperature": 0.5,
+        "user_content": "{\"question\": \"Implement a function to find two numbers that add up to a target.\", \"optimal_approaches\": null}"
+      },
+      {
+        "kind": "question_generation",
+        "max_tokens": 2000,
+        "response_format": "json",
+        "system_prompt_sha": "8e06818dd10e",
+        "task_type": "question_generation",
+        "temperature": 0.7,
+        "user_content": "{\"count\": 1, \"categories\": [\"behavioral\"], \"difficulty_range\": [2, 4], \"focus_areas\": [\"coding\", \"system_design\", \"behavioral\"], \"level\": \"sde2\", \"resume_context\": {}, \"time_budget_minutes\": 16}"
+      },
+      {
+        "kind": "question_generation",
+        "max_tokens": 2000,
+        "response_format": "json",
+        "system_prompt_sha": "8e06818dd10e",
+        "task_type": "question_generation",
+        "temperature": 0.7,
+        "user_content": "{\"count\": 1, \"categories\": [\"coding\"], \"difficulty_range\": [2, 4], \"focus_areas\": [\"coding\", \"system_design\", \"behavioral\"], \"level\": \"sde2\", \"resume_context\": {}, \"time_budget_minutes\": 15}"
+      },
+      {
+        "kind": "question_generation",
+        "max_tokens": 2000,
+        "response_format": "json",
+        "system_prompt_sha": "8e06818dd10e",
+        "task_type": "question_generation",
+        "temperature": 0.7,
+        "user_content": "{\"count\": 1, \"categories\": [\"system_design\"], \"difficulty_range\": [2, 4], \"focus_areas\": [\"coding\", \"system_design\", \"behavioral\"], \"level\": \"sde2\", \"resume_context\": {}, \"time_budget_minutes\": 15}"
+      }
+    ],
+    "plan": {
+      "buffer_minutes": 6,
+      "focus_areas": [
+        "coding",
+        "system_design",
+        "behavioral"
+      ],
+      "intro_minutes": 3,
+      "level": "sde2",
+      "phases": [
+        {
+          "duration_minutes": 15,
+          "phase": "coding",
+          "questions": [
+            {
+              "alternates": [],
+              "brute_force_approach": null,
+              "category": "coding",
+              "common_pitfalls": null,
+              "difficulty": 2,
+              "hints": [
+                {
+                  "level": 1,
+                  "text": "scripted-hint-L1-817"
+                },
+                {
+                  "level": 2,
+                  "text": "scripted-hint-L2-817"
+                },
+                {
+                  "level": 3,
+                  "text": "scripted-hint-L3-817"
+                }
+              ],
+              "id": "p0q0",
+              "optimal_approaches": null,
+              "source": "generated",
+              "tags": [],
+              "text": "Implement a function to find two numbers that add up to a target.",
+              "time_minutes": 15
+            }
+          ],
+          "start_minute": 3
+        },
+        {
+          "duration_minutes": 15,
+          "phase": "system_design",
+          "questions": [
+            {
+              "alternates": [],
+              "brute_force_approach": null,
+              "category": "coding",
+              "common_pitfalls": null,
+              "difficulty": 2,
+              "hints": [
+                {
+                  "level": 1,
+                  "text": "scripted-hint-L1-817"
+                },
+                {
+                  "level": 2,
+                  "text": "scripted-hint-L2-817"
+                },
+                {
+                  "level": 3,
+                  "text": "scripted-hint-L3-817"
+                }
+              ],
+              "id": "p1q0",
+              "optimal_approaches": null,
+              "source": "generated",
+              "tags": [],
+              "text": "Implement a function to find two numbers that add up to a target.",
+              "time_minutes": 15
+            }
+          ],
+          "start_minute": 18
+        },
+        {
+          "duration_minutes": 16,
+          "phase": "behavioral",
+          "questions": [
+            {
+              "alternates": [],
+              "brute_force_approach": null,
+              "category": "coding",
+              "common_pitfalls": null,
+              "difficulty": 2,
+              "hints": [
+                {
+                  "level": 1,
+                  "text": "scripted-hint-L1-817"
+                },
+                {
+                  "level": 2,
+                  "text": "scripted-hint-L2-817"
+                },
+                {
+                  "level": 3,
+                  "text": "scripted-hint-L3-817"
+                }
+              ],
+              "id": "p2q0",
+              "optimal_approaches": null,
+              "source": "generated",
+              "tags": [],
+              "text": "Implement a function to find two numbers that add up to a target.",
+              "time_minutes": 16
+            }
+          ],
+          "start_minute": 33
+        }
+      ],
+      "session_id": "golden-session",
+      "total_minutes": 60,
+      "wrap_up_minutes": 5
+    }
+  },
+  "senior-dsa-debugging-api-aptitude-90": {
+    "llm_calls": [
+      {
+        "kind": "hint",
+        "max_tokens": 500,
+        "response_format": "json",
+        "system_prompt_sha": "cbbe9e3e80f5",
+        "task_type": "hint_generation",
+        "temperature": 0.5,
+        "user_content": "{\"question\": \"Implement a function to find two numbers that add up to a target.\", \"optimal_approaches\": null}"
+      },
+      {
+        "kind": "hint",
+        "max_tokens": 500,
+        "response_format": "json",
+        "system_prompt_sha": "cbbe9e3e80f5",
+        "task_type": "hint_generation",
+        "temperature": 0.5,
+        "user_content": "{\"question\": \"Implement a function to find two numbers that add up to a target.\", \"optimal_approaches\": null}"
+      },
+      {
+        "kind": "hint",
+        "max_tokens": 500,
+        "response_format": "json",
+        "system_prompt_sha": "cbbe9e3e80f5",
+        "task_type": "hint_generation",
+        "temperature": 0.5,
+        "user_content": "{\"question\": \"Implement a function to find two numbers that add up to a target.\", \"optimal_approaches\": null}"
+      },
+      {
+        "kind": "question_generation",
+        "max_tokens": 2000,
+        "response_format": "json",
+        "system_prompt_sha": "8e06818dd10e",
+        "task_type": "question_generation",
+        "temperature": 0.7,
+        "user_content": "{\"count\": 1, \"categories\": [\"aptitude\"], \"difficulty_range\": [3, 5], \"focus_areas\": [\"dsa\", \"debugging\", \"api_design\", \"aptitude\"], \"level\": \"senior\", \"resume_context\": {}, \"time_budget_minutes\": 25}"
+      },
+      {
+        "kind": "question_generation",
+        "max_tokens": 2000,
+        "response_format": "json",
+        "system_prompt_sha": "8e06818dd10e",
+        "task_type": "question_generation",
+        "temperature": 0.7,
+        "user_content": "{\"count\": 1, \"categories\": [\"coding\"], \"difficulty_range\": [3, 5], \"focus_areas\": [\"dsa\", \"debugging\", \"api_design\", \"aptitude\"], \"level\": \"senior\", \"resume_context\": {}, \"time_budget_minutes\": 24}"
+      },
+      {
+        "kind": "question_generation",
+        "max_tokens": 2000,
+        "response_format": "json",
+        "system_prompt_sha": "8e06818dd10e",
+        "task_type": "question_generation",
+        "temperature": 0.7,
+        "user_content": "{\"count\": 1, \"categories\": [\"system_design\"], \"difficulty_range\": [3, 5], \"focus_areas\": [\"dsa\", \"debugging\", \"api_design\", \"aptitude\"], \"level\": \"senior\", \"resume_context\": {}, \"time_budget_minutes\": 24}"
+      }
+    ],
+    "plan": {
+      "buffer_minutes": 9,
+      "focus_areas": [
+        "dsa",
+        "debugging",
+        "api_design",
+        "aptitude"
+      ],
+      "intro_minutes": 3,
+      "level": "senior",
+      "phases": [
+        {
+          "duration_minutes": 24,
+          "phase": "coding",
+          "questions": [
+            {
+              "alternates": [],
+              "brute_force_approach": null,
+              "category": "coding",
+              "common_pitfalls": null,
+              "difficulty": 2,
+              "hints": [
+                {
+                  "level": 1,
+                  "text": "scripted-hint-L1-817"
+                },
+                {
+                  "level": 2,
+                  "text": "scripted-hint-L2-817"
+                },
+                {
+                  "level": 3,
+                  "text": "scripted-hint-L3-817"
+                }
+              ],
+              "id": "p0q0",
+              "optimal_approaches": null,
+              "source": "generated",
+              "tags": [],
+              "text": "Implement a function to find two numbers that add up to a target.",
+              "time_minutes": 24
+            }
+          ],
+          "start_minute": 3
+        },
+        {
+          "duration_minutes": 24,
+          "phase": "system_design",
+          "questions": [
+            {
+              "alternates": [],
+              "brute_force_approach": null,
+              "category": "coding",
+              "common_pitfalls": null,
+              "difficulty": 2,
+              "hints": [
+                {
+                  "level": 1,
+                  "text": "scripted-hint-L1-817"
+                },
+                {
+                  "level": 2,
+                  "text": "scripted-hint-L2-817"
+                },
+                {
+                  "level": 3,
+                  "text": "scripted-hint-L3-817"
+                }
+              ],
+              "id": "p1q0",
+              "optimal_approaches": null,
+              "source": "generated",
+              "tags": [],
+              "text": "Implement a function to find two numbers that add up to a target.",
+              "time_minutes": 24
+            }
+          ],
+          "start_minute": 27
+        },
+        {
+          "duration_minutes": 25,
+          "phase": "aptitude",
+          "questions": [
+            {
+              "alternates": [],
+              "brute_force_approach": null,
+              "category": "coding",
+              "common_pitfalls": null,
+              "difficulty": 2,
+              "hints": [
+                {
+                  "level": 1,
+                  "text": "scripted-hint-L1-817"
+                },
+                {
+                  "level": 2,
+                  "text": "scripted-hint-L2-817"
+                },
+                {
+                  "level": 3,
+                  "text": "scripted-hint-L3-817"
+                }
+              ],
+              "id": "p2q0",
+              "optimal_approaches": null,
+              "source": "generated",
+              "tags": [],
+              "text": "Implement a function to find two numbers that add up to a target.",
+              "time_minutes": 25
+            }
+          ],
+          "start_minute": 51
+        }
+      ],
+      "session_id": "golden-session",
+      "total_minutes": 90,
+      "wrap_up_minutes": 5
+    }
+  },
+  "staff-with-resume-60": {
+    "llm_calls": [
+      {
+        "kind": "hint",
+        "max_tokens": 500,
+        "response_format": "json",
+        "system_prompt_sha": "cbbe9e3e80f5",
+        "task_type": "hint_generation",
+        "temperature": 0.5,
+        "user_content": "{\"question\": \"Implement a function to find two numbers that add up to a target.\", \"optimal_approaches\": null}"
+      },
+      {
+        "kind": "hint",
+        "max_tokens": 500,
+        "response_format": "json",
+        "system_prompt_sha": "cbbe9e3e80f5",
+        "task_type": "hint_generation",
+        "temperature": 0.5,
+        "user_content": "{\"question\": \"Implement a function to find two numbers that add up to a target.\", \"optimal_approaches\": null}"
+      },
+      {
+        "kind": "question_generation",
+        "max_tokens": 2000,
+        "response_format": "json",
+        "system_prompt_sha": "8e06818dd10e",
+        "task_type": "question_generation",
+        "temperature": 0.7,
+        "user_content": "{\"count\": 1, \"categories\": [\"coding\"], \"difficulty_range\": [3, 5], \"focus_areas\": [\"system_design\", \"coding\"], \"level\": \"staff\", \"resume_context\": {\"tech_stack\": [\"Go\", \"Kafka\"], \"years_experience\": 9}, \"time_budget_minutes\": 23}"
+      },
+      {
+        "kind": "question_generation",
+        "max_tokens": 2000,
+        "response_format": "json",
+        "system_prompt_sha": "8e06818dd10e",
+        "task_type": "question_generation",
+        "temperature": 0.7,
+        "user_content": "{\"count\": 1, \"categories\": [\"system_design\"], \"difficulty_range\": [3, 5], \"focus_areas\": [\"system_design\", \"coding\"], \"level\": \"staff\", \"resume_context\": {\"tech_stack\": [\"Go\", \"Kafka\"], \"years_experience\": 9}, \"time_budget_minutes\": 23}"
+      }
+    ],
+    "plan": {
+      "buffer_minutes": 6,
+      "focus_areas": [
+        "system_design",
+        "coding"
+      ],
+      "intro_minutes": 3,
+      "level": "staff",
+      "phases": [
+        {
+          "duration_minutes": 23,
+          "phase": "system_design",
+          "questions": [
+            {
+              "alternates": [],
+              "brute_force_approach": null,
+              "category": "coding",
+              "common_pitfalls": null,
+              "difficulty": 2,
+              "hints": [
+                {
+                  "level": 1,
+                  "text": "scripted-hint-L1-817"
+                },
+                {
+                  "level": 2,
+                  "text": "scripted-hint-L2-817"
+                },
+                {
+                  "level": 3,
+                  "text": "scripted-hint-L3-817"
+                }
+              ],
+              "id": "p0q0",
+              "optimal_approaches": null,
+              "source": "generated",
+              "tags": [],
+              "text": "Implement a function to find two numbers that add up to a target.",
+              "time_minutes": 23
+            }
+          ],
+          "start_minute": 3
+        },
+        {
+          "duration_minutes": 23,
+          "phase": "coding",
+          "questions": [
+            {
+              "alternates": [],
+              "brute_force_approach": null,
+              "category": "coding",
+              "common_pitfalls": null,
+              "difficulty": 2,
+              "hints": [
+                {
+                  "level": 1,
+                  "text": "scripted-hint-L1-817"
+                },
+                {
+                  "level": 2,
+                  "text": "scripted-hint-L2-817"
+                },
+                {
+                  "level": 3,
+                  "text": "scripted-hint-L3-817"
+                }
+              ],
+              "id": "p1q0",
+              "optimal_approaches": null,
+              "source": "generated",
+              "tags": [],
+              "text": "Implement a function to find two numbers that add up to a target.",
+              "time_minutes": 23
+            }
+          ],
+          "start_minute": 26
+        }
+      ],
+      "session_id": "golden-session",
+      "total_minutes": 60,
+      "wrap_up_minutes": 5
+    }
+  }
+}

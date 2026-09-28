@@ -17,9 +17,6 @@ if TYPE_CHECKING:
 from src.services.calibration_service import (
     CalibrationProfile,
     PhaseAllocation,
-    build_phases_from_focus_areas,
-    compute_time_allocation,
-    get_calibration_profile,
 )
 from src.utils.logging import get_logger
 
@@ -169,75 +166,19 @@ class PlanService:
             resume_data: Structured resume data (from M1) if available.
             bank_questions: Pre-seeded questions from QuestionBank, grouped by category.
         """
-        # 1. Get calibration profile
-        profile = get_calibration_profile(level)
+        from src.graphs.plan_graph import run_plan_graph
 
-        # Build phases from focus areas instead of using hardcoded profile phases
-        focus_phases = build_phases_from_focus_areas(focus_areas)
-        time_alloc = compute_time_allocation(profile, duration_minutes, phases_override=focus_phases)
-
-        logger.info(
-            "plan_generation_started",
+        return await run_plan_graph(
+            self,
             session_id=session_id,
-            level=level.value,
-            duration=duration_minutes,
-            phases=list(time_alloc.phase_minutes.keys()),
-        )
-
-        # 2. Build phases using focus-area-driven allocations
-        phases: list[PlanPhaseData] = []
-        current_minute = time_alloc.intro_minutes
-
-        for phase_alloc in focus_phases:
-            phase_minutes = time_alloc.phase_minutes.get(phase_alloc.phase, 0)
-            if phase_minutes <= 0:
-                continue
-
-            # Select or generate questions for this phase
-            questions = await self._select_questions_for_phase(
-                phase_alloc=phase_alloc,
-                phase_minutes=phase_minutes,
-                profile=profile,
-                focus_areas=focus_areas,
-                resume_data=resume_data,
-                bank_questions=bank_questions,
-            )
-
-            # Ensure hints exist for technical questions (coding, system_design, aptitude)
-            for q in questions:
-                if q.category in ("coding", "system_design", "aptitude") and len(q.hints) < 3:
-                    q.hints = await self._generate_hints(q)
-
-            phases.append(
-                PlanPhaseData(
-                    phase=phase_alloc.phase,
-                    start_minute=current_minute,
-                    duration_minutes=phase_minutes,
-                    questions=questions,
-                )
-            )
-            current_minute += phase_minutes
-
-        plan = GeneratedPlan(
-            session_id=session_id,
-            phases=phases,
-            total_minutes=duration_minutes,
-            intro_minutes=time_alloc.intro_minutes,
-            wrap_up_minutes=time_alloc.wrap_up_minutes,
-            buffer_minutes=time_alloc.buffer_minutes,
-            level=level.value,
+            level=level,
+            duration_minutes=duration_minutes,
             focus_areas=focus_areas,
+            resume_data=resume_data,
+            bank_questions=bank_questions,
         )
 
-        logger.info(
-            "plan_generation_completed",
-            session_id=session_id,
-            total_questions=sum(len(p.questions) for p in phases),
-        )
-
-        return plan
-
-    async def _select_questions_for_phase(
+    async def select_questions_for_phase(
         self,
         phase_alloc: PhaseAllocation,
         phase_minutes: int,
@@ -380,7 +321,7 @@ class PlanService:
 
         return questions
 
-    async def _generate_hints(self, question: QuestionData) -> list[dict]:
+    async def generate_hints(self, question: QuestionData) -> list[dict]:
         """Pre-generate 3-level hints for a coding question."""
         context = AnalysisContext(
             system_prompt=HINT_PRECOMPUTE_SYSTEM_PROMPT,

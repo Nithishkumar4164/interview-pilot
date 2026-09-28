@@ -215,7 +215,7 @@ load_session_data (DB: transcripts, analyses, hints, code snapshots, contradicti
 |---|---|---|
 | 0 | Commit the replay harness. Record golden baselines (**(rev 3)** against an input-sensitive `ScriptedProvider`, since the stock mock returns one string per task type and would pass even when the context sent to the LLM is wrong). Add deps. Wire up the checkpointer lifespan, strict serde, Alembic exclusion, OTel setup + LLM spans, `SessionPipeline` Protocol, idempotency-key migration | Golden files are committed. A trivial graph checkpoints to the dev DB and round-trips `EnhancedAnalysisResult` / `FactStore`. `AnalysisWorker` is reached only through the Protocol |
 | 1 | **ReportGraph**, deterministic single-call mode, per-attempt threads, thread cleanup | Report tests pass. A report resumes after a killed process. **Done** — see §9 |
-| 2 | **PlanGraph** with `Send` fan-out | Plan tests pass. SSE shows per-phase progress. Latency improves |
+| 2 | **PlanGraph** with `Send` fan-out | Plan tests pass. SSE shows per-phase progress. Latency improves. **Done except SSE progress** — see §10 |
 | 3 | **SessionGraph** utterances and question_change paths, **MemoryGraph**, `SessionIngress`, `EffectsSink`, behind `USE_LANGGRAPH_SESSION` | Replay parity, crash/resume, and latency tests pass. The factory switches to the new pipeline under the flag |
 | 4 | Move the code_snapshot path, `RuntimeHintGraph` and `CodeRatingGraph` in. `code_handler` switches over. `/state` adapter | Code-hint tests pass. The `code_handler` per-process dict and `SessionStateService` snapshot loop are gone |
 | 5 | Add `invoke_with_tools` to the LLM layer. Agentic routing on the hot path. Agentic report scoring with `synthesize` | Agentic scenario assertions pass. Manually compare reports from both modes on real sessions |
@@ -272,3 +272,19 @@ Decisions that differ from the draft plan:
 - **Cancellation is not failure.** When the task awaiting the graph is cancelled (shutdown), the report stays `pending` and resumable. LangGraph turns an exception raised *inside* a node, including `CancelledError`, into a regular error, so node code must never raise it on purpose.
 - **No extra retries yet.** Parity-first: the generate node keeps today's behavior, where a failed call after provider failover gives the fallback report. Node-level `RetryPolicy` for transient errors (§2.1.8) comes with the agentic scoring work in Phase 5.
 - Only reports that have a checkpoint are resumed. Reports left `pending` by the old code have none and are not touched.
+
+---
+
+## 10. Phase 2 notes (PlanGraph)
+
+Built as `calibrate → Send(select_questions)×phases → plan_hints → Send(generate_hints)×technical questions → assemble` in `src/graphs/plan_graph.py`. `PlanService.generate_plan` delegates to it, so `/api/plans/create` and every other caller use it.
+
+Verified:
+- **Parity:** goldens were recorded from the sequential implementation before the change, across 5 cases (1–3 phases, with and without the question bank, with and without resume context). The graph reproduces the plans exactly and makes the same LLM calls, compared as a multiset. A mutation that drops generated hints fails 4 of the 5 cases; the bank-only case makes no hint calls.
+- **Concurrency:** at most 3 LLM calls in flight for a 3-phase plan, and 2 when `plan_generation_max_concurrency=2`, measured by in-flight count rather than timing.
+- **Latency with a 1 s LLM:** a 3-phase plan dropped from 6.01 s (sequential, run from a worktree at `HEAD`) to 2.39 s. `POST /api/plans/create` over HTTP took 2.03 s.
+
+Decisions that differ from the draft plan:
+- **No checkpointer.** Plan generation belongs to one HTTP request, so a resumed run after a crash would have nobody to deliver the plan to.
+- **No SSE progress yet.** There is no plan-progress endpoint, and the frontend awaits the POST. Streaming needs a new endpoint plus UI work, and is a follow-up if 2 s turns out to feel slow.
+- **Error behavior unchanged.** A failed question or hint call still fails the plan request, as before. The "fall back to bank questions" idea stays for Phase 5, since the API doesn't currently pass bank questions at all.

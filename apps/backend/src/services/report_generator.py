@@ -172,16 +172,26 @@ class ReportGenerator:
         self._failover = failover_manager
 
     async def generate(self, input_data: ReportInput) -> GeneratedReport:
-        """Generate a complete interview report from session data."""
+        """Generate a complete interview report from session data.
 
-        # Build the context for LLM analysis
-        context = self._build_context(input_data)
+        Composes the public steps below; ReportGraph runs the same steps as
+        separately checkpointed nodes.
+        """
+        llm = await self.call_llm(input_data)
+        report = self.report_from_llm(llm, input_data)
+        return self.enrich(report, input_data)
 
+    async def call_llm(self, input_data: ReportInput) -> dict:
+        """One report-generation call.
+
+        Returns ``{"content", "parsed"}`` on success or ``{"error"}`` if the
+        call failed after provider failover; never raises.
+        """
         try:
             result = await self._failover.analyze(
                 AnalysisContext(
                     system_prompt=REPORT_SYSTEM_PROMPT,
-                    user_content=context,
+                    user_content=self._build_context(input_data),
                     task_type=TaskType.REPORT_GENERATION,
                 ),
                 LLMConfig(
@@ -191,28 +201,30 @@ class ReportGenerator:
                 ),
                 session_id=input_data.session_id,
             )
-
-            report = self._parse_report(
-                result.content,
-                result.parsed,
-                input_data,
-            )
-
+            return {"content": result.content, "parsed": result.parsed}
         except Exception as e:
             logger.error(
                 "report_generation_failed",
                 session_id=input_data.session_id,
                 error=str(e),
             )
-            # Return a minimal report
-            report = self._fallback_report(input_data)
+            return {"error": str(e)}
 
-        # Compute hint summary
+    def report_from_llm(self, llm: dict, input_data: ReportInput) -> GeneratedReport:
+        """Parse the LLM output, or build the minimal fallback report if the call failed."""
+        if "error" in llm:
+            return self._fallback_report(input_data)
+        try:
+            return self._parse_report(llm["content"], llm.get("parsed"), input_data)
+        except Exception as e:
+            # Same outcome as a failed call (the original single try covered both).
+            logger.error("report_parse_failed", session_id=input_data.session_id, error=str(e))
+            return self._fallback_report(input_data)
+
+    def enrich(self, report: GeneratedReport, input_data: ReportInput) -> GeneratedReport:
+        """Attach the deterministic parts: hint summary and annotated transcript."""
         report.hint_summary = self._compute_hint_summary(input_data)
-
-        # Build annotated transcript
         report.annotated_transcript = self._build_annotated_transcript(input_data)
-
         return report
 
     def _build_context(self, input_data: ReportInput) -> str:

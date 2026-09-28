@@ -23,8 +23,11 @@ from src.schemas.analysis import (
     InsightDimensions,
     RelevanceDimension,
 )
+from src.schemas.hint import HintResponseMetricsSchema
+from src.schemas.report import CriterionScoreSchema, KeyMomentSchema, Recommendation
 from src.services.contradiction_service import Contradiction
 from src.services.memory_service import FactStore, Utterance
+from src.services.report_generator import GeneratedReport, ReportInput
 
 CHECKPOINT_TYPES: tuple[type, ...] = (
     # analysis results
@@ -42,6 +45,13 @@ CHECKPOINT_TYPES: tuple[type, ...] = (
     FactStore,
     # contradictions
     Contradiction,
+    # report graph
+    ReportInput,
+    GeneratedReport,
+    CriterionScoreSchema,
+    KeyMomentSchema,
+    Recommendation,
+    HintResponseMetricsSchema,
 )
 
 

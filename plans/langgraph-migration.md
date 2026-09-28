@@ -214,7 +214,7 @@ load_session_data (DB: transcripts, analyses, hints, code snapshots, contradicti
 | # | Phase | Exit criteria |
 |---|---|---|
 | 0 | Commit the replay harness. Record golden baselines (**(rev 3)** against an input-sensitive `ScriptedProvider`, since the stock mock returns one string per task type and would pass even when the context sent to the LLM is wrong). Add deps. Wire up the checkpointer lifespan, strict serde, Alembic exclusion, OTel setup + LLM spans, `SessionPipeline` Protocol, idempotency-key migration | Golden files are committed. A trivial graph checkpoints to the dev DB and round-trips `EnhancedAnalysisResult` / `FactStore`. `AnalysisWorker` is reached only through the Protocol |
-| 1 | **ReportGraph**, deterministic single-call mode, per-attempt threads, thread cleanup | Report tests pass. A report resumes after a killed process |
+| 1 | **ReportGraph**, deterministic single-call mode, per-attempt threads, thread cleanup | Report tests pass. A report resumes after a killed process. **Done** — see §9 |
 | 2 | **PlanGraph** with `Send` fan-out | Plan tests pass. SSE shows per-phase progress. Latency improves |
 | 3 | **SessionGraph** utterances and question_change paths, **MemoryGraph**, `SessionIngress`, `EffectsSink`, behind `USE_LANGGRAPH_SESSION` | Replay parity, crash/resume, and latency tests pass. The factory switches to the new pipeline under the flag |
 | 4 | Move the code_snapshot path, `RuntimeHintGraph` and `CodeRatingGraph` in. `code_handler` switches over. `/state` adapter | Code-hint tests pass. The `code_handler` per-process dict and `SessionStateService` snapshot loop are gone |
@@ -255,3 +255,20 @@ Phases 1 and 2 are independent of each other. Phase 3 depends only on Phase 0.
 | `GET /state` fields (`plan_progress`, `active_question_id`, `code_snapshot_count`) had no home in graph state, and the response shape was unaddressed. | Added to state; shape adapter keeps the frontend unchanged. |
 | Dashboard catch-up from the DB could miss the last 2 s because persistence is batched. | Catch-up ring buffer stays in the transport layer. |
 | "Nodes are pure" contradicted the `persist` nodes in the report and plan graphs. | Stated exception: idempotent upsert-by-id persist nodes are allowed in request-scoped graphs. |
+
+---
+
+## 9. Phase 1 notes (ReportGraph, deterministic mode)
+
+Built as `load_inputs → generate → assemble → persist` in `src/graphs/report_graph.py`, run by `ReportRunner` on thread `report:{report_id}` with `durability="sync"`. `_generate_report_background` now delegates to it; startup calls `resume_pending()`.
+
+Verified:
+- **Parity:** from the same seeded session and scripted LLM, the graph persists the same `report_data` as `ReportService.load_inputs` + `ReportGenerator.generate`, except for `generated_at`.
+- **Real crash:** before the change, `SIGKILL` during generation left the report `pending` forever (reproduced on the live server). After it, a restart resumes and completes it, and the thread is deleted.
+- **In-test crash:** a child process is `SIGKILL`ed inside `persist`. The checkpoint on disk already holds `generate` and `assemble`, and resuming makes no second LLM call. Switching to `durability="exit"` fails this test, while a cancellation-based test cannot tell the two apart.
+
+Decisions that differ from the draft plan:
+- **Claims use a Postgres advisory lock, not a status value.** Production runs 2 gunicorn workers, so a request and a startup resume could run the same report at once. The UI renders nothing for an unknown report status, so a new `generating` state would make reports vanish from the list. The lock needs no schema change and is released automatically if the holder dies.
+- **Cancellation is not failure.** When the task awaiting the graph is cancelled (shutdown), the report stays `pending` and resumable. LangGraph turns an exception raised *inside* a node, including `CancelledError`, into a regular error, so node code must never raise it on purpose.
+- **No extra retries yet.** Parity-first: the generate node keeps today's behavior, where a failed call after provider failover gives the fallback report. Node-level `RetryPolicy` for transient errors (§2.1.8) comes with the agentic scoring work in Phase 5.
+- Only reports that have a checkpoint are resumed. Reports left `pending` by the old code have none and are not touched.

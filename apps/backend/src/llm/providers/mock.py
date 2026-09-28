@@ -1,9 +1,11 @@
+import asyncio
 import contextlib
 import json
 import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
+from src.config import settings
 from src.llm.interface import (
     AnalysisContext,
     ILLMProvider,
@@ -141,6 +143,8 @@ class MockProvider(ILLMProvider):
             raise ConnectionError("Mock provider is unhealthy")
 
         start = time.monotonic()
+        if settings.mock_llm_latency_ms > 0:
+            await asyncio.sleep(settings.mock_llm_latency_ms / 1000)
         content = MOCK_RESPONSES.get(context.task_type, '{"result": "mock"}')
         latency = (time.monotonic() - start) * 1000
 

@@ -12,13 +12,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.auth import get_request_user
+from src.api.authz import authorized_session, get_user_principal
 from src.dependencies import get_db
 from src.models.plan import InterviewPlan
 from src.models.report import Report
-from src.models.user import User
+from src.models.session import InterviewSession
 from src.repositories.report_repo import ReportRepository
 from src.repositories.session_repo import SessionRepository
+from src.services.access_control import Principal
 from src.utils.logging import get_logger
 
 logger = get_logger("api.history")
@@ -61,12 +62,12 @@ async def list_sessions(
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_request_user),
+    principal: Principal = Depends(get_user_principal),
 ) -> dict:
-    """List sessions for the current user with report/plan data."""
+    """List the caller's sessions (all sessions for admins) with report/plan data."""
     session_repo = SessionRepository(db)
     sessions, total = await session_repo.get_sessions_enriched(
-        user.id,
+        None if principal.is_admin else principal.user_id,
         status_filter=status_filter,
         limit=limit,
         offset=offset,
@@ -100,17 +101,10 @@ async def list_sessions(
 async def get_session_detail(
     session_id: str,
     db: AsyncSession = Depends(get_db),
+    session: InterviewSession = Depends(authorized_session),
 ) -> dict:
     """Get expanded detail for a session: plan, report summary, stats."""
-    sid = uuid.UUID(session_id)
-
-    session_repo = SessionRepository(db)
-    session = await session_repo.get_by_id(sid)
-    if session is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
+    sid = session.id
 
     # Plan data
     plan_result = await db.execute(
@@ -204,6 +198,7 @@ async def get_session_detail(
 async def get_session_report(
     session_id: str,
     db: AsyncSession = Depends(get_db),
+    _session: InterviewSession = Depends(authorized_session),
 ) -> dict:
     """Get the report for a completed session."""
     report_repo = ReportRepository(db)

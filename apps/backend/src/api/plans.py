@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.authz import authorized_plan, get_principal, require_session_access
 from src.dependencies import failover_manager, get_db
 from src.models.plan import InterviewPlan
 from src.repositories.plan_repo import PlanRepository
@@ -21,6 +22,7 @@ from src.schemas.plan import (
     SwapQuestionRequest,
 )
 from src.schemas.session import InterviewLevel
+from src.services.access_control import Principal
 from src.services.plan_service import PlanService, QuestionData
 
 router = APIRouter(prefix="/plans", tags=["plans"])
@@ -61,8 +63,10 @@ def _get_plan_service() -> PlanService:
 async def create_plan(
     request: CreatePlanFullRequest,
     db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(get_principal),
 ) -> InterviewPlanSchema:
     """Generate a new interview plan for a session."""
+    await require_session_access(request.session_id, principal, db)
     service = _get_plan_service()
     plan_repo = PlanRepository(db)
 
@@ -125,18 +129,13 @@ async def create_plan(
 @router.get("/{plan_id}", response_model=InterviewPlanSchema)
 async def get_plan(
     plan_id: str,
-    db: AsyncSession = Depends(get_db),
+    db_plan: InterviewPlan = Depends(authorized_plan),
 ) -> InterviewPlanSchema:
     """Get a plan by ID."""
-    plan_repo = PlanRepository(db)
-    db_plan = await plan_repo.get_by_id(uuid.UUID(plan_id))
+    return _plan_response(db_plan)
 
-    if db_plan is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Plan not found",
-        )
 
+def _plan_response(db_plan: InterviewPlan) -> InterviewPlanSchema:
     plan_data = db_plan.plan_data
     return InterviewPlanSchema(
         id=str(db_plan.id),
@@ -176,13 +175,10 @@ async def swap_question(
     plan_id: str,
     request: SwapQuestionRequest,
     db: AsyncSession = Depends(get_db),
+    db_plan: InterviewPlan = Depends(authorized_plan),
 ) -> InterviewPlanSchema:
     """Swap a question with one of its alternates."""
     plan_repo = PlanRepository(db)
-    db_plan = await plan_repo.get_by_id(uuid.UUID(plan_id))
-
-    if db_plan is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
 
     service = _get_plan_service()
     plan = PlanService.plan_from_dict(db_plan.plan_data)
@@ -196,7 +192,7 @@ async def swap_question(
     await plan_repo.update(db_plan)
     await db.commit()
 
-    return await get_plan(plan_id, db)
+    return _plan_response(db_plan)
 
 
 @router.patch("/{plan_id}/reorder", response_model=InterviewPlanSchema)
@@ -204,13 +200,10 @@ async def reorder_questions(
     plan_id: str,
     request: ReorderQuestionsRequest,
     db: AsyncSession = Depends(get_db),
+    db_plan: InterviewPlan = Depends(authorized_plan),
 ) -> InterviewPlanSchema:
     """Reorder questions within a phase."""
     plan_repo = PlanRepository(db)
-    db_plan = await plan_repo.get_by_id(uuid.UUID(plan_id))
-
-    if db_plan is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
 
     service = _get_plan_service()
     plan = PlanService.plan_from_dict(db_plan.plan_data)
@@ -224,7 +217,7 @@ async def reorder_questions(
     await plan_repo.update(db_plan)
     await db.commit()
 
-    return await get_plan(plan_id, db)
+    return _plan_response(db_plan)
 
 
 @router.patch("/{plan_id}/remove", response_model=InterviewPlanSchema)
@@ -232,13 +225,10 @@ async def remove_question(
     plan_id: str,
     request: RemoveQuestionRequest,
     db: AsyncSession = Depends(get_db),
+    db_plan: InterviewPlan = Depends(authorized_plan),
 ) -> InterviewPlanSchema:
     """Remove a question from a phase."""
     plan_repo = PlanRepository(db)
-    db_plan = await plan_repo.get_by_id(uuid.UUID(plan_id))
-
-    if db_plan is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
 
     service = _get_plan_service()
     plan = PlanService.plan_from_dict(db_plan.plan_data)
@@ -252,7 +242,7 @@ async def remove_question(
     await plan_repo.update(db_plan)
     await db.commit()
 
-    return await get_plan(plan_id, db)
+    return _plan_response(db_plan)
 
 
 @router.patch("/{plan_id}/add", response_model=InterviewPlanSchema)
@@ -260,13 +250,10 @@ async def add_question(
     plan_id: str,
     request: AddQuestionRequest,
     db: AsyncSession = Depends(get_db),
+    db_plan: InterviewPlan = Depends(authorized_plan),
 ) -> InterviewPlanSchema:
     """Add a question to a phase."""
     plan_repo = PlanRepository(db)
-    db_plan = await plan_repo.get_by_id(uuid.UUID(plan_id))
-
-    if db_plan is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
 
     service = _get_plan_service()
     plan = PlanService.plan_from_dict(db_plan.plan_data)
@@ -290,7 +277,7 @@ async def add_question(
     await plan_repo.update(db_plan)
     await db.commit()
 
-    return await get_plan(plan_id, db)
+    return _plan_response(db_plan)
 
 
 @router.post("/{plan_id}/regenerate-hints", response_model=InterviewPlanSchema)
@@ -298,13 +285,10 @@ async def regenerate_hints(
     plan_id: str,
     request: RegenerateHintsRequest,
     db: AsyncSession = Depends(get_db),
+    db_plan: InterviewPlan = Depends(authorized_plan),
 ) -> InterviewPlanSchema:
     """Regenerate hints for a specific question."""
     plan_repo = PlanRepository(db)
-    db_plan = await plan_repo.get_by_id(uuid.UUID(plan_id))
-
-    if db_plan is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
 
     service = _get_plan_service()
     plan = PlanService.plan_from_dict(db_plan.plan_data)
@@ -323,4 +307,4 @@ async def regenerate_hints(
     await plan_repo.update(db_plan)
     await db.commit()
 
-    return await get_plan(plan_id, db)
+    return _plan_response(db_plan)

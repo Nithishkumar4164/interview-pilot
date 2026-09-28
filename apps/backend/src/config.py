@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     # so local runs can exercise slow calls (e.g. crash during report generation).
     mock_llm_latency_ms: int = 0
 
+    # Upper bound on parallel LLM calls while generating one interview plan.
+    plan_generation_max_concurrency: int = 4
+
     # Storage
     s3_endpoint: str = "http://localhost:9000"
     s3_access_key: str = "minioadmin"

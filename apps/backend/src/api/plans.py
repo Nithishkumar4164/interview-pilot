@@ -301,7 +301,7 @@ async def regenerate_hints(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question index out of range")
 
     question = phase.questions[request.question_index]
-    question.hints = await service._generate_hints(question)
+    question.hints = await service.generate_hints(question)
 
     db_plan.plan_data = service.plan_to_dict(plan)
     await plan_repo.update(db_plan)

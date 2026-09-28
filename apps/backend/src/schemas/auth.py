@@ -1,16 +1,6 @@
 from pydantic import BaseModel
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-
-
-class TokenRefreshRequest(BaseModel):
-    refresh_token: str
-
-
 class UserResponse(BaseModel):
     id: str
     email: str
@@ -21,6 +11,24 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class GoogleAuthRequest(BaseModel):
+class GoogleStartResponse(BaseModel):
+    authorization_url: str
+
+
+class GoogleCallbackRequest(BaseModel):
     code: str
-    redirect_uri: str
+    state: str
+
+
+class AuthSessionResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: UserResponse
+    next: str = "/"
+
+
+class PairingTokenResponse(BaseModel):
+    session_id: str
+    pairing_token: str
+    expires_in: int

@@ -39,6 +39,12 @@
       "js": ["dist/content/code-scraper.js"]
     }
   ],
+  "externally_connectable": {
+    "matches": [
+      "http://localhost:5173/*",
+      "https://interviewpilot.duckdns.org/*"
+    ]
+  },
   "web_accessible_resources": [
     {
       "resources": ["audio/audio-processor.js"],

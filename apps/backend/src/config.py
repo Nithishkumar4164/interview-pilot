@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     # Deepgram
     deepgram_api_key: str = ""
 
+    # Mock LLM (used when no provider keys are set): simulated per-call latency,
+    # so local runs can exercise slow calls (e.g. crash during report generation).
+    mock_llm_latency_ms: int = 0
+
     # Storage
     s3_endpoint: str = "http://localhost:9000"
     s3_access_key: str = "minioadmin"

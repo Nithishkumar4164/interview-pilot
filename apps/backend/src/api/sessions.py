@@ -306,8 +306,6 @@ async def end_session(
     report_id = None
     try:
         from src.dependencies import (
-            async_session_factory,
-            failover_manager,
             get_session_state_service,
         )
         from src.models.report import Report
@@ -401,8 +399,6 @@ async def end_session(
                 report_id=report_id,
                 session_id=session_id,
                 snapshots=snapshots,
-                fm=failover_manager,
-                session_factory=async_session_factory,
             )
         )
 
@@ -423,73 +419,16 @@ async def _generate_report_background(
     report_id: str,
     session_id: str,
     snapshots: dict,
-    fm,
-    session_factory,
 ) -> None:
-    """Background task: generate report and update DB row.
+    """Generate and persist a report via ReportGraph.
 
-    Uses three distinct DB sessions — load inputs, release the connection,
-    run the LLM call unattached to any DB session, then open a fresh
-    session to persist the result. Prevents long-running LLM calls (which
-    can take minutes on provider failover) from holding a connection from
-    the pool.
+    The graph releases its DB connection before the LLM call, checkpoints each
+    step, and is resumed at startup if the process dies mid-run. Failures mark
+    the report failed; this never raises.
     """
-    import logging
+    from src.dependencies import get_report_runner
 
-    logger = logging.getLogger("api.sessions.background_report")
-
-    from src.repositories.report_repo import ReportRepository
-    from src.services.report_service import ReportService
-
-    report_service = ReportService(fm)
-
-    try:
-        # Phase 1 — load inputs from DB and release the connection.
-        async with session_factory() as db:
-            report_input = await report_service.load_inputs(
-                session_id=session_id,
-                snapshots=snapshots,
-                db=db,
-            )
-
-        # Phase 2 — LLM call with no DB session attached.
-        generated = await report_service.generate_from_inputs(report_input)
-
-        # Phase 3 — persist the result in a fresh session.
-        async with session_factory() as db:
-            report_repo = ReportRepository(db)
-            report = await report_repo.get_by_id(uuid.UUID(report_id))
-            if report:
-                report.report_data = {
-                    "scores": [s.model_dump() for s in generated.scores],
-                    "key_moments": [m.model_dump() for m in generated.key_moments],
-                    "strengths": generated.strengths,
-                    "areas_for_growth": generated.areas_for_growth,
-                    "level_comparison": generated.level_comparison,
-                    "hint_summary": generated.hint_summary,
-                    "annotated_transcript": generated.annotated_transcript,
-                    "generated_at": generated.generated_at,
-                }
-                report.recommendation = generated.recommendation.value
-                report.confidence_level = generated.confidence_level
-                report.is_final = True
-                report.status = "completed"
-                await report_repo.update(report)
-            await db.commit()
-            logger.info(f"Report {report_id} generation completed for session {session_id}")
-
-    except Exception as e:
-        logger.error(f"Background report generation failed for {report_id}: {e}")
-        try:
-            async with session_factory() as db:
-                report_repo = ReportRepository(db)
-                report = await report_repo.get_by_id(uuid.UUID(report_id))
-                if report:
-                    report.status = "failed"
-                    await report_repo.update(report)
-                await db.commit()
-        except Exception as inner_e:
-            logger.error(f"Failed to mark report as failed: {inner_e}")
+    await get_report_runner().run(report_id=report_id, session_id=session_id, snapshots=snapshots)
 
 
 @router.delete("/{session_id}")

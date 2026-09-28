@@ -6,6 +6,9 @@ of the app keeps using SQLAlchemy + asyncpg. Checkpoint tables are owned by
 ``CHECKPOINT_TABLES`` and ``alembic/env.py``.
 """
 
+import contextlib
+from collections.abc import AsyncIterator
+
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg import AsyncConnection
 from psycopg.rows import DictRow, dict_row
@@ -77,6 +80,28 @@ class Checkpointer:
         if self._saver is None:
             raise RuntimeError("Checkpointer is not open; call open() during app startup")
         return self._saver
+
+    @contextlib.asynccontextmanager
+    async def try_advisory_lock(self, key: str) -> AsyncIterator[bool]:
+        """Hold a session-level Postgres advisory lock for ``key`` if it is free.
+
+        Yields False (without waiting) when another holder has it. The lock
+        lives on a pooled connection held for the duration of the block, so
+        it is released automatically if this process dies — letting another
+        worker take over a crashed run.
+        """
+        if self._pool is None:
+            raise RuntimeError("Checkpointer is not open; call open() during app startup")
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute("SELECT pg_try_advisory_lock(hashtextextended(%s, 0)) AS locked", (key,))
+            ).fetchone()
+            locked = bool(row and row["locked"])
+            try:
+                yield locked
+            finally:
+                if locked:
+                    await conn.execute("SELECT pg_advisory_unlock(hashtextextended(%s, 0))", (key,))
 
     async def delete_threads(self, *thread_ids: str) -> None:
         for thread_id in thread_ids:

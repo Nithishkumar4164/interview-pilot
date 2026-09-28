@@ -96,3 +96,16 @@ def get_session_state_service():
     from src.main import session_state_service
 
     return session_state_service
+
+
+def get_report_runner():
+    """The process-wide ReportRunner (ReportGraph on the shared checkpointer)."""
+    global _report_runner
+    if _report_runner is None:
+        from src.graphs.report_graph import ReportRunner
+
+        _report_runner = ReportRunner(failover_manager, async_session_factory, checkpointer)
+    return _report_runner
+
+
+_report_runner = None

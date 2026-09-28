@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.authz import authorized_report, authorized_session, get_user_principal
-from src.dependencies import async_session_factory, failover_manager, get_db
+from src.dependencies import get_db
 from src.models.report import Report, ReportNote
 from src.models.session import InterviewSession
 from src.repositories.report_repo import ReportNoteRepository, ReportRepository
@@ -84,8 +84,6 @@ async def generate_report_for_session(
             report_id=report_id,
             session_id=session_id,
             snapshots=snapshots,
-            fm=failover_manager,
-            session_factory=async_session_factory,
         )
     )
 

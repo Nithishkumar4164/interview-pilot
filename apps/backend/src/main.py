@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -6,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.router import api_router
 from src.config import settings
-from src.dependencies import async_session_factory, checkpointer, health_monitor
+from src.dependencies import async_session_factory, checkpointer, get_report_runner, health_monitor
 from src.services.persistence_service import PersistenceService
 from src.services.session_state_service import SessionStateService
 from src.utils.logging import setup_logging
@@ -37,9 +38,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # LangGraph checkpointer (creates/migrates its own tables)
     await checkpointer.open(settings.database_url_sync)
 
+    # Finish any report whose generation was interrupted by a restart.
+    resume_task = asyncio.create_task(get_report_runner().resume_pending())
+
     yield
 
     # Shutdown
+    resume_task.cancel()
     await checkpointer.close()
     await persistence_service.stop()
     health_monitor.stop()

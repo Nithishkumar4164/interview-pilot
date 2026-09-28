@@ -17,6 +17,9 @@ def _kwargs(**overrides):
         "openai_api_key": "",
         "deepgram_api_key": "real-deepgram-key",
         "dev_mode": False,
+        "google_client_id": "client-id.apps.googleusercontent.com",
+        "google_client_secret": "client-secret",
+        "allowed_login_domains": "example.com",
     }
     base.update(overrides)
     return base
@@ -58,3 +61,25 @@ class TestProductionConfigValidation:
     def test_prod_rejects_missing_deepgram(self):
         with pytest.raises(RuntimeError, match="DEEPGRAM_API_KEY"):
             Settings(**_kwargs(deepgram_api_key=""))
+
+
+class TestLoginConfigValidation:
+    def test_prod_rejects_missing_google_credentials(self):
+        with pytest.raises(RuntimeError, match="GOOGLE_CLIENT_ID"):
+            Settings(**_kwargs(google_client_secret=""))
+
+    def test_prod_rejects_empty_login_allowlist(self):
+        with pytest.raises(RuntimeError, match="ALLOWED_LOGIN"):
+            Settings(**_kwargs(allowed_login_domains="", allowed_login_emails=""))
+
+    def test_prod_accepts_an_email_allowlist_alone(self):
+        Settings(**_kwargs(allowed_login_domains="", allowed_login_emails="a@x.com"))
+
+    def test_csv_settings_are_normalized(self):
+        s = Settings(**_kwargs(allowed_login_emails=" A@X.com, b@y.com ,", admin_emails="Boss@X.com"))
+        assert s.allowed_login_email_set == {"a@x.com", "b@y.com"}
+        assert s.admin_email_set == {"boss@x.com"}
+
+    def test_cookies_are_secure_outside_development(self):
+        assert Settings(**_kwargs()).secure_cookies is True
+        assert Settings(environment="development").secure_cookies is False

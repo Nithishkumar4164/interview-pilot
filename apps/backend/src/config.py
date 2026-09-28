@@ -24,6 +24,20 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:5173/auth/callback"
+    # OpenID provider endpoints. Default to Google; overridable so tests and
+    # local end-to-end runs can point at a stand-in provider.
+    oidc_issuer: str = "https://accounts.google.com"
+    oidc_authorization_url: str = "https://accounts.google.com/o/oauth2/v2/auth"
+    oidc_token_url: str = "https://oauth2.googleapis.com/token"
+    oidc_jwks_url: str = "https://www.googleapis.com/oauth2/v3/certs"
+    # Who may sign in (comma-separated). A login is allowed if its verified
+    # email is listed or its domain is. Required outside development.
+    allowed_login_emails: str = ""
+    allowed_login_domains: str = ""
+    # Users whose verified email is listed get role=admin (re-evaluated at each login).
+    admin_emails: str = ""
+    # Lifetime of the per-session token the dashboard hands to the extension.
+    pairing_token_expire_hours: int = 6
 
     # LLM Providers
     anthropic_api_key: str = ""
@@ -78,9 +92,38 @@ class Settings(BaseSettings):
             )
         if not self.deepgram_api_key:
             errors.append("INTERVIEW_PILOT_DEEPGRAM_API_KEY must be set in prod.")
+        if not self.google_client_id or not self.google_client_secret:
+            errors.append(
+                "INTERVIEW_PILOT_GOOGLE_CLIENT_ID and INTERVIEW_PILOT_GOOGLE_CLIENT_SECRET must be set in prod."
+            )
+        if not self.allowed_login_emails.strip() and not self.allowed_login_domains.strip():
+            errors.append(
+                "Set INTERVIEW_PILOT_ALLOWED_LOGIN_EMAILS and/or INTERVIEW_PILOT_ALLOWED_LOGIN_DOMAINS "
+                "in prod; otherwise any Google account could sign in."
+            )
         if errors:
             raise RuntimeError("Insecure production config: " + " | ".join(errors))
         return self
+
+    @staticmethod
+    def _csv(value: str) -> frozenset[str]:
+        return frozenset(v.strip().lower() for v in value.split(",") if v.strip())
+
+    @property
+    def allowed_login_email_set(self) -> frozenset[str]:
+        return self._csv(self.allowed_login_emails)
+
+    @property
+    def allowed_login_domain_set(self) -> frozenset[str]:
+        return self._csv(self.allowed_login_domains)
+
+    @property
+    def admin_email_set(self) -> frozenset[str]:
+        return self._csv(self.admin_emails)
+
+    @property
+    def secure_cookies(self) -> bool:
+        return self.environment != "development"
 
 
 settings = Settings()

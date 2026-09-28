@@ -12,16 +12,19 @@
 import { WSClient, createAudioFrame, type ConnectionState } from '../networking/ws-client';
 import { ChunkQueue, type QueuedChunk } from '../networking/chunk-queue';
 import { OfflineBuffer } from '../storage/offline-buffer';
+import { parsePairingToken, type Pairing } from '../auth/pairing';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
 interface SessionConfig {
-  sessionId: string;
+  pairing: Pairing;
   backendUrl: string;
 }
 
 interface ExtensionState {
   sessionId: string | null;
+  /** Session-scoped credential from the dashboard; sent as ?token= on both sockets. */
+  pairing: Pairing | null;
   backendUrl: string;
   frontendUrl: string;
   connectionState: ConnectionState;
@@ -46,6 +49,7 @@ let offscreenReady = false;
 
 const state: ExtensionState = {
   sessionId: null,
+  pairing: null,
   backendUrl: 'ws://localhost:8000',
   frontendUrl: 'http://localhost:5173',
   connectionState: 'disconnected',
@@ -98,20 +102,40 @@ chrome.storage.local.get(['backendUrl', 'frontendUrl'], (result) => {
   if (result.frontendUrl) state.frontendUrl = result.frontendUrl;
 });
 
+// The pairing token lives in session storage: it survives service-worker
+// eviction but not a browser restart, and is never written to disk.
+chrome.storage.session.get(['pairingToken'], (result) => {
+  const pairing = typeof result.pairingToken === 'string' ? parsePairingToken(result.pairingToken) : null;
+  if (pairing) {
+    state.pairing = pairing;
+    state.sessionId = pairing.sessionId;
+  }
+});
+
+function pairAndConnect(pairing: Pairing, backendUrl: string, frontendUrl: string | undefined): void {
+  if (frontendUrl) state.frontendUrl = frontendUrl;
+  connectWebSockets({ pairing, backendUrl });
+  chrome.storage.session.set({ pairingToken: pairing.token });
+  chrome.storage.local.set({ backendUrl, frontendUrl: state.frontendUrl });
+}
+
 // ── WebSocket Management ──────────────────────────────────────────────────
 
 function connectWebSockets(config: SessionConfig): void {
   disconnectWebSockets();
 
-  state.sessionId = config.sessionId;
+  state.pairing = config.pairing;
+  state.sessionId = config.pairing.sessionId;
   state.backendUrl = config.backendUrl;
+  const getAuthToken = () => state.pairing?.token ?? null;
 
   // Audio WebSocket
   audioWs = new WSClient(
     {
       baseUrl: config.backendUrl,
-      sessionId: config.sessionId,
+      sessionId: config.pairing.sessionId,
       endpoint: '/ws/audio',
+      getAuthToken,
     },
     {
       onStateChange: (wsState) => {
@@ -135,8 +159,9 @@ function connectWebSockets(config: SessionConfig): void {
   codeWs = new WSClient(
     {
       baseUrl: config.backendUrl,
-      sessionId: config.sessionId,
+      sessionId: config.pairing.sessionId,
       endpoint: '/ws/code',
+      getAuthToken,
     },
     {
       onStateChange: (wsState) => {
@@ -353,6 +378,28 @@ async function ensureOffscreen(): Promise<void> {
   });
 }
 
+// ── Pairing from the dashboard ────────────────────────────────────────────
+//
+// Only origins listed under externally_connectable in manifest.json can
+// reach this listener; Chrome enforces that before delivery. The dashboard
+// URL is taken from the verified sender origin, not from the message.
+
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+  if (message?.type !== 'pair' || !sender.origin) {
+    sendResponse({ ok: false, error: 'unsupported message' });
+    return false;
+  }
+  const pairing = parsePairingToken(String(message.pairingToken ?? ''));
+  if (!pairing) {
+    sendResponse({ ok: false, error: 'invalid or expired pairing token' });
+    return false;
+  }
+  const backendUrl = typeof message.backendUrl === 'string' ? message.backendUrl : state.backendUrl;
+  pairAndConnect(pairing, backendUrl, sender.origin);
+  sendResponse({ ok: true, sessionId: pairing.sessionId });
+  return false;
+});
+
 // ── Message Handler ───────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -378,22 +425,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
 
     case 'connect': {
-      const config: SessionConfig = message.config;
-      if (message.config.frontendUrl) {
-        state.frontendUrl = message.config.frontendUrl;
+      // From the popup: a pairing code pasted by the user.
+      const pairing = parsePairingToken(String(message.config?.pairingToken ?? ''));
+      if (!pairing) {
+        sendResponse({ status: 'error', error: 'That pairing code is invalid or has expired. Get a new one from the dashboard.' });
+        return true;
       }
-      connectWebSockets(config);
-      // Persist URLs for restoration on restart
-      chrome.storage.local.set({
-        backendUrl: config.backendUrl,
-        frontendUrl: state.frontendUrl,
-      });
-      sendResponse({ status: 'connecting' });
+      pairAndConnect(pairing, message.config.backendUrl, message.config.frontendUrl);
+      sendResponse({ status: 'connecting', sessionId: pairing.sessionId });
       return true;
     }
 
     case 'disconnect':
       disconnectWebSockets();
+      state.pairing = null;
+      state.sessionId = null;
+      chrome.storage.session.remove('pairingToken');
+      broadcastState();
       sendResponse({ status: 'disconnected' });
       return true;
 

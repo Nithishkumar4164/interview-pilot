@@ -40,7 +40,8 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function Popup() {
   const [state, setState] = useState<ExtensionState>(DEFAULT_STATE);
-  const [sessionId, setSessionId] = useState('');
+  const [pairingCode, setPairingCode] = useState('');
+  const [connectError, setConnectError] = useState<string | null>(null);
   const [backendUrl, setBackendUrl] = useState('ws://localhost:8000');
   const [frontendUrl, setFrontendUrl] = useState('http://localhost:5173');
 
@@ -49,7 +50,6 @@ export function Popup() {
     chrome.runtime.sendMessage({ type: 'get-state' }, (response) => {
       if (response) {
         setState(response);
-        if (response.sessionId) setSessionId(response.sessionId);
         if (response.backendUrl) setBackendUrl(response.backendUrl);
         if (response.frontendUrl) setFrontendUrl(response.frontendUrl);
       }
@@ -66,12 +66,22 @@ export function Popup() {
   }, []);
 
   const handleConnect = useCallback(() => {
-    if (!sessionId.trim()) return;
-    chrome.runtime.sendMessage({
-      type: 'connect',
-      config: { sessionId: sessionId.trim(), backendUrl, frontendUrl },
-    });
-  }, [sessionId, backendUrl, frontendUrl]);
+    if (!pairingCode.trim()) return;
+    setConnectError(null);
+    chrome.runtime.sendMessage(
+      {
+        type: 'connect',
+        config: { pairingToken: pairingCode.trim(), backendUrl, frontendUrl },
+      },
+      (response) => {
+        if (response?.status === 'error') {
+          setConnectError(response.error);
+        } else {
+          setPairingCode('');
+        }
+      },
+    );
+  }, [pairingCode, backendUrl, frontendUrl]);
 
   const handleDisconnect = useCallback(() => {
     chrome.runtime.sendMessage({ type: 'disconnect' });
@@ -137,14 +147,16 @@ export function Popup() {
       {/* Connection Config */}
       {state.connectionState === 'disconnected' && (
         <div style={styles.section}>
-          <label style={styles.label}>Session ID</label>
+          <label style={styles.label}>Pairing code</label>
           <input
-            type="text"
-            value={sessionId}
-            onChange={(e) => setSessionId(e.target.value)}
-            placeholder="Enter session ID"
+            type="password"
+            value={pairingCode}
+            onChange={(e) => setPairingCode(e.target.value)}
+            placeholder="From “Connect extension” in the dashboard"
+            autoComplete="off"
             style={styles.input}
           />
+          {connectError && <div style={styles.error}>{connectError}</div>}
           <label style={styles.label}>Backend URL</label>
           <input
             type="text"
@@ -161,11 +173,11 @@ export function Popup() {
           />
           <button
             onClick={handleConnect}
-            disabled={!sessionId.trim()}
+            disabled={!pairingCode.trim()}
             style={{
               ...styles.button,
               ...styles.buttonPrimary,
-              opacity: sessionId.trim() ? 1 : 0.5,
+              opacity: pairingCode.trim() ? 1 : 0.5,
             }}
           >
             Connect
@@ -256,6 +268,11 @@ export function Popup() {
 // ── Styles ────────────────────────────────────────────────────────────────
 
 const styles: Record<string, React.CSSProperties> = {
+  error: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginBottom: 8,
+  },
   container: {
     width: 320,
     padding: 16,

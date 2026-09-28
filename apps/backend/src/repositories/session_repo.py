@@ -26,7 +26,7 @@ class SessionRepository(BaseRepository[InterviewSession]):
 
     async def get_sessions_enriched(
         self,
-        user_id: uuid.UUID,
+        user_id: uuid.UUID | None,
         *,
         status_filter: str | None = None,
         limit: int = 50,
@@ -39,7 +39,9 @@ class SessionRepository(BaseRepository[InterviewSession]):
         every session just to slice it in Python — scans stay bounded as
         a user's history grows.
         """
-        base = select(InterviewSession).where(InterviewSession.user_id == user_id)
+        base = select(InterviewSession)
+        if user_id is not None:  # None = all users (admin view)
+            base = base.where(InterviewSession.user_id == user_id)
         if status_filter:
             base = base.where(InterviewSession.status == status_filter)
 

@@ -26,14 +26,15 @@ class HintEventRepository(BaseRepository[HintEvent]):
     async def update_acknowledgment(
         self,
         hint_id: uuid.UUID,
+        session_id: uuid.UUID,
         interviewer_used: bool,
         candidate_response_quality: str,
         time_to_respond_ms: int | None = None,
     ) -> bool:
-        """Update a hint event with acknowledgment data by exact ID."""
+        """Update a hint event with acknowledgment data by exact ID, within one session."""
         stmt = (
             update(HintEvent)
-            .where(HintEvent.id == hint_id)
+            .where(HintEvent.id == hint_id, HintEvent.session_id == session_id)
             .values(
                 interviewer_used=interviewer_used,
                 candidate_response_quality=candidate_response_quality,

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.models.report import Report, ReportNote
+from src.models.session import InterviewSession
 from src.repositories.base import BaseRepository
 
 
@@ -32,23 +33,34 @@ class ReportRepository(BaseRepository[Report]):
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def list_reports(self, limit: int = 20, offset: int = 0) -> list[Report]:
+    @staticmethod
+    def _owned_by(stmt, owner_id: uuid.UUID | None):
+        """Restrict to reports whose session belongs to owner_id (None = no restriction)."""
+        if owner_id is None:
+            return stmt
+        return stmt.join(InterviewSession, InterviewSession.id == Report.session_id).where(
+            InterviewSession.user_id == owner_id
+        )
+
+    async def list_reports(self, limit: int = 20, offset: int = 0, owner_id: uuid.UUID | None = None) -> list[Report]:
         """List reports ordered by creation date descending."""
-        stmt = select(Report).order_by(Report.created_at.desc()).limit(limit).offset(offset)
+        stmt = self._owned_by(select(Report), owner_id).order_by(Report.created_at.desc()).limit(limit).offset(offset)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    async def count_reports(self) -> int:
+    async def count_reports(self, owner_id: uuid.UUID | None = None) -> int:
         """Count total reports."""
-        stmt = select(func.count()).select_from(Report)
+        stmt = self._owned_by(select(func.count()).select_from(Report), owner_id)
         result = await self.db.execute(stmt)
         return result.scalar() or 0
 
-    async def get_multiple(self, report_ids: list[uuid.UUID]) -> list[Report]:
+    async def get_multiple(self, report_ids: list[uuid.UUID], owner_id: uuid.UUID | None = None) -> list[Report]:
         """Fetch multiple reports by ID."""
         if not report_ids:
             return []
-        stmt = select(Report).where(Report.id.in_(report_ids)).order_by(Report.created_at.desc())
+        stmt = (
+            self._owned_by(select(Report), owner_id).where(Report.id.in_(report_ids)).order_by(Report.created_at.desc())
+        )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 

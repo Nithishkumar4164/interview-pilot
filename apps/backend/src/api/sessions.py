@@ -13,16 +13,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.auth import get_request_user
+from src.api.authz import authorized_session, get_user_principal
 from src.dependencies import get_db
 from src.models.session import InterviewSession
-from src.models.user import User
 from src.repositories.session_repo import SessionRepository
+from src.schemas.auth import PairingTokenResponse
 from src.schemas.hint import AcknowledgeHintRequest, TriggerHintRequest
 from src.schemas.session import (
     CreateSessionRequest,
     SessionStatus,
 )
+from src.services.access_control import Principal
 from src.services.hint_service import HintService
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -45,12 +46,12 @@ class RegisterPlanHintsRequest(BaseModel):
 async def start_session(
     req: CreateSessionRequest,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_request_user),
+    principal: Principal = Depends(get_user_principal),
 ) -> dict:
     session_repo = SessionRepository(db)
 
     db_session = InterviewSession(
-        user_id=user.id,
+        user_id=principal.user_id,
         status=SessionStatus.PLANNING,
         level=req.level,
         duration_minutes=req.duration_minutes,
@@ -71,15 +72,8 @@ async def start_session(
 async def get_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
+    db_session: InterviewSession = Depends(authorized_session),
 ) -> dict:
-    session_repo = SessionRepository(db)
-    db_session = await session_repo.get_by_id(uuid.UUID(session_id))
-
-    if db_session is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
 
     return {
         "id": str(db_session.id),
@@ -101,20 +95,13 @@ async def get_session(
 async def get_session_state(
     session_id: str,
     db: AsyncSession = Depends(get_db),
+    db_session: InterviewSession = Depends(authorized_session),
 ) -> dict:
     """Get full session state for recovery after page reload.
 
     Returns session metadata, recent transcripts, analyses, hints,
     and plan data for restoring the frontend.
     """
-    session_repo = SessionRepository(db)
-    db_session = await session_repo.get_by_id(uuid.UUID(session_id))
-
-    if db_session is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
 
     # Compute elapsed time
     elapsed_ms = 0
@@ -234,16 +221,10 @@ async def get_session_state(
 async def go_live(
     session_id: str,
     db: AsyncSession = Depends(get_db),
+    db_session: InterviewSession = Depends(authorized_session),
 ) -> dict:
     """Transition session from PLANNING to LIVE."""
     session_repo = SessionRepository(db)
-    db_session = await session_repo.get_by_id(uuid.UUID(session_id))
-
-    if db_session is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
 
     if db_session.status not in (SessionStatus.PLANNING, SessionStatus.READY):
         raise HTTPException(
@@ -261,7 +242,11 @@ async def go_live(
 
 
 @router.post("/{session_id}/register-plan-hints")
-async def register_plan_hints(session_id: str, req: RegisterPlanHintsRequest) -> dict:
+async def register_plan_hints(
+    session_id: str,
+    req: RegisterPlanHintsRequest,
+    _session: InterviewSession = Depends(authorized_session),
+) -> dict:
     """Register all pre-computed hints from a plan into the session's HintService."""
     service = _get_or_create_hint_service(session_id)
     count = 0
@@ -289,15 +274,9 @@ async def register_plan_hints(session_id: str, req: RegisterPlanHintsRequest) ->
 async def pause_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
+    db_session: InterviewSession = Depends(authorized_session),
 ) -> dict:
     session_repo = SessionRepository(db)
-    db_session = await session_repo.get_by_id(uuid.UUID(session_id))
-
-    if db_session is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
 
     if db_session.status == SessionStatus.LIVE:
         db_session.status = SessionStatus.PAUSED
@@ -314,15 +293,9 @@ async def pause_session(
 async def end_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
+    db_session: InterviewSession = Depends(authorized_session),
 ) -> dict:
     session_repo = SessionRepository(db)
-    db_session = await session_repo.get_by_id(uuid.UUID(session_id))
-
-    if db_session is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
 
     now = datetime.now(UTC)
     db_session.status = SessionStatus.ENDED
@@ -523,16 +496,10 @@ async def _generate_report_background(
 async def delete_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
+    db_session: InterviewSession = Depends(authorized_session),
 ) -> dict:
     """Delete a session. Only allowed for planning-status sessions."""
     session_repo = SessionRepository(db)
-    db_session = await session_repo.get_by_id(uuid.UUID(session_id))
-
-    if db_session is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
 
     if db_session.status not in (SessionStatus.PLANNING, SessionStatus.READY):
         raise HTTPException(
@@ -547,7 +514,11 @@ async def delete_session(
 
 
 @router.post("/{session_id}/hints/next")
-async def trigger_next_hint(session_id: str, req: TriggerHintRequest) -> dict:
+async def trigger_next_hint(
+    session_id: str,
+    req: TriggerHintRequest,
+    _session: InterviewSession = Depends(authorized_session),
+) -> dict:
     """Get the next progressive hint for a question."""
     service = _get_or_create_hint_service(session_id)
 
@@ -589,6 +560,7 @@ async def acknowledge_hint(
     hint_id: str,
     req: AcknowledgeHintRequest,
     db: AsyncSession = Depends(get_db),
+    _session: InterviewSession = Depends(authorized_session),
 ) -> dict:
     """Acknowledge a hint with usage and response metrics.
 
@@ -637,6 +609,7 @@ async def acknowledge_hint(
             # latest-unacked lookup below.
             updated = await hint_repo.update_acknowledgment(
                 hint_id=uuid.UUID(hint_id),
+                session_id=uuid.UUID(session_id),
                 interviewer_used=req.interviewer_used,
                 candidate_response_quality=quality_str,
             )
@@ -659,3 +632,21 @@ async def acknowledge_hint(
         "acknowledged": True,
         "quality": req.candidate_response_quality,
     }
+
+
+@router.post("/{session_id}/pairing-token", response_model=PairingTokenResponse)
+async def create_pairing_token(
+    session_id: str,
+    principal: Principal = Depends(get_user_principal),
+    _session: InterviewSession = Depends(authorized_session),
+    db: AsyncSession = Depends(get_db),
+) -> PairingTokenResponse:
+    """Mint a credential for the Chrome extension that works only for this session."""
+    from src.config import settings
+    from src.services.auth_service import AuthService
+
+    return PairingTokenResponse(
+        session_id=session_id,
+        pairing_token=AuthService(db).create_pairing_token(str(principal.user_id), session_id),
+        expires_in=settings.pairing_token_expire_hours * 3600,
+    )

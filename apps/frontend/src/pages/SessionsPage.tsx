@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import type { SessionListItem } from '@/api/client';
 import { SessionDetail } from '@/components/sessions/SessionDetail';
+import { UserMenu } from '@/components/auth/UserMenu';
 
 const STATUS_FILTERS = ['all', 'planning', 'ready', 'live', 'paused', 'ended'] as const;
 
@@ -196,7 +197,8 @@ export function SessionsPage() {
               {sessions.length} session{sessions.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+            <UserMenu />
             <button className="btn btn--ghost" onClick={() => navigate('/reports')}>
               Reports
             </button>

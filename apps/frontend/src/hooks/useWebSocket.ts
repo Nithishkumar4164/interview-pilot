@@ -5,6 +5,7 @@
  * incoming messages to the appropriate stores.
  */
 import { useEffect, useRef, useCallback } from 'react';
+import { useAuthStore } from '@/stores/auth-store';
 import { DashboardWSClient, type WSMessage } from '@/api/websocket';
 import { useTranscriptStore } from '@/stores/transcript-store';
 import { useSpeakerStore } from '@/stores/speaker-store';
@@ -296,6 +297,8 @@ export function useWebSocket(sessionId: string | null) {
     console.log('[useWebSocket] Connecting for session:', sessionId);
     const client = new DashboardWSClient({
       sessionId,
+      getToken: () => useAuthStore.getState().getValidToken(),
+      onAuthRejected: () => useAuthStore.getState().recoverFromUnauthorized(),
       onOpen: () => {
         console.log('[useWebSocket] onOpen — session:', sessionId);
         setWSStatus('connected');

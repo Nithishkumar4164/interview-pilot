@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ConnectExtension } from '@/components/auth/ConnectExtension';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useTimer } from '@/hooks/useTimer';
 import { useSessionStore, getAllPlanQuestions } from '@/stores/session-store';
@@ -249,6 +250,10 @@ export function LiveSessionPage() {
     try {
       const result = await api.endSession(sessionId) as { report_id?: string };
       setStatus('ended');
+      if (isPanel) {
+        // The side panel's pairing token only covers this session; the report opens in the dashboard.
+        return;
+      }
       if (result?.report_id) {
         navigate(`/reports/${result.report_id}`);
       } else {
@@ -479,6 +484,8 @@ export function LiveSessionPage() {
           onToggleVideo={handleToggleVideo}
           videoActive={!!videoStream}
         />
+
+        {!isPanel && <ConnectExtension sessionId={sessionId} />}
 
         {/* Floating + fullscreen overlays render outside layout */}
         {videoStream && overlays.filter(o => o.mode !== 'docked').map(overlay => (

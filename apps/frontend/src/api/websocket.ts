@@ -39,7 +39,13 @@ interface WSClientOptions {
   onOpen?: () => void;
   onClose?: () => void;
   onError?: (error: Event) => void;
+  /** Credential for the ?token= query param, fetched fresh on every (re)connect. */
+  getToken?: () => Promise<string | null>;
+  /** Called when the server rejects the credential (close code 1008). */
+  onAuthRejected?: () => Promise<unknown>;
 }
+
+const WS_POLICY_VIOLATION = 1008;
 
 const DEFAULT_RECONNECT_MS = 1000;
 const MAX_RECONNECT_MS = 30000;
@@ -66,6 +72,8 @@ export class DashboardWSClient {
       onOpen: () => {},
       onClose: () => {},
       onError: () => {},
+      getToken: async () => null,
+      onAuthRejected: async () => undefined,
       ...options,
     };
     this.reconnectDelay = this.options.reconnectIntervalMs;
@@ -83,11 +91,24 @@ export class DashboardWSClient {
     if (this.ws?.readyState === WebSocket.OPEN) return;
 
     this._intentionalClose = false;
+    void this.open();
+  }
 
-    console.log('[WS] Connecting to', this.options.url);
+  private async open(): Promise<void> {
+    let token: string | null = null;
+    try {
+      token = await this.options.getToken();
+    } catch {
+      // fall through: connect without a token and let the server decide
+    }
+    if (this._intentionalClose) return;
+
+    const sep = this.options.url.includes('?') ? '&' : '?';
+    const url = token ? `${this.options.url}${sep}token=${encodeURIComponent(token)}` : this.options.url;
+    console.log('[WS] Connecting to', this.options.url); // never log the token
 
     try {
-      this.ws = new WebSocket(this.options.url);
+      this.ws = new WebSocket(url);
     } catch {
       this.scheduleReconnect();
       return;
@@ -108,9 +129,13 @@ export class DashboardWSClient {
       this.stopHeartbeat();
       this.options.onClose();
 
-      if (!this._intentionalClose) {
-        this.scheduleReconnect();
+      if (this._intentionalClose) return;
+      if (event.code === WS_POLICY_VIOLATION) {
+        // Credential rejected: refresh it before the next attempt.
+        void this.options.onAuthRejected().finally(() => this.scheduleReconnect());
+        return;
       }
+      this.scheduleReconnect();
     };
 
     this.ws.onerror = (event) => {

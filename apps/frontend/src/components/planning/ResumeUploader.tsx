@@ -1,5 +1,8 @@
 /**
  * Drag-and-drop resume uploader with SSE-based extraction status.
+ *
+ * The status stream is read with fetch (api.streamSSE) rather than
+ * EventSource, because EventSource can't send the Authorization header.
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { usePlanStore } from '@/stores/plan-store';
@@ -18,7 +21,7 @@ const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 export function ResumeUploader({ onUploadComplete }: ResumeUploaderProps) {
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const streamRef = useRef<AbortController | null>(null);
   const resume = usePlanStore((s) => s.resume);
   const setResumeUploading = usePlanStore((s) => s.setResumeUploading);
   const setResumeProcessing = usePlanStore((s) => s.setResumeProcessing);
@@ -26,10 +29,10 @@ export function ResumeUploader({ onUploadComplete }: ResumeUploaderProps) {
   const setResumeFailed = usePlanStore((s) => s.setResumeFailed);
   const clearResume = usePlanStore((s) => s.clearResume);
 
-  // Close EventSource on unmount
+  // Stop reading the status stream on unmount
   useEffect(() => {
     return () => {
-      eventSourceRef.current?.close();
+      streamRef.current?.abort();
     };
   }, []);
 
@@ -50,30 +53,35 @@ export function ResumeUploader({ onUploadComplete }: ResumeUploaderProps) {
         const uploadResult = await api.uploadResume(file);
         setResumeProcessing(uploadResult.reference_id);
 
-        // Close any previous SSE connection
-        eventSourceRef.current?.close();
+        // Stop any previous status stream
+        streamRef.current?.abort();
+        const controller = new AbortController();
+        streamRef.current = controller;
 
-        // Stream extraction status via SSE
-        const es = new EventSource(api.getExtractionStreamUrl(uploadResult.reference_id));
-        eventSourceRef.current = es;
-
-        es.addEventListener('completed', (e: MessageEvent) => {
-          const data = JSON.parse(e.data);
-          setResumeCompleted(data.structured_data);
-          onUploadComplete(uploadResult.reference_id, data.structured_data);
-          es.close();
+        let finished = false;
+        await api.streamSSE(
+          api.getExtractionStreamUrl(uploadResult.reference_id),
+          ({ event, data }) => {
+            if (event === 'completed') {
+              const payload = JSON.parse(data);
+              finished = true;
+              setResumeCompleted(payload.structured_data);
+              onUploadComplete(uploadResult.reference_id, payload.structured_data);
+              controller.abort();
+            } else if (event === 'error') {
+              const payload = JSON.parse(data);
+              finished = true;
+              setResumeFailed(payload.error || 'Extraction failed');
+              controller.abort();
+            }
+          },
+          controller.signal,
+        ).catch((err: unknown) => {
+          if (!finished && !controller.signal.aborted) throw err;
         });
-
-        es.addEventListener('error', (e: Event) => {
-          // SSE error can be a MessageEvent (server-sent) or a generic connection error
-          if (e instanceof MessageEvent) {
-            const data = JSON.parse(e.data);
-            setResumeFailed(data.error || 'Extraction failed');
-          } else {
-            setResumeFailed('Connection to server lost');
-          }
-          es.close();
-        });
+        if (!finished && !controller.signal.aborted) {
+          setResumeFailed('Connection to server lost');
+        }
       } catch (err) {
         setResumeFailed(err instanceof Error ? err.message : 'Upload failed');
       }

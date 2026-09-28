@@ -3,6 +3,7 @@
  *
  * All endpoints go through the Vite proxy (/api → backend:8000).
  */
+import { useAuthStore } from '@/stores/auth-store';
 
 export class APIError extends Error {
   constructor(
@@ -15,21 +16,79 @@ export class APIError extends Error {
   }
 }
 
+/**
+ * fetch with the caller's credential attached. On a 401 the access token is
+ * refreshed once (single-flight) and the request retried; if that fails the
+ * auth store moves to signed_out and the route guard sends the user to /login.
+ */
+export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const auth = useAuthStore.getState();
+  const send = (token: string | null) => {
+    const headers = new Headers(init.headers);
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return fetch(input, { ...init, headers });
+  };
+
+  const res = await send(await auth.getValidToken());
+  if (res.status !== 401) return res;
+  const fresh = await auth.recoverFromUnauthorized();
+  return fresh ? send(fresh) : res;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(path, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    ...options,
-  });
+  const headers = new Headers(options.headers);
+  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  const res = await authFetch(path, { ...options, headers });
 
   if (!res.ok) {
     const body = await res.text();
     throw new APIError(res.status, res.statusText, body);
   }
 
+  if (res.status === 204) return undefined as T;
   return res.json();
+}
+
+export interface SSEEvent {
+  event: string;
+  data: string;
+}
+
+/**
+ * Read a text/event-stream response with fetch (EventSource can't send an
+ * Authorization header). Resolves when the stream ends or ``signal`` aborts.
+ */
+export async function streamSSE(
+  path: string,
+  onEvent: (event: SSEEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await authFetch(path, { headers: { Accept: 'text/event-stream' }, signal });
+  if (!res.ok || !res.body) {
+    throw new APIError(res.status, res.statusText, res.body ? await res.text() : 'No stream');
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    // Events are separated by a blank line.
+    let boundary: RegExpExecArray | null;
+    while ((boundary = /\r?\n\r?\n/.exec(buffer)) !== null) {
+      const raw = buffer.slice(0, boundary.index);
+      buffer = buffer.slice(boundary.index + boundary[0].length);
+      let event = 'message';
+      const data: string[] = [];
+      for (const line of raw.split(/\r?\n/)) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+      }
+      if (data.length) onEvent({ event, data: data.join('\n') });
+    }
+  }
 }
 
 // ── Sessions ──────────────────────────────────────────────────────────
@@ -257,22 +316,24 @@ export interface UploadResponse {
 export async function uploadResume(file: File): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append('file', file);
-
-  const res = await fetch('/api/upload/resume', {
-    method: 'POST',
-    body: formData,
-    // Do NOT set Content-Type — browser sets multipart boundary
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new APIError(res.status, res.statusText, body);
-  }
-  return res.json();
+  // No Content-Type: the browser sets the multipart boundary.
+  return request<UploadResponse>('/api/upload/resume', { method: 'POST', body: formData });
 }
 
 export function getExtractionStreamUrl(referenceId: string): string {
   return `/api/upload/${referenceId}/stream`;
+}
+
+// ── Extension pairing ────────────────────────────────────────────────
+
+export interface PairingTokenResponse {
+  session_id: string;
+  pairing_token: string;
+  expires_in: number;
+}
+
+export async function createPairingToken(sessionId: string) {
+  return request<PairingTokenResponse>(`/api/sessions/${sessionId}/pairing-token`, { method: 'POST' });
 }
 
 // ── Plans ─────────────────────────────────────────────────────────────

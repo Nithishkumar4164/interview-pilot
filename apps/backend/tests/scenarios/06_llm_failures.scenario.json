@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "id": "06-llm-failures",
+    "description": "An utterance analysis fails (fallback also fails) and the end-of-session summary compression fails; the pipeline must degrade the same way.",
+    "tags": [
+      "errors",
+      "llm-failure"
+    ]
+  },
+  "events": [
+    {
+      "type": "question_change",
+      "question_text": "Explain how a hash map handles collisions.",
+      "question_index": 0,
+      "question_plan": {
+        "id": "q-hash",
+        "text": "Hash map collisions"
+      }
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "How does a hash map deal with two keys that hash to the same bucket?",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "You can chain entries in a list per bucket or use open addressing and probe for the next free slot. [scripted-fail:utterance_analysis]",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "With chaining, lookups degrade to linear time in the worst case if many keys collide in one bucket.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Java switches long chains to balanced trees to bound that at log n. [scripted-fail:summary]",
+      "channel": "microphone"
+    }
+  ]
+}

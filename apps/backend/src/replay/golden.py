@@ -5,6 +5,8 @@ observably responsible for under the scripted LLM:
   - dashboard broadcasts, in order;
   - request/response results (runtime hints, code ratings);
   - every LLM call's prompt, grouped by call site;
+  - every write queued for the database, in order;
+  - the session-state snapshot served by GET /api/sessions/{id}/state;
   - the final session state.
 
 Wall-clock and random values are masked. LLM calls are grouped by call site
@@ -19,7 +21,7 @@ from typing import Any
 
 from src.replay.runner import ReplayReport
 
-GOLDEN_VERSION = 1
+GOLDEN_VERSION = 2
 
 VOLATILE_KEYS = frozenset({"timestamp", "detected_at", "hint_id", "latency_ms"})
 MASK = "<volatile>"
@@ -51,6 +53,12 @@ def normalize(report: ReplayReport) -> dict:
                 "code_ratings": _mask(report.code_ratings),
                 "llm_calls_by_kind": dict(sorted(llm_calls_by_kind.items())),
                 "final_state": _mask(report.final_state),
+                # Idempotency keys are an implementation detail of the writer, not of what is written.
+                "persisted": [
+                    _mask({"type": w.event_type, **{k: v for k, v in w.fields.items() if k != "idempotency_key"}})
+                    for w in report.persisted
+                ],
+                "session_state": _mask(report.session_state),
             },
             default=str,
         )

@@ -39,21 +39,21 @@
           "behavioral_signal": {
             "flags": [],
             "justification": "scripted",
-            "score": "excellent",
+            "score": "weak",
             "signals_detected": []
           },
           "communication_quality": {
-            "clarity": "low",
-            "confidence": "low",
+            "clarity": "medium",
+            "confidence": "high",
             "justification": "scripted",
-            "score": "excellent",
-            "structure": "low"
+            "score": "weak",
+            "structure": "high"
           },
           "contextual_consistency": {
-            "consistent": true,
+            "consistent": false,
             "contradictions": [],
             "justification": "scripted",
-            "score": "adequate"
+            "score": "good"
           },
           "depth_completeness": {
             "justification": "scripted",
@@ -65,9 +65,9 @@
           },
           "hint_reception": {
             "acted_on_hint": true,
-            "incorporation_level": "none",
+            "incorporation_level": "full",
             "justification": "scripted",
-            "score": "good"
+            "score": "excellent"
           },
           "relevance": {
             "justification": "scripted",
@@ -75,13 +75,13 @@
             "score": "good"
           }
         },
-        "hint_signal": "nudge",
-        "insight": "scripted-insight-2062",
+        "hint_signal": "guide",
+        "insight": "scripted-insight-1292",
         "latency_ms": "<volatile>",
         "on_track": true,
         "provider": "scripted",
         "red_flags": [],
-        "suggestion_for_interviewer": "scripted-suggestion-062",
+        "suggestion_for_interviewer": "scripted-suggestion-292",
         "timestamp": "<volatile>"
       }
     },
@@ -100,7 +100,7 @@
     {
       "method": "send_hint",
       "payload": {
-        "signal": "nudge",
+        "signal": "guide",
         "timestamp": "<volatile>"
       }
     },
@@ -137,65 +137,61 @@
     {
       "method": "send_analysis",
       "payload": {
-        "answer_quality": 3,
+        "answer_quality": 4,
         "dimensions": {
           "behavioral_signal": {
             "flags": [],
             "justification": "scripted",
-            "score": "good",
-            "signals_detected": [
-              "structured_thinking"
-            ]
+            "score": "adequate",
+            "signals_detected": []
           },
           "communication_quality": {
             "clarity": "high",
-            "confidence": "medium",
+            "confidence": "low",
             "justification": "scripted",
             "score": "adequate",
-            "structure": "high"
+            "structure": "medium"
           },
           "contextual_consistency": {
-            "consistent": true,
+            "consistent": false,
             "contradictions": [],
             "justification": "scripted",
-            "score": "excellent"
+            "score": "good"
           },
           "depth_completeness": {
             "justification": "scripted",
             "key_points_covered": [
               "scripted-covered"
             ],
-            "key_points_missed": [
-              "scripted-missed"
-            ],
+            "key_points_missed": [],
             "score": "excellent"
           },
           "hint_reception": {
-            "acted_on_hint": false,
-            "incorporation_level": "full",
+            "acted_on_hint": true,
+            "incorporation_level": "none",
             "justification": "scripted",
-            "score": "adequate"
+            "score": "good"
           },
           "relevance": {
             "justification": "scripted",
             "on_topic": true,
-            "score": "weak"
+            "score": "poor"
           }
         },
-        "hint_signal": "nudge",
-        "insight": "scripted-insight-4247",
+        "hint_signal": "direct",
+        "insight": "scripted-insight-9008",
         "latency_ms": "<volatile>",
         "on_track": true,
         "provider": "scripted",
         "red_flags": [],
-        "suggestion_for_interviewer": "scripted-suggestion-247",
+        "suggestion_for_interviewer": "scripted-suggestion-008",
         "timestamp": "<volatile>"
       }
     },
     {
       "method": "send_hint",
       "payload": {
-        "signal": "nudge",
+        "signal": "direct",
         "timestamp": "<volatile>"
       }
     },
@@ -232,28 +228,26 @@
     {
       "method": "send_analysis",
       "payload": {
-        "answer_quality": 1,
+        "answer_quality": 4,
         "dimensions": {
           "behavioral_signal": {
-            "flags": [
-              "vagueness"
-            ],
+            "flags": [],
             "justification": "scripted",
-            "score": "adequate",
+            "score": "poor",
             "signals_detected": []
           },
           "communication_quality": {
-            "clarity": "high",
-            "confidence": "high",
+            "clarity": "low",
+            "confidence": "medium",
             "justification": "scripted",
-            "score": "poor",
-            "structure": "high"
+            "score": "adequate",
+            "structure": "low"
           },
           "contextual_consistency": {
             "consistent": true,
             "contradictions": [],
             "justification": "scripted",
-            "score": "good"
+            "score": "adequate"
           },
           "depth_completeness": {
             "justification": "scripted",
@@ -261,34 +255,34 @@
               "scripted-covered"
             ],
             "key_points_missed": [],
-            "score": "weak"
+            "score": "excellent"
           },
           "hint_reception": {
             "acted_on_hint": true,
-            "incorporation_level": "full",
+            "incorporation_level": "partial",
             "justification": "scripted",
-            "score": "adequate"
+            "score": "good"
           },
           "relevance": {
             "justification": "scripted",
             "on_topic": true,
-            "score": "excellent"
+            "score": "poor"
           }
         },
-        "hint_signal": "nudge",
-        "insight": "scripted-insight-7210",
+        "hint_signal": "direct",
+        "insight": "scripted-insight-8378",
         "latency_ms": "<volatile>",
-        "on_track": false,
+        "on_track": true,
         "provider": "scripted",
         "red_flags": [],
-        "suggestion_for_interviewer": "scripted-suggestion-210",
+        "suggestion_for_interviewer": "scripted-suggestion-378",
         "timestamp": "<volatile>"
       }
     },
     {
       "method": "send_hint",
       "payload": {
-        "signal": "nudge",
+        "signal": "direct",
         "timestamp": "<volatile>"
       }
     }
@@ -298,7 +292,7 @@
     "analyses_run": 3,
     "analysis": {
       "analysis_count": 3,
-      "average_quality": 3.0,
+      "average_quality": 3.6666666666666665,
       "current_question": "Tell me about your experience operating Kafka in production.",
       "recent_analyses": [
         {
@@ -307,14 +301,116 @@
             "behavioral_signal": {
               "flags": [],
               "justification": "scripted",
-              "score": "excellent",
+              "score": "weak",
+              "signals_detected": []
+            },
+            "communication_quality": {
+              "clarity": "medium",
+              "confidence": "high",
+              "justification": "scripted",
+              "score": "weak",
+              "structure": "high"
+            },
+            "contextual_consistency": {
+              "consistent": false,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "good"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [],
+              "score": "good"
+            },
+            "hint_reception": {
+              "acted_on_hint": true,
+              "incorporation_level": "full",
+              "justification": "scripted",
+              "score": "excellent"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "good"
+            }
+          },
+          "hint_signal": "guide",
+          "insight": "scripted-insight-1292",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-292",
+          "timestamp": "<volatile>"
+        },
+        {
+          "answer_quality": 4,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "adequate",
+              "signals_detected": []
+            },
+            "communication_quality": {
+              "clarity": "high",
+              "confidence": "low",
+              "justification": "scripted",
+              "score": "adequate",
+              "structure": "medium"
+            },
+            "contextual_consistency": {
+              "consistent": false,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "good"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [],
+              "score": "excellent"
+            },
+            "hint_reception": {
+              "acted_on_hint": true,
+              "incorporation_level": "none",
+              "justification": "scripted",
+              "score": "good"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "poor"
+            }
+          },
+          "hint_signal": "direct",
+          "insight": "scripted-insight-9008",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-008",
+          "timestamp": "<volatile>"
+        },
+        {
+          "answer_quality": 4,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "poor",
               "signals_detected": []
             },
             "communication_quality": {
               "clarity": "low",
-              "confidence": "low",
+              "confidence": "medium",
               "justification": "scripted",
-              "score": "excellent",
+              "score": "adequate",
               "structure": "low"
             },
             "contextual_consistency": {
@@ -329,135 +425,27 @@
                 "scripted-covered"
               ],
               "key_points_missed": [],
-              "score": "good"
+              "score": "excellent"
             },
             "hint_reception": {
               "acted_on_hint": true,
-              "incorporation_level": "none",
+              "incorporation_level": "partial",
               "justification": "scripted",
               "score": "good"
             },
             "relevance": {
               "justification": "scripted",
               "on_topic": true,
-              "score": "good"
+              "score": "poor"
             }
           },
-          "hint_signal": "nudge",
-          "insight": "scripted-insight-2062",
+          "hint_signal": "direct",
+          "insight": "scripted-insight-8378",
           "latency_ms": "<volatile>",
           "on_track": true,
           "provider": "scripted",
           "red_flags": [],
-          "suggestion_for_interviewer": "scripted-suggestion-062",
-          "timestamp": "<volatile>"
-        },
-        {
-          "answer_quality": 3,
-          "dimensions": {
-            "behavioral_signal": {
-              "flags": [],
-              "justification": "scripted",
-              "score": "good",
-              "signals_detected": [
-                "structured_thinking"
-              ]
-            },
-            "communication_quality": {
-              "clarity": "high",
-              "confidence": "medium",
-              "justification": "scripted",
-              "score": "adequate",
-              "structure": "high"
-            },
-            "contextual_consistency": {
-              "consistent": true,
-              "contradictions": [],
-              "justification": "scripted",
-              "score": "excellent"
-            },
-            "depth_completeness": {
-              "justification": "scripted",
-              "key_points_covered": [
-                "scripted-covered"
-              ],
-              "key_points_missed": [
-                "scripted-missed"
-              ],
-              "score": "excellent"
-            },
-            "hint_reception": {
-              "acted_on_hint": false,
-              "incorporation_level": "full",
-              "justification": "scripted",
-              "score": "adequate"
-            },
-            "relevance": {
-              "justification": "scripted",
-              "on_topic": true,
-              "score": "weak"
-            }
-          },
-          "hint_signal": "nudge",
-          "insight": "scripted-insight-4247",
-          "latency_ms": "<volatile>",
-          "on_track": true,
-          "provider": "scripted",
-          "red_flags": [],
-          "suggestion_for_interviewer": "scripted-suggestion-247",
-          "timestamp": "<volatile>"
-        },
-        {
-          "answer_quality": 1,
-          "dimensions": {
-            "behavioral_signal": {
-              "flags": [
-                "vagueness"
-              ],
-              "justification": "scripted",
-              "score": "adequate",
-              "signals_detected": []
-            },
-            "communication_quality": {
-              "clarity": "high",
-              "confidence": "high",
-              "justification": "scripted",
-              "score": "poor",
-              "structure": "high"
-            },
-            "contextual_consistency": {
-              "consistent": true,
-              "contradictions": [],
-              "justification": "scripted",
-              "score": "good"
-            },
-            "depth_completeness": {
-              "justification": "scripted",
-              "key_points_covered": [
-                "scripted-covered"
-              ],
-              "key_points_missed": [],
-              "score": "weak"
-            },
-            "hint_reception": {
-              "acted_on_hint": true,
-              "incorporation_level": "full",
-              "justification": "scripted",
-              "score": "adequate"
-            },
-            "relevance": {
-              "justification": "scripted",
-              "on_topic": true,
-              "score": "excellent"
-            }
-          },
-          "hint_signal": "nudge",
-          "insight": "scripted-insight-7210",
-          "latency_ms": "<volatile>",
-          "on_track": false,
-          "provider": "scripted",
-          "red_flags": [],
-          "suggestion_for_interviewer": "scripted-suggestion-210",
+          "suggestion_for_interviewer": "scripted-suggestion-378",
           "timestamp": "<volatile>"
         }
       ],
@@ -530,7 +518,7 @@
     },
     "session_id": "03-contradiction-resume-vs-response"
   },
-  "golden_version": 1,
+  "golden_version": 2,
   "hint_responses": [],
   "llm_calls_by_kind": {
     "contradiction": [
@@ -586,7 +574,7 @@
         "system_prompt_sha": "7d9acd39b017",
         "task_type": "real_time_analysis",
         "temperature": 0.3,
-        "user_content": "## Current Question\nTell me about your experience operating Kafka in production.\n\n## Key Facts\nExperience: I have around five years of hands-on Kafka experience.; I led the streaming platform at my last company and we processed over a billion events per day across many topics.\n\n## Recent Conversation\n[interviewer]: How long have you worked with Kafka?\n[candidate]: I have around five years of hands-on Kafka experience. I led the streaming platform at my last company and we processed over a billion events per day across many topics.\n\n## Expected Answer Outline\nOptimal approaches: Discusses partition strategy, replication, consumer groups, retention with concrete numbers\nCommon pitfalls: Vague claims without operational specifics; Confuses partitions with replicas\n\n## Latest Utterance\n[candidate]: I have around five years of hands-on Kafka experience. I led the streaming platform at my last company and we processed over a billion events per day across many topics."
+        "user_content": "## Current Question\nTell me about your experience operating Kafka in production.\n\n## Key Facts\n(No facts extracted yet)\n\n## Recent Conversation\n[interviewer]: How long have you worked with Kafka?\n[candidate]: I have around five years of hands-on Kafka experience. I led the streaming platform at my last company and we processed over a billion events per day across many topics.\n\n## Expected Answer Outline\nOptimal approaches: Discusses partition strategy, replication, consumer groups, retention with concrete numbers\nCommon pitfalls: Vague claims without operational specifics; Confuses partitions with replicas\n\n## Latest Utterance\n[candidate]: I have around five years of hands-on Kafka experience. I led the streaming platform at my last company and we processed over a billion events per day across many topics."
       },
       {
         "max_tokens": 600,
@@ -594,7 +582,7 @@
         "system_prompt_sha": "7d9acd39b017",
         "task_type": "real_time_analysis",
         "temperature": 0.3,
-        "user_content": "## Current Question\nTell me about your experience operating Kafka in production.\n\n## Key Facts\nExperience: I have around five years of hands-on Kafka experience.; I led the streaming platform at my last company and we processed over a billion events per day across many topics.\nTechnical positions: I think a partition is basically the same as a replica.\n\n## Recent Conversation\n[interviewer]: How long have you worked with Kafka?\n[candidate]: I have around five years of hands-on Kafka experience. I led the streaming platform at my last company and we processed over a billion events per day across many topics.\n[interviewer]: Great. Walk me through how you'd think about partition count for a high-throughput topic.\n[candidate]: Honestly partitions are something the ops team usually handled. I think a partition is basically the same as a replica. You add more of them to make the topic bigger. I've never had to set that myself.\n\n## Expected Answer Outline\nOptimal approaches: Discusses partition strategy, replication, consumer groups, retention with concrete numbers\nCommon pitfalls: Vague claims without operational specifics; Confuses partitions with replicas\n\n## Latest Utterance\n[candidate]: Honestly partitions are something the ops team usually handled. I think a partition is basically the same as a replica. You add more of them to make the topic bigger. I've never had to set that myself."
+        "user_content": "## Current Question\nTell me about your experience operating Kafka in production.\n\n## Key Facts\nExperience: I have around five years of hands-on Kafka experience.; I led the streaming platform at my last company and we processed over a billion events per day across many topics.\n\n## Recent Conversation\n[interviewer]: How long have you worked with Kafka?\n[candidate]: I have around five years of hands-on Kafka experience. I led the streaming platform at my last company and we processed over a billion events per day across many topics.\n[interviewer]: Great. Walk me through how you'd think about partition count for a high-throughput topic.\n[candidate]: Honestly partitions are something the ops team usually handled. I think a partition is basically the same as a replica. You add more of them to make the topic bigger. I've never had to set that myself.\n\n## Expected Answer Outline\nOptimal approaches: Discusses partition strategy, replication, consumer groups, retention with concrete numbers\nCommon pitfalls: Vague claims without operational specifics; Confuses partitions with replicas\n\n## Latest Utterance\n[candidate]: Honestly partitions are something the ops team usually handled. I think a partition is basically the same as a replica. You add more of them to make the topic bigger. I've never had to set that myself."
       },
       {
         "max_tokens": 600,
@@ -602,9 +590,262 @@
         "system_prompt_sha": "7d9acd39b017",
         "task_type": "real_time_analysis",
         "temperature": 0.3,
-        "user_content": "## Current Question\nTell me about your experience operating Kafka in production.\n\n## Key Facts\nExperience: I have around five years of hands-on Kafka experience.; I led the streaming platform at my last company and we processed over a billion events per day across many topics.\nTechnical positions: I think a partition is basically the same as a replica.; I think we just restarted the consumers when something went wrong.\n\n## Recent Conversation\n[interviewer]: How long have you worked with Kafka?\n[candidate]: I have around five years of hands-on Kafka experience. I led the streaming platform at my last company and we processed over a billion events per day across many topics.\n[interviewer]: Great. Walk me through how you'd think about partition count for a high-throughput topic.\n[candidate]: Honestly partitions are something the ops team usually handled. I think a partition is basically the same as a replica. You add more of them to make the topic bigger. I've never had to set that myself.\n[interviewer]: Can you describe a time you had to debug a consumer-group rebalance issue?\n[candidate]: Rebalances, hmm. I don't remember the specifics. I think we just restarted the consumers when something went wrong. It wasn't really my area.\n\n## Expected Answer Outline\nOptimal approaches: Discusses partition strategy, replication, consumer groups, retention with concrete numbers\nCommon pitfalls: Vague claims without operational specifics; Confuses partitions with replicas\n\n## Latest Utterance\n[candidate]: Rebalances, hmm. I don't remember the specifics. I think we just restarted the consumers when something went wrong. It wasn't really my area."
+        "user_content": "## Current Question\nTell me about your experience operating Kafka in production.\n\n## Key Facts\nExperience: I have around five years of hands-on Kafka experience.; I led the streaming platform at my last company and we processed over a billion events per day across many topics.\nTechnical positions: I think a partition is basically the same as a replica.\n\n## Recent Conversation\n[interviewer]: How long have you worked with Kafka?\n[candidate]: I have around five years of hands-on Kafka experience. I led the streaming platform at my last company and we processed over a billion events per day across many topics.\n[interviewer]: Great. Walk me through how you'd think about partition count for a high-throughput topic.\n[candidate]: Honestly partitions are something the ops team usually handled. I think a partition is basically the same as a replica. You add more of them to make the topic bigger. I've never had to set that myself.\n[interviewer]: Can you describe a time you had to debug a consumer-group rebalance issue?\n[candidate]: Rebalances, hmm. I don't remember the specifics. I think we just restarted the consumers when something went wrong. It wasn't really my area.\n\n## Expected Answer Outline\nOptimal approaches: Discusses partition strategy, replication, consumer groups, retention with concrete numbers\nCommon pitfalls: Vague claims without operational specifics; Confuses partitions with replicas\n\n## Latest Utterance\n[candidate]: Rebalances, hmm. I don't remember the specifics. I think we just restarted the consumers when something went wrong. It wasn't really my area."
       }
     ]
   },
-  "scenario_id": "03-contradiction-resume-vs-response"
+  "persisted": [
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "How long have you worked with Kafka?",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "I have around five years of hands-on Kafka experience. I led the streaming platform at my last company and we processed over a billion events per day across many topics.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 3,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "weak",
+          "signals_detected": []
+        },
+        "communication_quality": {
+          "clarity": "medium",
+          "confidence": "high",
+          "justification": "scripted",
+          "score": "weak",
+          "structure": "high"
+        },
+        "contextual_consistency": {
+          "consistent": false,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "good"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [],
+          "score": "good"
+        },
+        "hint_reception": {
+          "acted_on_hint": true,
+          "incorporation_level": "full",
+          "justification": "scripted",
+          "score": "excellent"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "good"
+        }
+      },
+      "hint_signal": "guide",
+      "insight": "scripted-insight-1292",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-292",
+      "type": "analysis"
+    },
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "Great. Walk me through how you'd think about partition count for a high-throughput topic.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Honestly partitions are something the ops team usually handled. I think a partition is basically the same as a replica. You add more of them to make the topic bigger. I've never had to set that myself.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 4,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "adequate",
+          "signals_detected": []
+        },
+        "communication_quality": {
+          "clarity": "high",
+          "confidence": "low",
+          "justification": "scripted",
+          "score": "adequate",
+          "structure": "medium"
+        },
+        "contextual_consistency": {
+          "consistent": false,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "good"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [],
+          "score": "excellent"
+        },
+        "hint_reception": {
+          "acted_on_hint": true,
+          "incorporation_level": "none",
+          "justification": "scripted",
+          "score": "good"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "poor"
+        }
+      },
+      "hint_signal": "direct",
+      "insight": "scripted-insight-9008",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-008",
+      "type": "analysis"
+    },
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "Can you describe a time you had to debug a consumer-group rebalance issue?",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Rebalances, hmm. I don't remember the specifics. I think we just restarted the consumers when something went wrong. It wasn't really my area.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 4,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "poor",
+          "signals_detected": []
+        },
+        "communication_quality": {
+          "clarity": "low",
+          "confidence": "medium",
+          "justification": "scripted",
+          "score": "adequate",
+          "structure": "low"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "adequate"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [],
+          "score": "excellent"
+        },
+        "hint_reception": {
+          "acted_on_hint": true,
+          "incorporation_level": "partial",
+          "justification": "scripted",
+          "score": "good"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "poor"
+        }
+      },
+      "hint_signal": "direct",
+      "insight": "scripted-insight-8378",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-378",
+      "type": "analysis"
+    }
+  ],
+  "scenario_id": "03-contradiction-resume-vs-response",
+  "session_state": {
+    "active_question_id": "q-kafka-experience",
+    "analysis_count": 3,
+    "code_snapshot_count": 0,
+    "coverage_tracker": {},
+    "facts": {
+      "behavioral_signals": [],
+      "claimed_experience": [
+        "I have around five years of hands-on Kafka experience.",
+        "I led the streaming platform at my last company and we processed over a billion events per day across many topics."
+      ],
+      "hint_interactions": [],
+      "key_numbers": [],
+      "technical_positions": [
+        "I think a partition is basically the same as a replica.",
+        "I think we just restarted the consumers when something went wrong."
+      ]
+    },
+    "hint_history": [],
+    "last_transcript_timestamp": null,
+    "plan_progress": {
+      "current_phase_index": 0,
+      "current_question_index": 0
+    },
+    "rolling_summary": "",
+    "schema_version": 1,
+    "scores": {
+      "problem_solving": 3.7
+    },
+    "session_id": "03-contradiction-resume-vs-response",
+    "transcript_count": 6
+  }
 }

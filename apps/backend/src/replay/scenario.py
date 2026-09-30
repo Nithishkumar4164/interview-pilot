@@ -55,6 +55,14 @@ class HintAckEvent(BaseModel):
     delay_ms: int = 0
 
 
+class ActiveHintEvent(BaseModel):
+    """The interviewer revealed a hint (REST hint endpoint -> ``set_active_hint``)."""
+
+    type: Literal["active_hint"] = "active_hint"
+    text: str
+    delay_ms: int = 0
+
+
 class CodeSnapshotEvent(BaseModel):
     type: Literal["code_snapshot"] = "code_snapshot"
     code: str
@@ -64,7 +72,7 @@ class CodeSnapshotEvent(BaseModel):
 
 
 ScenarioEvent = Annotated[
-    TranscriptEvent | QuestionChangeEvent | HintRequestEvent | HintAckEvent | CodeSnapshotEvent,
+    TranscriptEvent | QuestionChangeEvent | HintRequestEvent | HintAckEvent | ActiveHintEvent | CodeSnapshotEvent,
     Field(discriminator="type"),
 ]
 

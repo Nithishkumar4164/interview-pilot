@@ -1,0 +1,242 @@
+{
+  "meta": {
+    "id": "04-long-interview-memory",
+    "description": "A 30-utterance interview across two questions: triggers summary compression mid-session, compresses the leftover buffer on a question change, carries a long interviewer utterance, an active hint, hint ack and regeneration, and a real contradiction between two candidate statements.",
+    "tags": [
+      "memory",
+      "compression",
+      "question-change",
+      "contradiction",
+      "hints"
+    ]
+  },
+  "events": [
+    {
+      "type": "question_change",
+      "question_text": "Tell me about running Kafka in production.",
+      "question_index": 0,
+      "question_plan": {
+        "id": "q-kafka",
+        "text": "Kafka in production",
+        "optimal_approaches": [
+          "partition by key for ordering",
+          "size partitions from target throughput"
+        ],
+        "common_pitfalls": [
+          "confusing partitions with replicas"
+        ]
+      }
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Let's start with your background. In your last role you were on the data platform team, and I'd like to hear about the systems you owned, the scale they ran at, and what went wrong.",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Sure. I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "How big was that deployment?",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Around forty brokers and roughly two thousand partitions, handling about three hundred thousand messages per second at peak.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "And who owned partition planning?",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "I did most of it. I think partition count should come from the target throughput divided by what a single consumer can handle.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Okay.",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "We also used keys for ordering, so all events for one account landed on the same partition.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "What happens when you add partitions to an existing topic?",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "The key to partition mapping changes, so ordering per key breaks for a while unless you migrate carefully.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Good. How did you monitor consumer lag?",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "We exported lag per consumer group to Prometheus and alerted when it grew for more than five minutes.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Did you ever lose data?",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Once, when a producer was configured with acks set to one and a broker died before replication finished.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "How did you fix it?",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "We moved every producer to acks all with min insync replicas of two, and added an idempotent producer config.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Nice.",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Honestly I'm not familiar with the transactional API, we never needed it for our pipelines.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "That's fine.",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "I led the migration from the old cluster to the new one, which took about three months end to end.",
+      "channel": "microphone"
+    },
+    {
+      "type": "active_hint",
+      "text": "Think about what happens to in-flight messages during a cluster migration."
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "During the migration we mirrored topics with MirrorMaker and cut consumers over one group at a time.",
+      "channel": "microphone"
+    },
+    {
+      "type": "hint_request",
+      "question_id": "q-kafka",
+      "preferred_directness": "moderate"
+    },
+    {
+      "type": "hint_ack",
+      "hint_id": "h-1",
+      "question_id": "q-kafka",
+      "quality": "partial"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Actually I've never used Kafka Connect or MirrorMaker myself, another team ran that part.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Let's move on to a coding question.",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Sounds good, I'm ready for the next one whenever you are.",
+      "channel": "microphone"
+    },
+    {
+      "type": "question_change",
+      "question_text": "Design an LRU cache with O(1) get and put.",
+      "question_index": 1,
+      "question_plan": {
+        "id": "q-lru",
+        "text": "Design an LRU cache",
+        "optimal_approaches": [
+          {
+            "name": "hash_map_plus_doubly_linked_list",
+            "expected_complexity": {
+              "time": "O(1)",
+              "space": "O(n)"
+            }
+          }
+        ],
+        "brute_force_approach": "scan a list for the least recently used key",
+        "common_pitfalls": [
+          "forgetting to move a key to the front on get"
+        ]
+      }
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Implement get and put for an LRU cache with a fixed capacity, both in constant time.",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "On get I move the node to the head, and on put I insert at the head and evict from the tail when over capacity.",
+      "channel": "microphone"
+    },
+    {
+      "type": "hint_request",
+      "question_id": "q-lru",
+      "regenerate": true,
+      "regeneration_reason": "too_direct"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Edge cases are updating an existing key, which should also move it to the front, and capacity zero.",
+      "channel": "microphone"
+    }
+  ]
+}

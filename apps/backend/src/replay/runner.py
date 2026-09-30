@@ -1,8 +1,9 @@
-"""Replay scenario fixtures through a real AnalysisWorker, headlessly."""
+"""Replay scenario fixtures through a real session pipeline, headlessly."""
 
 import asyncio
 import contextlib
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -12,8 +13,9 @@ from src.llm.factory import ProviderFactory
 from src.llm.failover import FailoverManager
 from src.llm.health import HealthMonitor
 from src.llm.interface import TaskType
-from src.replay.collector import CapturedEvent, EventCollector
+from src.replay.collector import CapturedEvent, EventCollector, PersistedWrite
 from src.replay.scenario import (
+    ActiveHintEvent,
     CodeSnapshotEvent,
     HintAckEvent,
     HintRequestEvent,
@@ -21,11 +23,28 @@ from src.replay.scenario import (
     Scenario,
     TranscriptEvent,
 )
-from src.replay.scripted_provider import LLMCallRecorder, ScriptedProvider, recording
+from src.replay.scripted_provider import LLMCallRecorder, ScriptedProvider, behavior, recording
 from src.schemas.transcript import TranscriptEventSchema
-from src.workers.analysis_worker import AnalysisWorker
+from src.workers.analysis_worker import MIN_ANALYSIS_INTERVAL_S, AnalysisWorker
+from src.workers.session_pipeline import SessionPipeline
 
 LLMMode = Literal["mock", "scripted", "real"]
+
+# (session_id, failover_manager, min_analysis_interval_s) -> pipeline
+PipelineFactory = Callable[[str, FailoverManager, float], SessionPipeline]
+
+# Scripted-LLM latency per call site. Calls issued together finish in this
+# order, as they tend to against a real provider: a fact extraction started
+# alongside an utterance analysis completes first; a summary compression
+# outlasts the analysis it was triggered next to.
+REPLAY_LATENCY_MS: dict[str, float] = {
+    "fact_extraction": 10,
+    "contradiction": 10,
+    "hint": 20,
+    "code_rating": 20,
+    "utterance_analysis": 30,
+    "summary": 60,
+}
 
 # Replay timestamps are derived from this epoch plus each event's delay_ms,
 # so recorded outputs don't depend on wall-clock time.
@@ -69,6 +88,10 @@ def _real_failover_manager() -> FailoverManager:
     return failover_manager
 
 
+def analysis_worker_factory(session_id: str, fm: FailoverManager, min_interval_s: float) -> SessionPipeline:
+    return AnalysisWorker(session_id, fm, get_speaker_snapshot=lambda: {}, min_analysis_interval_s=min_interval_s)
+
+
 @dataclass
 class ReplaySummary:
     transcripts: int = 0
@@ -90,6 +113,8 @@ class ReplayReport:
     code_ratings: list[dict] = field(default_factory=list)
     llm_calls: list[dict] = field(default_factory=list)
     final_state: dict = field(default_factory=dict)
+    persisted: list[PersistedWrite] = field(default_factory=list)
+    session_state: dict = field(default_factory=dict)
     error: str | None = None
 
     def to_dict(self) -> dict:
@@ -112,12 +137,19 @@ class ReplayReport:
             "code_ratings": self.code_ratings,
             "llm_calls": self.llm_calls,
             "final_state": self.final_state,
+            "persisted": [asdict(w) for w in self.persisted],
+            "session_state": self.session_state,
             "error": self.error,
         }
 
 
 class ReplayRunner:
-    """Replays a Scenario through a real AnalysisWorker.
+    """Replays a Scenario through a session pipeline (AnalysisWorker by default).
+
+    Compressed-time mode (the default) analyzes every qualifying utterance
+    (rate-limit interval 0) and waits for the pipeline to go idle after each
+    event, as if the scenario's utterances were seconds apart. ``real_time``
+    honors ``delay_ms`` and the production rate limit instead.
 
     Usage:
         runner = ReplayRunner(scenario, llm_mode="mock")
@@ -129,10 +161,18 @@ class ReplayRunner:
         scenario: Scenario,
         llm_mode: LLMMode = "mock",
         real_time: bool = False,
+        pipeline_factory: PipelineFactory = analysis_worker_factory,
+        latency_ms: dict[str, float] | None = None,
+        min_analysis_interval_s: float | None = None,
     ) -> None:
         self.scenario = scenario
         self.llm_mode = llm_mode
         self.real_time = real_time
+        self.pipeline_factory = pipeline_factory
+        self.latency_ms = REPLAY_LATENCY_MS if latency_ms is None else latency_ms
+        if min_analysis_interval_s is None:
+            min_analysis_interval_s = MIN_ANALYSIS_INTERVAL_S if real_time else 0.0
+        self.min_analysis_interval_s = min_analysis_interval_s
 
     async def run(self) -> ReplayReport:
         started_at = datetime.now(UTC).isoformat()
@@ -145,21 +185,22 @@ class ReplayRunner:
         else:
             fm = _real_failover_manager()
 
-        worker = AnalysisWorker(
-            session_id=session_id,
-            failover_manager=fm,
-            get_speaker_snapshot=lambda: {},
-        )
-
         hint_responses: list[dict] = []
         code_ratings: list[dict] = []
         error: str | None = None
         recorder = LLMCallRecorder()
         scenario_clock = REPLAY_EPOCH
+        latency = behavior(self.latency_ms) if self.llm_mode == "scripted" else contextlib.nullcontext()
 
-        with recording(recorder):
+        with recording(recorder), latency:
             async with EventCollector() as collector:
-                error = await self._drive(worker, session_id, scenario_clock, hint_responses, code_ratings)
+                worker = self.pipeline_factory(session_id, fm, self.min_analysis_interval_s)
+                try:
+                    error = await self._drive(worker, session_id, scenario_clock, hint_responses, code_ratings)
+                    final_state = worker.to_dict()
+                finally:
+                    worker.stop()
+                    await worker.wait_idle()
 
         summary = _summarize(collector.events)
         finished_at = datetime.now(UTC).isoformat()
@@ -174,13 +215,15 @@ class ReplayRunner:
             hint_responses=hint_responses,
             code_ratings=code_ratings,
             llm_calls=recorder.to_list(),
-            final_state=worker.to_dict(),
+            final_state=final_state,
+            persisted=list(collector.persisted),
+            session_state=_session_state(collector, session_id),
             error=error,
         )
 
     async def _drive(
         self,
-        worker: AnalysisWorker,
+        worker: SessionPipeline,
         session_id: str,
         scenario_clock: datetime,
         hint_responses: list[dict],
@@ -200,11 +243,6 @@ class ReplayRunner:
                         ev.question_index,
                     )
                 elif isinstance(ev, TranscriptEvent):
-                    # Reset rate limiter so every utterance is analyzed
-                    # in compressed-time mode (matches the pattern used
-                    # by tests/test_memory_analysis.py).
-                    if not self.real_time:
-                        worker._last_analysis_time = 0
                     transcript = TranscriptEventSchema(
                         id=str(uuid.uuid5(_REPLAY_ID_NAMESPACE, f"{session_id}:{index}")),
                         session_id=session_id,
@@ -216,12 +254,6 @@ class ReplayRunner:
                         channel=ev.channel,
                     )
                     await worker.on_transcript_event(transcript)
-                    # Wait for fire-and-forget analysis task to finish
-                    # so its dashboard events are collected before the
-                    # next event runs.
-                    if worker._bg_analysis_task is not None:
-                        with contextlib.suppress(Exception):
-                            await asyncio.wait_for(worker._bg_analysis_task, timeout=30.0)
                 elif isinstance(ev, HintRequestEvent):
                     payload = ev.model_dump(exclude={"type", "delay_ms"}, exclude_none=True)
                     response = await worker.handle_runtime_hint_request(payload)
@@ -243,11 +275,25 @@ class ReplayRunner:
                         }
                     )
                     code_ratings.append(rating)
+                elif isinstance(ev, ActiveHintEvent):
+                    worker.set_active_hint(ev.text)
+
+                if not self.real_time:
+                    await asyncio.wait_for(worker.wait_idle(), timeout=30.0)
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
         finally:
             await worker.drain()
         return error
+
+
+def _session_state(collector: EventCollector, session_id: str) -> dict:
+    state = collector.session_state.get_state_or_none(session_id)
+    if state is None:
+        return {}
+    snapshot = state.to_snapshot()
+    snapshot.pop("captured_at")
+    return snapshot
 
 
 def _summarize(events: list[CapturedEvent]) -> ReplaySummary:

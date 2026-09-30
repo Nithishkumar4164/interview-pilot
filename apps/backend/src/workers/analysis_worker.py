@@ -46,6 +46,7 @@ class AnalysisWorker:
         session_id: str,
         failover_manager: FailoverManager,
         get_speaker_snapshot: Callable[[], dict] | None = None,
+        min_analysis_interval_s: float = MIN_ANALYSIS_INTERVAL_S,
     ) -> None:
         self.session_id = session_id
         self._failover = failover_manager
@@ -58,6 +59,7 @@ class AnalysisWorker:
         self.runtime_hints = RuntimeHintService(session_id, failover_manager, self.memory)
 
         # Rate limiting
+        self._min_analysis_interval_s = min_analysis_interval_s
         self._last_analysis_time: float = 0
         self._pending_analysis: bool = False
         self._pending_snapshot: tuple[str, str] | None = None
@@ -160,14 +162,14 @@ class AnalysisWorker:
         now = asyncio.get_event_loop().time()
         elapsed = now - self._last_analysis_time
 
-        if elapsed < MIN_ANALYSIS_INTERVAL_S:
+        if elapsed < self._min_analysis_interval_s:
             # Always refresh the pending snapshot so the deferred analysis
             # picks up the latest utterance, not the first one that opened
             # the pending window.
             self._pending_snapshot = (speaker, text)
             if not self._pending_analysis:
                 self._pending_analysis = True
-                delay = MIN_ANALYSIS_INTERVAL_S - elapsed
+                delay = self._min_analysis_interval_s - elapsed
                 asyncio.get_event_loop().call_later(
                     delay,
                     lambda: asyncio.ensure_future(self._run_pending_analysis()),
@@ -389,6 +391,21 @@ class AnalysisWorker:
         if self._bg_analysis_task and not self._bg_analysis_task.done():
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(self._bg_analysis_task, timeout=10.0)
+
+    async def wait_idle(self) -> None:
+        """Wait until no analysis, deferred analysis or memory task is in flight (replay/tests)."""
+        while True:
+            pending = [
+                t
+                for t in (self._bg_analysis_task, self.memory._bg_compress_task, *self.memory._bg_extract_tasks)
+                if t is not None and not t.done()
+            ]
+            if pending:
+                await asyncio.wait(pending)
+            elif self._pending_analysis or self._analysis_lock.locked():
+                await asyncio.sleep(0.01)
+            else:
+                return
 
     def stop(self) -> None:
         """Stop the worker."""

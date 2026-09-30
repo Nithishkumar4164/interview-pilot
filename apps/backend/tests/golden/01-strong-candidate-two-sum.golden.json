@@ -61,22 +61,22 @@
     {
       "method": "send_analysis",
       "payload": {
-        "answer_quality": 1,
+        "answer_quality": 5,
         "dimensions": {
           "behavioral_signal": {
-            "flags": [
-              "vagueness"
-            ],
+            "flags": [],
             "justification": "scripted",
             "score": "adequate",
-            "signals_detected": []
+            "signals_detected": [
+              "structured_thinking"
+            ]
           },
           "communication_quality": {
-            "clarity": "high",
-            "confidence": "high",
+            "clarity": "medium",
+            "confidence": "low",
             "justification": "scripted",
             "score": "excellent",
-            "structure": "high"
+            "structure": "low"
           },
           "contextual_consistency": {
             "consistent": true,
@@ -89,28 +89,41 @@
             "key_points_covered": [
               "scripted-covered"
             ],
-            "key_points_missed": [],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
             "score": "good"
           },
           "hint_reception": {
-            "acted_on_hint": true,
-            "incorporation_level": "none",
+            "acted_on_hint": false,
+            "incorporation_level": "partial",
             "justification": "scripted",
             "score": "excellent"
           },
           "relevance": {
             "justification": "scripted",
             "on_topic": true,
-            "score": "excellent"
+            "score": "poor"
           }
         },
         "hint_signal": "guide",
-        "insight": "scripted-insight-8490",
+        "insight": "scripted-insight-4409",
         "latency_ms": "<volatile>",
-        "on_track": false,
+        "on_track": true,
         "provider": "scripted",
-        "red_flags": [],
-        "suggestion_for_interviewer": "scripted-suggestion-490",
+        "red_flags": [
+          "scripted-red-flag-16"
+        ],
+        "suggestion_for_interviewer": "scripted-suggestion-409",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_red_flag",
+      "payload": {
+        "flags": [
+          "scripted-red-flag-16"
+        ],
         "timestamp": "<volatile>"
       }
     },
@@ -233,26 +246,26 @@
     "analyses_run": 2,
     "analysis": {
       "analysis_count": 2,
-      "average_quality": 4.0,
+      "average_quality": 4.5,
       "current_question": "Given an array of integers nums and an integer target, return the indices of the two numbers that add up to target. Each input has exactly one solution; you may not use the same element twice.",
       "recent_analyses": [
         {
-          "answer_quality": 1,
+          "answer_quality": 5,
           "dimensions": {
             "behavioral_signal": {
-              "flags": [
-                "vagueness"
-              ],
+              "flags": [],
               "justification": "scripted",
               "score": "adequate",
-              "signals_detected": []
+              "signals_detected": [
+                "structured_thinking"
+              ]
             },
             "communication_quality": {
-              "clarity": "high",
-              "confidence": "high",
+              "clarity": "medium",
+              "confidence": "low",
               "justification": "scripted",
               "score": "excellent",
-              "structure": "high"
+              "structure": "low"
             },
             "contextual_consistency": {
               "consistent": true,
@@ -265,28 +278,32 @@
               "key_points_covered": [
                 "scripted-covered"
               ],
-              "key_points_missed": [],
+              "key_points_missed": [
+                "scripted-missed"
+              ],
               "score": "good"
             },
             "hint_reception": {
-              "acted_on_hint": true,
-              "incorporation_level": "none",
+              "acted_on_hint": false,
+              "incorporation_level": "partial",
               "justification": "scripted",
               "score": "excellent"
             },
             "relevance": {
               "justification": "scripted",
               "on_topic": true,
-              "score": "excellent"
+              "score": "poor"
             }
           },
           "hint_signal": "guide",
-          "insight": "scripted-insight-8490",
+          "insight": "scripted-insight-4409",
           "latency_ms": "<volatile>",
-          "on_track": false,
+          "on_track": true,
           "provider": "scripted",
-          "red_flags": [],
-          "suggestion_for_interviewer": "scripted-suggestion-490",
+          "red_flags": [
+            "scripted-red-flag-16"
+          ],
+          "suggestion_for_interviewer": "scripted-suggestion-409",
           "timestamp": "<volatile>"
         },
         {
@@ -392,7 +409,7 @@
     },
     "session_id": "01-strong-candidate-two-sum"
   },
-  "golden_version": 1,
+  "golden_version": 2,
   "hint_responses": [],
   "llm_calls_by_kind": {
     "code_rating": [
@@ -440,7 +457,7 @@
         "system_prompt_sha": "7d9acd39b017",
         "task_type": "real_time_analysis",
         "temperature": 0.3,
-        "user_content": "## Current Question\nGiven an array of integers nums and an integer target, return the indices of the two numbers that add up to target. Each input has exactly one solution; you may not use the same element twice.\n\n## Key Facts\nTechnical positions: I would use a hash map.\n\n## Recent Conversation\n[interviewer]: Walk me through how you'd approach this problem.\n[candidate]: I would use a hash map. As I iterate through the array, for each element I check whether the complement, which is target minus the current value, has already been stored. If it has, I return the two indices. Otherwise I store the current value mapped to its index. That gives O of n time and O of n space.\n\n## Expected Answer Outline\nOptimal approaches: {'name': 'hash_map', 'expected_complexity': {'time': 'O(n)', 'space': 'O(n)'}, 'key_steps': ['Iterate the array once', 'For each element, check if (target - element) is in the map', 'Otherwise store element -> index']}\nCommon pitfalls: Using the same index twice; Returning values instead of indices\nBrute-force approach: {'name': 'nested_loops', 'expected_complexity': {'time': 'O(n^2)', 'space': 'O(1)'}, 'key_steps': ['For each i, for each j > i, check if nums[i]+nums[j]==target']}\n\n## Latest Utterance\n[candidate]: I would use a hash map. As I iterate through the array, for each element I check whether the complement, which is target minus the current value, has already been stored. If it has, I return the two indices. Otherwise I store the current value mapped to its index. That gives O of n time and O of n space."
+        "user_content": "## Current Question\nGiven an array of integers nums and an integer target, return the indices of the two numbers that add up to target. Each input has exactly one solution; you may not use the same element twice.\n\n## Key Facts\n(No facts extracted yet)\n\n## Recent Conversation\n[interviewer]: Walk me through how you'd approach this problem.\n[candidate]: I would use a hash map. As I iterate through the array, for each element I check whether the complement, which is target minus the current value, has already been stored. If it has, I return the two indices. Otherwise I store the current value mapped to its index. That gives O of n time and O of n space.\n\n## Expected Answer Outline\nOptimal approaches: {'name': 'hash_map', 'expected_complexity': {'time': 'O(n)', 'space': 'O(n)'}, 'key_steps': ['Iterate the array once', 'For each element, check if (target - element) is in the map', 'Otherwise store element -> index']}\nCommon pitfalls: Using the same index twice; Returning values instead of indices\nBrute-force approach: {'name': 'nested_loops', 'expected_complexity': {'time': 'O(n^2)', 'space': 'O(1)'}, 'key_steps': ['For each i, for each j > i, check if nums[i]+nums[j]==target']}\n\n## Latest Utterance\n[candidate]: I would use a hash map. As I iterate through the array, for each element I check whether the complement, which is target minus the current value, has already been stored. If it has, I return the two indices. Otherwise I store the current value mapped to its index. That gives O of n time and O of n space."
       },
       {
         "max_tokens": 600,
@@ -452,5 +469,193 @@
       }
     ]
   },
-  "scenario_id": "01-strong-candidate-two-sum"
+  "persisted": [
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "Walk me through how you'd approach this problem.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "I would use a hash map. As I iterate through the array, for each element I check whether the complement, which is target minus the current value, has already been stored. If it has, I return the two indices. Otherwise I store the current value mapped to its index. That gives O of n time and O of n space.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 5,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "adequate",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "medium",
+          "confidence": "low",
+          "justification": "scripted",
+          "score": "excellent",
+          "structure": "low"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "good"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "good"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "partial",
+          "justification": "scripted",
+          "score": "excellent"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "poor"
+        }
+      },
+      "hint_signal": "guide",
+      "insight": "scripted-insight-4409",
+      "on_track": true,
+      "red_flags": [
+        "scripted-red-flag-16"
+      ],
+      "suggestion": "scripted-suggestion-409",
+      "type": "analysis"
+    },
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "Sounds reasonable. What's the worst-case complexity, and can you handle duplicates?",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Worst case is O of n because we visit every element once and each hash map operation is O of one on average. Duplicates work because I check the map before inserting, so if target is twice the current value and we've already seen it, we get a valid pair.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 4,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "weak",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "low",
+          "confidence": "high",
+          "justification": "scripted",
+          "score": "adequate",
+          "structure": "medium"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "good"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "poor"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "none",
+          "justification": "scripted",
+          "score": "adequate"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "good"
+        }
+      },
+      "hint_signal": "direct",
+      "insight": "scripted-insight-5453",
+      "on_track": true,
+      "red_flags": [
+        "scripted-red-flag-4"
+      ],
+      "suggestion": "scripted-suggestion-453",
+      "type": "analysis"
+    }
+  ],
+  "scenario_id": "01-strong-candidate-two-sum",
+  "session_state": {
+    "active_question_id": "q-two-sum",
+    "analysis_count": 2,
+    "code_snapshot_count": 0,
+    "coverage_tracker": {},
+    "facts": {
+      "behavioral_signals": [],
+      "claimed_experience": [],
+      "hint_interactions": [],
+      "key_numbers": [],
+      "technical_positions": [
+        "I would use a hash map."
+      ]
+    },
+    "hint_history": [],
+    "last_transcript_timestamp": null,
+    "plan_progress": {
+      "current_phase_index": 0,
+      "current_question_index": 0
+    },
+    "rolling_summary": "",
+    "schema_version": 1,
+    "scores": {
+      "problem_solving": 4.5
+    },
+    "session_id": "01-strong-candidate-two-sum",
+    "transcript_count": 4
+  }
 }

@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 import json
 from collections import deque
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 from src.llm.failover import FailoverManager
@@ -122,6 +123,115 @@ class FactStore:
         )
 
 
+# ── Pure helpers (shared by MemoryService and the LangGraph session graph) ──
+
+
+def should_extract_facts(text: str, is_final: bool) -> bool:
+    """Tier 3 runs on substantial final utterances only."""
+    return is_final and len(text.split()) > 20
+
+
+def format_utterances(utterances: Iterable[Utterance]) -> str:
+    return "\n".join(f"[{u.speaker}]: {u.text}" for u in utterances)
+
+
+def assemble_context(
+    working_memory: Iterable[Utterance],
+    rolling_summary: str,
+    fact_store: FactStore,
+    question_text: str = "",
+    hint_text: str = "",
+) -> str:
+    """Assemble the full context for an LLM analysis call.
+
+    Returns a formatted string combining all tiers within token budgets.
+    """
+    parts = []
+
+    # Current question context (first for LLM primacy effect)
+    if question_text:
+        parts.append(f"## Current Question\n{question_text}")
+
+    # Active hints
+    if hint_text:
+        parts.append(f"## Active Hints\n{hint_text}")
+
+    # Tier 3: Fact Store (most compressed, highest signal)
+    facts_text = truncate_to_budget(fact_store.to_text(), BUDGET_FACT_STORE)
+    if facts_text:
+        parts.append(f"## Key Facts\n{facts_text}")
+
+    # Tier 2: Rolling Summary
+    if rolling_summary:
+        summary = truncate_to_budget(rolling_summary, BUDGET_ROLLING_SUMMARY)
+        parts.append(f"## Interview Summary\n{summary}")
+
+    # Tier 1: Recent Utterances
+    recent_text = format_utterances(working_memory)
+    if recent_text:
+        recent_text = truncate_to_budget(recent_text, BUDGET_WORKING_MEMORY)
+        parts.append(f"## Recent Conversation\n{recent_text}")
+
+    return "\n\n".join(parts)
+
+
+async def compress_summary(
+    failover: FailoverManager,
+    session_id: str,
+    rolling_summary: str,
+    utterances: Sequence[Utterance],
+) -> str:
+    """Fold ``utterances`` into the rolling summary. Raises if the LLM call fails."""
+    user_content = (
+        f"Current summary:\n{rolling_summary or '(empty)'}\n\nNew utterances:\n{format_utterances(utterances)}"
+    )
+    result = await failover.analyze(
+        AnalysisContext(
+            system_prompt=SUMMARY_SYSTEM_PROMPT,
+            user_content=user_content,
+            task_type=TaskType.SUMMARY_COMPRESSION,
+        ),
+        LLMConfig(max_tokens=500, temperature=0.3),
+        session_id=session_id,
+    )
+    logger.debug(
+        "summary_compressed",
+        session_id=session_id,
+        summary_tokens=estimate_tokens(result.content),
+    )
+    return result.content
+
+
+async def extract_facts(failover: FailoverManager, session_id: str, speaker: str, text: str) -> dict | None:
+    """Extract structured facts from a substantial utterance. Never raises; None when nothing parsed."""
+    prompt = FACT_EXTRACTION_PROMPT.format(speaker=speaker, text=text)
+    try:
+        result = await failover.analyze(
+            AnalysisContext(
+                system_prompt="Extract factual claims from the utterance. Return valid JSON only.",
+                user_content=prompt,
+                task_type=TaskType.REAL_TIME_ANALYSIS,
+            ),
+            LLMConfig(max_tokens=300, temperature=0.2, response_format="json"),
+            session_id=session_id,
+        )
+    except Exception as e:
+        logger.error(
+            "fact_extraction_failed",
+            session_id=session_id,
+            error=str(e),
+        )
+        return None
+    if result.parsed:
+        return result.parsed
+    # Try parsing content directly
+    try:
+        parsed = json.loads(result.content)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 class MemoryService:
     """Manages hierarchical interview context memory.
 
@@ -186,7 +296,7 @@ class MemoryService:
             self._schedule_compress()
 
         # Tier 3: Schedule fact extraction in background for substantial utterances
-        if is_final and len(text.split()) > 20:
+        if should_extract_facts(text, is_final):
             self._schedule_extract_facts(speaker, text)
 
     # ── Background Task Scheduling ─────────────────────────────────
@@ -214,25 +324,9 @@ class MemoryService:
         if not buffer_snapshot:
             return
 
-        buffer_text = "\n".join(f"[{u.speaker}]: {u.text}" for u in buffer_snapshot)
-        user_content = f"Current summary:\n{self._rolling_summary or '(empty)'}\n\nNew utterances:\n{buffer_text}"
-
         try:
-            result = await self._failover.analyze(
-                AnalysisContext(
-                    system_prompt=SUMMARY_SYSTEM_PROMPT,
-                    user_content=user_content,
-                    task_type=TaskType.SUMMARY_COMPRESSION,
-                ),
-                LLMConfig(max_tokens=500, temperature=0.3),
-                session_id=self.session_id,
-            )
-            self._rolling_summary = result.content
-
-            logger.debug(
-                "summary_compressed",
-                session_id=self.session_id,
-                summary_tokens=estimate_tokens(self._rolling_summary),
+            self._rolling_summary = await compress_summary(
+                self._failover, self.session_id, self._rolling_summary, buffer_snapshot
             )
         except Exception as e:
             # Re-prepend items to buffer for retry on next trigger
@@ -251,28 +345,11 @@ class MemoryService:
         if not self._unsummarized_buffer:
             return
 
-        buffer_text = "\n".join(f"[{u.speaker}]: {u.text}" for u in self._unsummarized_buffer)
-
-        user_content = f"Current summary:\n{self._rolling_summary or '(empty)'}\n\nNew utterances:\n{buffer_text}"
-
         try:
-            result = await self._failover.analyze(
-                AnalysisContext(
-                    system_prompt=SUMMARY_SYSTEM_PROMPT,
-                    user_content=user_content,
-                    task_type=TaskType.SUMMARY_COMPRESSION,
-                ),
-                LLMConfig(max_tokens=500, temperature=0.3),
-                session_id=self.session_id,
+            self._rolling_summary = await compress_summary(
+                self._failover, self.session_id, self._rolling_summary, self._unsummarized_buffer
             )
-            self._rolling_summary = result.content
             self._unsummarized_buffer.clear()
-
-            logger.debug(
-                "summary_compressed",
-                session_id=self.session_id,
-                summary_tokens=estimate_tokens(self._rolling_summary),
-            )
         except Exception as e:
             logger.error(
                 "summary_compression_failed",
@@ -289,32 +366,9 @@ class MemoryService:
 
     async def _extract_facts(self, speaker: str, text: str) -> None:
         """Extract structured facts from a substantial utterance."""
-        prompt = FACT_EXTRACTION_PROMPT.format(speaker=speaker, text=text)
-        try:
-            result = await self._failover.analyze(
-                AnalysisContext(
-                    system_prompt="Extract factual claims from the utterance. Return valid JSON only.",
-                    user_content=prompt,
-                    task_type=TaskType.REAL_TIME_ANALYSIS,
-                ),
-                LLMConfig(max_tokens=300, temperature=0.2, response_format="json"),
-                session_id=self.session_id,
-            )
-            if result.parsed:
-                self.fact_store.merge(result.parsed)
-            else:
-                # Try parsing content directly
-                try:
-                    parsed = json.loads(result.content)
-                    self.fact_store.merge(parsed)
-                except json.JSONDecodeError:
-                    pass
-        except Exception as e:
-            logger.error(
-                "fact_extraction_failed",
-                session_id=self.session_id,
-                error=str(e),
-            )
+        extracted = await extract_facts(self._failover, self.session_id, speaker, text)
+        if extracted:
+            self.fact_store.merge(extracted)
 
     def add_hint_interaction(self, hint_data: dict) -> None:
         """Record a hint interaction in the fact store."""
@@ -376,41 +430,12 @@ class MemoryService:
         question_text: str = "",
         hint_text: str = "",
     ) -> str:
-        """Assemble the full context for an LLM analysis call.
-
-        Returns a formatted string combining all tiers within token budgets.
-        """
-        parts = []
-
-        # Current question context (first for LLM primacy effect)
-        if question_text:
-            parts.append(f"## Current Question\n{question_text}")
-
-        # Active hints
-        if hint_text:
-            parts.append(f"## Active Hints\n{hint_text}")
-
-        # Tier 3: Fact Store (most compressed, highest signal)
-        facts_text = truncate_to_budget(self.fact_store.to_text(), BUDGET_FACT_STORE)
-        if facts_text:
-            parts.append(f"## Key Facts\n{facts_text}")
-
-        # Tier 2: Rolling Summary
-        if self._rolling_summary:
-            summary = truncate_to_budget(self._rolling_summary, BUDGET_ROLLING_SUMMARY)
-            parts.append(f"## Interview Summary\n{summary}")
-
-        # Tier 1: Recent Utterances
-        recent_text = "\n".join(f"[{u.speaker}]: {u.text}" for u in self._working_memory)
-        if recent_text:
-            recent_text = truncate_to_budget(recent_text, BUDGET_WORKING_MEMORY)
-            parts.append(f"## Recent Conversation\n{recent_text}")
-
-        return "\n\n".join(parts)
+        """Assemble the full context for an LLM analysis call (see ``assemble_context``)."""
+        return assemble_context(self._working_memory, self._rolling_summary, self.fact_store, question_text, hint_text)
 
     def get_working_memory_text(self) -> str:
         """Get the current working memory as formatted text."""
-        return "\n".join(f"[{u.speaker}]: {u.text}" for u in self._working_memory)
+        return format_utterances(self._working_memory)
 
     def get_summary(self) -> str:
         """Return the current tier-2 rolling summary text (may be empty).

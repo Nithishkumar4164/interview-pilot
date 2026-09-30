@@ -1,0 +1,624 @@
+{
+  "code_ratings": [],
+  "dashboard_events": [
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "922e6709-3663-5bc7-aa1b-9f122effc035",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "How does a hash map deal with two keys that hash to the same bucket?",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "865786af-4044-58ca-9d48-f8527cd1abd5",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "You can chain entries in a list per bucket or use open addressing and probe for the next free slot. [scripted-fail:utterance_analysis]",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 0,
+        "dimensions": null,
+        "hint_signal": "none",
+        "insight": "Analysis unavailable: scripted failure for utterance_analysis",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "",
+        "red_flags": [],
+        "suggestion_for_interviewer": "",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "21ba53e8-5cbb-5fed-9d44-a403b44ee53a",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "With chaining, lookups degrade to linear time in the worst case if many keys collide in one bucket.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 3,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "poor",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "medium",
+            "confidence": "high",
+            "justification": "scripted",
+            "score": "weak",
+            "structure": "high"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "adequate"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "good"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "full",
+            "justification": "scripted",
+            "score": "excellent"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "weak"
+          }
+        },
+        "hint_signal": "direct",
+        "insight": "scripted-insight-1777",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-777",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "direct",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "2e4389b0-0cbe-56c1-93a2-a9fde661491a",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Java switches long chains to balanced trees to bound that at log n. [scripted-fail:summary]",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 5,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "weak",
+            "signals_detected": []
+          },
+          "communication_quality": {
+            "clarity": "low",
+            "confidence": "low",
+            "justification": "scripted",
+            "score": "adequate",
+            "structure": "low"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [],
+            "score": "excellent"
+          },
+          "hint_reception": {
+            "acted_on_hint": true,
+            "incorporation_level": "partial",
+            "justification": "scripted",
+            "score": "adequate"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "adequate"
+          }
+        },
+        "hint_signal": "none",
+        "insight": "scripted-insight-9354",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-354",
+        "timestamp": "<volatile>"
+      }
+    }
+  ],
+  "error": null,
+  "final_state": {
+    "analyses_run": 3,
+    "analysis": {
+      "analysis_count": 3,
+      "average_quality": 4.0,
+      "current_question": "Explain how a hash map handles collisions.",
+      "recent_analyses": [
+        {
+          "answer_quality": 0,
+          "dimensions": null,
+          "hint_signal": "none",
+          "insight": "Analysis unavailable: scripted failure for utterance_analysis",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "",
+          "red_flags": [],
+          "suggestion_for_interviewer": "",
+          "timestamp": "<volatile>"
+        },
+        {
+          "answer_quality": 3,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "poor",
+              "signals_detected": [
+                "structured_thinking"
+              ]
+            },
+            "communication_quality": {
+              "clarity": "medium",
+              "confidence": "high",
+              "justification": "scripted",
+              "score": "weak",
+              "structure": "high"
+            },
+            "contextual_consistency": {
+              "consistent": true,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "adequate"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [
+                "scripted-missed"
+              ],
+              "score": "good"
+            },
+            "hint_reception": {
+              "acted_on_hint": false,
+              "incorporation_level": "full",
+              "justification": "scripted",
+              "score": "excellent"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "weak"
+            }
+          },
+          "hint_signal": "direct",
+          "insight": "scripted-insight-1777",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-777",
+          "timestamp": "<volatile>"
+        },
+        {
+          "answer_quality": 5,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "weak",
+              "signals_detected": []
+            },
+            "communication_quality": {
+              "clarity": "low",
+              "confidence": "low",
+              "justification": "scripted",
+              "score": "adequate",
+              "structure": "low"
+            },
+            "contextual_consistency": {
+              "consistent": true,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "poor"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [],
+              "score": "excellent"
+            },
+            "hint_reception": {
+              "acted_on_hint": true,
+              "incorporation_level": "partial",
+              "justification": "scripted",
+              "score": "adequate"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "adequate"
+            }
+          },
+          "hint_signal": "none",
+          "insight": "scripted-insight-9354",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-354",
+          "timestamp": "<volatile>"
+        }
+      ],
+      "session_id": "06-llm-failures"
+    },
+    "contradictions": {
+      "contradictions": []
+    },
+    "events_processed": 4,
+    "memory": {
+      "fact_store": {
+        "behavioral_signals": [],
+        "claimed_experience": [],
+        "hint_interactions": [],
+        "key_numbers": [],
+        "technical_positions": []
+      },
+      "rolling_summary": "",
+      "session_id": "06-llm-failures",
+      "total_utterances": 4,
+      "unsummarized_count": 4,
+      "working_memory": [
+        {
+          "speaker": "interviewer",
+          "text": "How does a hash map deal with two keys that hash to the same bucket?",
+          "timestamp": "<volatile>"
+        },
+        {
+          "speaker": "candidate",
+          "text": "You can chain entries in a list per bucket or use open addressing and probe for the next free slot. [scripted-fail:utterance_analysis]",
+          "timestamp": "<volatile>"
+        },
+        {
+          "speaker": "candidate",
+          "text": "With chaining, lookups degrade to linear time in the worst case if many keys collide in one bucket.",
+          "timestamp": "<volatile>"
+        },
+        {
+          "speaker": "candidate",
+          "text": "Java switches long chains to balanced trees to bound that at log n. [scripted-fail:summary]",
+          "timestamp": "<volatile>"
+        }
+      ]
+    },
+    "session_id": "06-llm-failures"
+  },
+  "golden_version": 2,
+  "hint_responses": [],
+  "llm_calls_by_kind": {
+    "fact_extraction": [
+      {
+        "max_tokens": 300,
+        "response_format": "json",
+        "system_prompt_sha": "34b139630de3",
+        "task_type": "real_time_analysis",
+        "temperature": 0.2,
+        "user_content": "Analyze this interview utterance and extract any factual claims into the following JSON structure. Only include categories with actual findings. Return valid JSON only.\n\n{\n  \"claimed_experience\": [\"list of specific claims about experience or skills\"],\n  \"technical_positions\": [\"list of technical opinions or approach preferences\"],\n  \"behavioral_signals\": [\"list of communication or behavioral observations\"],\n  \"key_numbers\": [\"list of specific metrics, numbers, or quantified claims\"]\n}\n\nUtterance (by candidate): You can chain entries in a list per bucket or use open addressing and probe for the next free slot. [scripted-fail:utterance_analysis]"
+      }
+    ],
+    "summary": [
+      {
+        "max_tokens": 500,
+        "response_format": null,
+        "system_prompt_sha": "84845177ca07",
+        "task_type": "summary_compression",
+        "temperature": 0.3,
+        "user_content": "Current summary:\n(empty)\n\nNew utterances:\n[interviewer]: How does a hash map deal with two keys that hash to the same bucket?\n[candidate]: You can chain entries in a list per bucket or use open addressing and probe for the next free slot. [scripted-fail:utterance_analysis]\n[candidate]: With chaining, lookups degrade to linear time in the worst case if many keys collide in one bucket.\n[candidate]: Java switches long chains to balanced trees to bound that at log n. [scripted-fail:summary]"
+      },
+      {
+        "max_tokens": 500,
+        "response_format": null,
+        "system_prompt_sha": "84845177ca07",
+        "task_type": "summary_compression",
+        "temperature": 0.3,
+        "user_content": "Current summary:\n(empty)\n\nNew utterances:\n[interviewer]: How does a hash map deal with two keys that hash to the same bucket?\n[candidate]: You can chain entries in a list per bucket or use open addressing and probe for the next free slot. [scripted-fail:utterance_analysis]\n[candidate]: With chaining, lookups degrade to linear time in the worst case if many keys collide in one bucket.\n[candidate]: Java switches long chains to balanced trees to bound that at log n. [scripted-fail:summary]"
+      }
+    ],
+    "utterance_analysis": [
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nExplain how a hash map handles collisions.\n\n## Key Facts\n(No facts extracted yet)\n\n## Recent Conversation\n[interviewer]: How does a hash map deal with two keys that hash to the same bucket?\n[candidate]: You can chain entries in a list per bucket or use open addressing and probe for the next free slot. [scripted-fail:utterance_analysis]\n\n## Latest Utterance\n[candidate]: You can chain entries in a list per bucket or use open addressing and probe for the next free slot. [scripted-fail:utterance_analysis]"
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nExplain how a hash map handles collisions.\n\n## Key Facts\n(No facts extracted yet)\n\n## Recent Conversation\n[interviewer]: How does a hash map deal with two keys that hash to the same bucket?\n[candidate]: You can chain entries in a list per bucket or use open addressing and probe for the next free slot. [scripted-fail:utterance_analysis]\n\n## Latest Utterance\n[candidate]: You can chain entries in a list per bucket or use open addressing and probe for the next free slot. [scripted-fail:utterance_analysis]"
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nExplain how a hash map handles collisions.\n\n## Key Facts\n(No facts extracted yet)\n\n## Recent Conversation\n[interviewer]: How does a hash map deal with two keys that hash to the same bucket?\n[candidate]: You can chain entries in a list per bucket or use open addressing and probe for the next free slot. [scripted-fail:utterance_analysis]\n[candidate]: With chaining, lookups degrade to linear time in the worst case if many keys collide in one bucket.\n\n## Latest Utterance\n[candidate]: With chaining, lookups degrade to linear time in the worst case if many keys collide in one bucket."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nExplain how a hash map handles collisions.\n\n## Key Facts\n(No facts extracted yet)\n\n## Recent Conversation\n[interviewer]: How does a hash map deal with two keys that hash to the same bucket?\n[candidate]: You can chain entries in a list per bucket or use open addressing and probe for the next free slot. [scripted-fail:utterance_analysis]\n[candidate]: With chaining, lookups degrade to linear time in the worst case if many keys collide in one bucket.\n[candidate]: Java switches long chains to balanced trees to bound that at log n. [scripted-fail:summary]\n\n## Latest Utterance\n[candidate]: Java switches long chains to balanced trees to bound that at log n. [scripted-fail:summary]"
+      }
+    ]
+  },
+  "persisted": [
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "How does a hash map deal with two keys that hash to the same bucket?",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "You can chain entries in a list per bucket or use open addressing and probe for the next free slot. [scripted-fail:utterance_analysis]",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 0,
+      "dimensions": null,
+      "hint_signal": "none",
+      "insight": "Analysis unavailable: scripted failure for utterance_analysis",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": null,
+      "type": "analysis"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "With chaining, lookups degrade to linear time in the worst case if many keys collide in one bucket.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 3,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "poor",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "medium",
+          "confidence": "high",
+          "justification": "scripted",
+          "score": "weak",
+          "structure": "high"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "adequate"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "good"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "full",
+          "justification": "scripted",
+          "score": "excellent"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "weak"
+        }
+      },
+      "hint_signal": "direct",
+      "insight": "scripted-insight-1777",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-777",
+      "type": "analysis"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Java switches long chains to balanced trees to bound that at log n. [scripted-fail:summary]",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 5,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "weak",
+          "signals_detected": []
+        },
+        "communication_quality": {
+          "clarity": "low",
+          "confidence": "low",
+          "justification": "scripted",
+          "score": "adequate",
+          "structure": "low"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [],
+          "score": "excellent"
+        },
+        "hint_reception": {
+          "acted_on_hint": true,
+          "incorporation_level": "partial",
+          "justification": "scripted",
+          "score": "adequate"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "adequate"
+        }
+      },
+      "hint_signal": "none",
+      "insight": "scripted-insight-9354",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-354",
+      "type": "analysis"
+    }
+  ],
+  "scenario_id": "06-llm-failures",
+  "session_state": {
+    "active_question_id": "q-hash",
+    "analysis_count": 3,
+    "code_snapshot_count": 0,
+    "coverage_tracker": {},
+    "facts": {
+      "behavioral_signals": [],
+      "claimed_experience": [],
+      "hint_interactions": [],
+      "key_numbers": [],
+      "technical_positions": []
+    },
+    "hint_history": [],
+    "last_transcript_timestamp": null,
+    "plan_progress": {
+      "current_phase_index": 0,
+      "current_question_index": 0
+    },
+    "rolling_summary": "",
+    "schema_version": 1,
+    "scores": {
+      "problem_solving": 4.0
+    },
+    "session_id": "06-llm-failures",
+    "transcript_count": 4
+  }
+}

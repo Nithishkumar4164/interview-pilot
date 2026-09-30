@@ -12,9 +12,18 @@ ScriptedProvider instead:
     signals, fact merging, contradictions) is exercised;
   - derives every field from a hash of the prompt, so a change in assembled
     context changes the output;
-  - records every call into the active ``LLMCallRecorder`` for golden diffs.
+  - records every call into the active ``LLMCallRecorder`` for golden diffs;
+  - optionally takes time per call site (``behavior(latency_ms=...)``), so
+    concurrent background work interleaves the way it does against a real
+    provider rather than completing before the caller's next await;
+  - fails a call about an utterance marked ``[scripted-fail:<kind>]``, to
+    drive error paths from a scenario. Only the prompt's last line counts —
+    the utterance the call is about (latest utterance, newest buffered one,
+    the utterance being mined) — so the marker does not also fail every later
+    call whose context merely quotes it.
 """
 
+import asyncio
 import contextlib
 import hashlib
 import json
@@ -76,6 +85,11 @@ class LLMCallRecorder:
 
 
 _active_recorder: ContextVar[LLMCallRecorder | None] = ContextVar("scripted_llm_recorder", default=None)
+_active_latency: ContextVar[dict[str, float] | None] = ContextVar("scripted_llm_latency", default=None)
+
+
+class ScriptedFailureError(RuntimeError):
+    """Raised for a call whose prompt carries a ``[scripted-fail:<kind>]`` marker."""
 
 
 @contextlib.contextmanager
@@ -86,6 +100,20 @@ def recording(recorder: LLMCallRecorder) -> Iterator[LLMCallRecorder]:
         yield recorder
     finally:
         _active_recorder.reset(token)
+
+
+@contextlib.contextmanager
+def behavior(latency_ms: dict[str, float]) -> Iterator[None]:
+    """Make calls of each kind (see ``classify``) take ``latency_ms[kind]`` in this context."""
+    token = _active_latency.set(latency_ms)
+    try:
+        yield
+    finally:
+        _active_latency.reset(token)
+
+
+def fail_marker(kind: str) -> str:
+    return f"[scripted-fail:{kind}]"
 
 
 def _sha(text: str) -> str:
@@ -258,6 +286,12 @@ class ScriptedProvider(ILLMProvider):
         recorder = _active_recorder.get()
         if recorder is not None:
             recorder.record(kind, context, config)
+
+        latency = (_active_latency.get() or {}).get(kind, 0.0)
+        if latency:
+            await asyncio.sleep(latency / 1000)
+        if fail_marker(kind) in context.user_content.rsplit("\n", 1)[-1]:
+            raise ScriptedFailureError(f"scripted failure for {kind}")
 
         content = respond(kind, context)
         parsed = None

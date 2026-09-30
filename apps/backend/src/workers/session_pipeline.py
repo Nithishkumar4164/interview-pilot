@@ -44,6 +44,10 @@ class SessionPipeline(Protocol):
     # ── Lifecycle ─────────────────────────────────────────────────────
     async def drain(self) -> None: ...
 
+    async def wait_idle(self) -> None:
+        """Wait until all work triggered so far has finished (replay and tests)."""
+        ...
+
     def stop(self) -> None: ...
 
 

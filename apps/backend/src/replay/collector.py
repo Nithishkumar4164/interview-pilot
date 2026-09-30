@@ -1,9 +1,12 @@
-"""Headless capture of dashboard_manager broadcasts during replay."""
+"""Headless capture of everything a session pipeline does outside itself during replay."""
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
+
+from src.services.session_state_service import SessionStateService
+from src.websocket.manager import dashboard_manager
 
 
 @dataclass
@@ -12,6 +15,13 @@ class CapturedEvent:
     session_id: str
     payload: Any
     timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+
+@dataclass
+class PersistedWrite:
+    event_type: str
+    session_id: str
+    fields: dict[str, Any]
 
 
 _CAPTURED_METHODS = (
@@ -23,38 +33,46 @@ _CAPTURED_METHODS = (
 )
 
 
-def _noop(*args, **kwargs) -> None:
-    return None
+class _RecordingPersistence:
+    """Stands in for PersistenceService: records each enqueue instead of writing to the DB."""
+
+    def __init__(self, sink: list[PersistedWrite]) -> None:
+        self._sink = sink
+
+    def __getattr__(self, name: str):
+        if not name.startswith("enqueue_"):
+            raise AttributeError(name)
+        event_type = name.removeprefix("enqueue_")
+
+        def _enqueue(session_id: str, **fields: Any) -> None:
+            self._sink.append(PersistedWrite(event_type, session_id, fields))
+
+        return _enqueue
 
 
 class EventCollector:
-    """Async context manager that captures every dashboard broadcast.
+    """Async context manager that captures a pipeline's outbound effects.
 
-    Patches `src.workers.analysis_worker.dashboard_manager` for the duration
-    of the context. All `send_*` calls become AsyncMock wrappers that append
-    to `self.events` instead of broadcasting to WebSocket clients.
-
-    Also no-ops `safe_enqueue` and `safe_update_session_state` so replay
-    runs don't try to persist transcripts under a non-UUID session id.
+    - every ``dashboard_manager.send_*`` broadcast (patched on the shared
+      manager object, so it works for any pipeline implementation);
+    - every persistence enqueue (``safe_enqueue`` resolves the persistence
+      service through ``src.dependencies`` at call time);
+    - session-state updates, into a private in-memory ``SessionStateService``
+      (``session_state``) instead of the app's.
     """
 
     def __init__(self) -> None:
         self.events: list[CapturedEvent] = []
+        self.persisted: list[PersistedWrite] = []
+        self.session_state = SessionStateService()
         self._patchers: list = []
 
     async def __aenter__(self) -> "EventCollector":
-        mock_mgr = AsyncMock()
-        for method_name in _CAPTURED_METHODS:
-            setattr(
-                mock_mgr,
-                method_name,
-                self._make_capture(method_name),
-            )
-
-        self._patchers = [
-            patch("src.workers.analysis_worker.dashboard_manager", mock_mgr),
-            patch("src.workers.analysis_worker.safe_enqueue", _noop),
-            patch("src.workers.analysis_worker.safe_update_session_state", _noop),
+        persistence = _RecordingPersistence(self.persisted)
+        self._patchers = [patch.object(dashboard_manager, m, self._make_capture(m)) for m in _CAPTURED_METHODS]
+        self._patchers += [
+            patch("src.dependencies.get_persistence_service", lambda: persistence),
+            patch("src.dependencies.get_session_state_service", lambda: self.session_state),
         ]
         for p in self._patchers:
             p.start()

@@ -33,6 +33,20 @@ EXPECTED = {
         "min_transcripts": 4,
         "min_analyses": 1,
     },
+    "04-long-interview-memory": {
+        "min_transcripts": 28,
+        "min_analyses": 10,
+        "min_hint_responses": 2,
+    },
+    "05-interim-transcripts": {
+        "min_transcripts": 4,
+        "min_analyses": 2,
+    },
+    # Failure markers only affect the scripted LLM; under mock it is a normal run.
+    "06-llm-failures": {
+        "min_transcripts": 4,
+        "min_analyses": 3,
+    },
 }
 
 

@@ -17,7 +17,7 @@ from src.graphs.checkpointer import CHECKPOINT_TABLES, Checkpointer
 from src.graphs.serde import CHECKPOINT_TYPES
 from src.replay.scripted_provider import _utterance_analysis
 from src.schemas.analysis import EnhancedAnalysisResult
-from src.services.analysis_service import AnalysisService
+from src.services.analysis_service import parse_analysis
 from src.services.contradiction_service import Contradiction
 from src.services.memory_service import FactStore, Utterance
 
@@ -43,7 +43,7 @@ class _State(TypedDict, total=False):
 
 def _sample_state() -> dict:
     raw = _utterance_analysis(12345)
-    analysis = AnalysisService.__new__(AnalysisService)._parse_analysis(json.dumps(raw), raw)
+    analysis = parse_analysis(json.dumps(raw), raw)
     facts = FactStore()
     facts.merge({"claimed_experience": ["5 years of Kafka"], "key_numbers": ["1B events/day"]})
     return {

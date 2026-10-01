@@ -50,6 +50,10 @@ class SessionPipeline(Protocol):
 
     def stop(self) -> None: ...
 
+    async def close(self) -> None:
+        """The session ended: stop for good and release background work and stored state."""
+        ...
+
 
 def create_session_pipeline(
     session_id: str,

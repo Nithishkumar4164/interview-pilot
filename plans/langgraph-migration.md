@@ -324,6 +324,13 @@ Decisions that differ from the draft plan:
 
 New failure mode: the live analysis path now needs Postgres (checkpoints and the lock). Persistence, reports and auth already did.
 
-Approved follow-ups, each a separate commit that reproduces the bug in a scenario first: self-contradiction, interviewer facts, interims in memory, session teardown (which also deletes the session thread).
+Approved follow-ups, all done. Each was fixed in both pipelines, since `AnalysisWorker` is still the default. Each reproduces the bug first in `tests/test_pipeline_fixes.py` on both implementations, and re-records the goldens from `AnalysisWorker` with the diff reviewed:
+- **Self-contradiction** (`acb7a90`). A statement was checked against facts extracted from itself. Both pipelines now record which claims each recent utterance added and exclude them from that utterance's check.
+- **Interviewer facts** (`e0def74`). Only candidate utterances are fact-extracted. In scenario 04 the interviewer's "On our team we used Kafka for years" had produced three false contradiction flags.
+- **Interims in memory** (`f675bb7`). Only finals enter memory and the summary buffer; interims still reach the dashboard.
+- **Session teardown** (this commit). Reproduced on a running server (flag off): after `POST /end`, audio on the still-open socket produced a transcript and an LLM analysis, and the transcription stream was never stopped.
+  - End-session now calls `close_transcription_service`, which closes the pipeline and stops transcription. The graph pipeline's `close()` also deletes the session's checkpoint thread.
+  - The audio socket of an ended session is closed, and new audio connections for it are refused.
+  - The extension still retries refused connections with backoff; teaching it to stop on "Session ended" is an extension follow-up.
 
 Known gaps carried forward: the transcript of an utterance spoken within 2 s of a crash is lost because `PersistenceService` buffers in memory (same as before). Two gunicorn workers still give each process its own `dashboard_manager`, so a dashboard and an audio socket for one session that land on different workers do not see each other. That issue predates this migration.

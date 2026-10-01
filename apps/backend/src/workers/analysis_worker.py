@@ -415,6 +415,10 @@ class AnalysisWorker:
         """Stop the worker."""
         self._running = False
 
+    async def close(self) -> None:
+        """The session ended: stop accepting events (in-flight work was drained by end-session)."""
+        self.stop()
+
     def to_dict(self) -> dict:
         return {
             "session_id": self.session_id,

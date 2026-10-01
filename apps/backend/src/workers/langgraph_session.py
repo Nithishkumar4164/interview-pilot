@@ -301,6 +301,26 @@ class LangGraphSessionPipeline:
         """Stop accepting transcript events. Work already queued still completes."""
         self._running = False
 
+    async def close(self) -> None:
+        """The session ended: finish queued work, stop the consumer, delete the session's checkpoints.
+
+        Report generation got its inputs from ``report_snapshot()`` before this
+        runs, so the thread is no longer needed.
+        """
+        self.stop()
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(self.wait_idle(), timeout=5.0)
+        self._cancel_pending_timer()
+        for task in (self._consumer, self._compress_task):
+            if task is not None and not task.done():
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await task
+        try:
+            await self._checkpointer.delete_threads(thread_id_for(self.session_id))
+        except Exception:
+            logger.exception("session_thread_delete_failed", session_id=self.session_id)
+
     # ── Ingress internals ─────────────────────────────────────────────
 
     def _enqueue(self, event: IngressEvent) -> None:

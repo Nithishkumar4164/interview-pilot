@@ -6,9 +6,13 @@ routes them through the transcription service pipeline.
 Endpoint: ws://{host}/ws/audio/{session_id}
 """
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+import uuid
 
-from src.dependencies import failover_manager
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
+
+from src.dependencies import async_session_factory, failover_manager
+from src.models.session import InterviewSession
+from src.schemas.session import SessionStatus
 from src.services.transcription_service import TranscriptionService
 from src.utils.logging import get_logger
 from src.websocket.auth import authenticate_ws
@@ -40,12 +44,26 @@ def get_transcription_service(session_id: str) -> TranscriptionService:
     return _active_sessions[session_id]
 
 
-def remove_transcription_service(session_id: str) -> None:
-    """Remove a TranscriptionService for a session."""
+async def close_transcription_service(session_id: str) -> None:
+    """The session ended: stop its transcription streams and close its pipeline."""
     worker = _active_workers.pop(session_id, None)
+    service = _active_sessions.pop(session_id, None)
     if worker:
-        worker.stop()
-    _active_sessions.pop(session_id, None)
+        await worker.close()
+    if service:
+        await service.stop()
+    if worker or service:
+        logger.info("transcription_service_closed", session_id=session_id)
+
+
+async def _session_ended(session_id: str) -> bool:
+    try:
+        sid = uuid.UUID(session_id)
+    except ValueError:
+        return False
+    async with async_session_factory() as db:
+        session = await db.get(InterviewSession, sid)
+    return session is not None and session.status == SessionStatus.ENDED
 
 
 @router.websocket("/ws/audio/{session_id}")
@@ -56,6 +74,12 @@ async def audio_websocket(websocket: WebSocket, session_id: str) -> None:
     channel, timestamp, sample rate, and buffered flag.
     """
     if await authenticate_ws(websocket, session_id) is None:
+        return
+    if await _session_ended(session_id):
+        # Accepting would start a new transcription stream and pipeline for a
+        # session that is over.
+        logger.info("audio_ws_rejected_session_ended", session_id=session_id)
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Session ended")
         return
     await websocket.accept()
 
@@ -83,6 +107,11 @@ async def audio_websocket(websocket: WebSocket, session_id: str) -> None:
     try:
         while True:
             data = await websocket.receive()
+
+            if not service.is_running:
+                # The session ended (end-session stopped the service) while this socket was open.
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Session ended")
+                return
 
             if "bytes" in data:
                 # Binary audio frame
@@ -156,6 +185,6 @@ async def audio_websocket(websocket: WebSocket, session_id: str) -> None:
         )
     finally:
         # Don't stop the transcription service on disconnect —
-        # the extension may reconnect. The session end endpoint
-        # will handle cleanup.
+        # the extension may reconnect. Ending the session closes it
+        # (close_transcription_service).
         pass

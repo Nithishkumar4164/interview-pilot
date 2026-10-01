@@ -392,6 +392,9 @@ async def end_session(
 
         # Cleanup in-memory services
         _hint_services.pop(session_id, None)
+        from src.websocket.audio_handler import close_transcription_service
+
+        await close_transcription_service(session_id)
 
         # Fire background task for report generation
         asyncio.create_task(

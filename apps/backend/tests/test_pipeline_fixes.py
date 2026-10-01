@@ -106,3 +106,22 @@ async def test_interviewer_statements_are_not_candidate_facts(replay) -> None:
     assert not [
         c for c in report.llm_calls if c["kind"] == "fact_extraction" and "(by interviewer)" in c["user_content"]
     ]
+
+
+async def test_interim_transcripts_stay_out_of_memory(replay) -> None:
+    """Interims are previews of a sentence that arrives again as a final; memory
+    keeps finals only, so the 10-utterance window is not filled with fragments."""
+    scenario = load_scenario(SCENARIOS_DIR / "05_interim_transcripts.scenario.json")
+    finals = [e.text for e in scenario.events if getattr(e, "is_final", False)]
+    interims = [e.text for e in scenario.events if getattr(e, "is_final", True) is False]
+    assert interims, "scenario must contain interims"
+
+    report = await replay("05_interim_transcripts.scenario.json")
+    memory = report.final_state["memory"]
+    assert [u["text"] for u in memory["working_memory"]] == finals
+    assert memory["total_utterances"] == len(finals)
+    for call in report.llm_calls:
+        lines = call["user_content"].splitlines()
+        assert not [i for i in interims if f"[candidate]: {i}" in lines or f"[interviewer]: {i}" in lines], call["kind"]
+    # The dashboard still gets the interim previews.
+    assert sum(1 for e in report.events if e.method == "send_transcript" and not e.payload["is_final"]) == len(interims)

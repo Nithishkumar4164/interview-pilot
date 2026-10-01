@@ -123,16 +123,18 @@ class AnalysisWorker:
             snapshot = self._get_speaker_snapshot()
             await dashboard_manager.send_speaker_snapshot(self.session_id, snapshot)
 
-        # 2. Update memory with ALL events (non-blocking — LLM calls are background tasks)
-        await self.memory.add_utterance(
-            speaker=speaker,
-            text=event.text,
-            timestamp=event.timestamp,
-            is_final=event.is_final,
-        )
-
-        # Store final transcripts for catch-up on dashboard reconnect
+        # Interims only preview a sentence that arrives again as a final;
+        # they go to the dashboard above, never into memory.
         if event.is_final:
+            # 2. Update memory (non-blocking — LLM calls are background tasks)
+            await self.memory.add_utterance(
+                speaker=speaker,
+                text=event.text,
+                timestamp=event.timestamp,
+                is_final=True,
+            )
+
+            # Store final transcripts for catch-up on dashboard reconnect
             self._transcript_history.append(transcript_event)
 
             # Persist final transcripts to DB

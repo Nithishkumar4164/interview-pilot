@@ -110,11 +110,14 @@ async def check_contradictions(
     new_statement: str,
     fact_store: FactStore,
     checked_pairs: Set[str],
+    exclude_claims: Set[str] = frozenset(),
 ) -> tuple[list[Contradiction], set[str]]:
     """Check a new statement against known facts for contradictions.
 
-    Pairs whose ``pair_key`` is in ``checked_pairs`` are skipped. Returns the
-    newly detected contradictions and the keys of the pairs checked now.
+    ``exclude_claims`` are facts extracted from the statement itself; a
+    statement is never checked against its own claims. Pairs whose
+    ``pair_key`` is in ``checked_pairs`` are skipped. Returns the newly
+    detected contradictions and the keys of the pairs checked now.
     """
     new_contradictions: list[Contradiction] = []
     newly_checked: set[str] = set()
@@ -123,6 +126,8 @@ async def check_contradictions(
     all_claims = fact_store.claimed_experience + fact_store.technical_positions + fact_store.key_numbers
 
     for claim in all_claims:
+        if claim in exclude_claims:
+            continue
         # Skip already-checked pairs
         key = pair_key(claim, new_statement)
         if key in checked_pairs or key in newly_checked:
@@ -252,13 +257,14 @@ class ContradictionService:
         self,
         new_statement: str,
         fact_store: FactStore,
+        exclude_claims: Set[str] = frozenset(),
     ) -> list[Contradiction]:
         """Check a new statement against known facts for contradictions.
 
         Returns a list of newly detected contradictions.
         """
         new_contradictions, checked = await check_contradictions(
-            self._failover, self.session_id, new_statement, fact_store, self._checked_pairs
+            self._failover, self.session_id, new_statement, fact_store, self._checked_pairs, exclude_claims
         )
         self._checked_pairs |= checked
         self._contradictions.extend(new_contradictions)

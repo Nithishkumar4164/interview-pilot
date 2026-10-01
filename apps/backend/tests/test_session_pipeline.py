@@ -26,7 +26,7 @@ async def test_report_snapshot_reflects_the_session(monkeypatch) -> None:
         captured["worker"] = self
 
     monkeypatch.setattr(AnalysisWorker, "__init__", capturing_init)
-    scenario = load_scenario(SCENARIOS_DIR / "03_contradiction_resume_vs_response.scenario.json")
+    scenario = load_scenario(SCENARIOS_DIR / "04_long_interview_memory.scenario.json")
     report = await ReplayRunner(scenario, llm_mode="scripted").run()
     assert report.error is None
 

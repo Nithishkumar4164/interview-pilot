@@ -86,18 +86,6 @@
       }
     },
     {
-      "method": "send_red_flag",
-      "payload": {
-        "claim": "I have around five years of hands-on Kafka experience.",
-        "confidence": 0.9,
-        "explanation": "scripted-contradiction-096",
-        "new_statement": "I have around five years of hands-on Kafka experience. I led the streaming platform at my last company and we processed over a billion events per day across many topics.",
-        "suggested_probe": "scripted-probe-096",
-        "timestamp": "<volatile>",
-        "type": "contradiction"
-      }
-    },
-    {
       "method": "send_hint",
       "payload": {
         "signal": "guide",
@@ -452,17 +440,7 @@
       "session_id": "03-contradiction-resume-vs-response"
     },
     "contradictions": {
-      "contradictions": [
-        {
-          "claim": "I have around five years of hands-on Kafka experience.",
-          "confidence": 0.9,
-          "detected_at": "<volatile>",
-          "detection_method": "llm",
-          "explanation": "scripted-contradiction-096",
-          "new_statement": "I have around five years of hands-on Kafka experience. I led the streaming platform at my last company and we processed over a billion events per day across many topics.",
-          "suggested_probe": "scripted-probe-096"
-        }
-      ]
+      "contradictions": []
     },
     "events_processed": 6,
     "memory": {
@@ -521,16 +499,6 @@
   "golden_version": 2,
   "hint_responses": [],
   "llm_calls_by_kind": {
-    "contradiction": [
-      {
-        "max_tokens": 200,
-        "response_format": "json",
-        "system_prompt_sha": "fd5a17c17593",
-        "task_type": "real_time_analysis",
-        "temperature": 0.2,
-        "user_content": "You are analyzing an interview transcript for contradictions.\n\nPrevious statement by the candidate:\n\"I have around five years of hands-on Kafka experience.\"\n\nNew statement by the candidate:\n\"I have around five years of hands-on Kafka experience. I led the streaming platform at my last company and we processed over a billion events per day across many topics.\"\n\nAre these statements contradictory? Consider:\n1. Direct contradictions (said X, now says not X)\n2. Temporal contradictions (said 5 years experience, but timeline doesn't add up)\n3. Technical contradictions (claimed to lead a project, but doesn't know basic details)\n\nRespond in JSON:\n{\n  \"is_contradiction\": true/false,\n  \"confidence\": 0.0-1.0,\n  \"explanation\": \"Brief explanation\",\n  \"suggested_probe\": \"A question the interviewer could ask to clarify\"\n}"
-      }
-    ],
     "fact_extraction": [
       {
         "max_tokens": 300,

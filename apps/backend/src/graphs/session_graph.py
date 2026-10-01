@@ -42,6 +42,7 @@ from src.schemas.analysis import EnhancedAnalysisResult
 from src.services.analysis_service import analyze_utterance
 from src.services.contradiction_service import Contradiction, check_contradictions
 from src.services.memory_service import (
+    CLAIM_PROVENANCE_SIZE,
     SUMMARY_TRIGGER_COUNT,
     WORKING_MEMORY_SIZE,
     FactStore,
@@ -159,6 +160,7 @@ class SessionState(TypedDict, total=False):
     # ── contradictions ──
     contradictions: list[Contradiction]
     checked_pairs: set[str]
+    claims_by_utterance: dict[str, list[str]]  # facts each recent utterance added (bounded)
 
     # ── runtime hints ──
     hint_generation_count: dict[str, int]
@@ -192,6 +194,7 @@ def initial_state(session_id: str) -> dict[str, Any]:
         "events_processed": 0,
         "contradictions": [],
         "checked_pairs": set(),
+        "claims_by_utterance": {},
         "hint_generation_count": {},
         "last_runtime_hint": None,
         "analysis": None,
@@ -395,9 +398,13 @@ def build_session_graph(failover: FailoverManager, session_id: str) -> StateGrap
         extracted = state.get("extracted") or {}
         if extracted:
             facts = copy.deepcopy(state["fact_store"])
+            provenance = dict(state.get("claims_by_utterance", {}))
             for index in sorted(extracted):
-                facts.merge(extracted[index])
+                source = state["events"][index]
+                assert isinstance(source, UtteranceIn)  # only utterances are sent to extract_facts
+                provenance[source.id] = facts.merge(extracted[index])
             update["fact_store"] = facts
+            update["claims_by_utterance"] = dict(list(provenance.items())[-CLAIM_PROVENANCE_SIZE:])
 
         result = state.get("analysis")
         if result is not None:
@@ -421,7 +428,12 @@ def build_session_graph(failover: FailoverManager, session_id: str) -> StateGrap
         result = state["analysis"]
         assert target is not None and result is not None
         found, checked = await check_contradictions(
-            failover, session_id, target.text, state["fact_store"], state.get("checked_pairs", set())
+            failover,
+            session_id,
+            target.text,
+            state["fact_store"],
+            state.get("checked_pairs", set()),
+            exclude_claims=set(state.get("claims_by_utterance", {}).get(target.id, [])),
         )
         for c in found:
             emit(

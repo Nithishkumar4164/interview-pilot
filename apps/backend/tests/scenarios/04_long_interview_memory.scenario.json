@@ -30,7 +30,7 @@
     {
       "type": "transcript",
       "speaker_role": "interviewer",
-      "text": "Let's start with your background. In your last role you were on the data platform team, and I'd like to hear about the systems you owned, the scale they ran at, and what went wrong.",
+      "text": "Let's start with your background. In your last role you were on the data platform team, and I'd like to hear about the systems you owned, the scale they ran at, and what went wrong. On our team we used Kafka for years, so I'm curious how yours compared.",
       "channel": "tab"
     },
     {

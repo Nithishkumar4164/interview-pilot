@@ -30,8 +30,17 @@ from src.workers.session_pipeline import SessionPipeline
 
 LLMMode = Literal["mock", "scripted", "real"]
 
-# (session_id, failover_manager, min_analysis_interval_s) -> pipeline
-PipelineFactory = Callable[[str, FailoverManager, float], SessionPipeline]
+
+@dataclass(frozen=True)
+class PipelineTiming:
+    """Wall-clock behavior a replay sets on the pipeline under test."""
+
+    min_analysis_interval_s: float
+    interim_throttle_s: float
+
+
+# (session_id, failover_manager, timing) -> pipeline
+PipelineFactory = Callable[[str, FailoverManager, PipelineTiming], SessionPipeline]
 
 # Scripted-LLM latency per call site. Calls issued together finish in this
 # order, as they tend to against a real provider: a fact extraction started
@@ -88,8 +97,14 @@ def _real_failover_manager() -> FailoverManager:
     return failover_manager
 
 
-def analysis_worker_factory(session_id: str, fm: FailoverManager, min_interval_s: float) -> SessionPipeline:
-    return AnalysisWorker(session_id, fm, get_speaker_snapshot=lambda: {}, min_analysis_interval_s=min_interval_s)
+def analysis_worker_factory(session_id: str, fm: FailoverManager, timing: PipelineTiming) -> SessionPipeline:
+    return AnalysisWorker(
+        session_id,
+        fm,
+        get_speaker_snapshot=lambda: {},
+        min_analysis_interval_s=timing.min_analysis_interval_s,
+        interim_throttle_s=timing.interim_throttle_s,
+    )
 
 
 @dataclass
@@ -147,9 +162,11 @@ class ReplayRunner:
     """Replays a Scenario through a session pipeline (AnalysisWorker by default).
 
     Compressed-time mode (the default) analyzes every qualifying utterance
-    (rate-limit interval 0) and waits for the pipeline to go idle after each
-    event, as if the scenario's utterances were seconds apart. ``real_time``
-    honors ``delay_ms`` and the production rate limit instead.
+    (rate-limit interval 0), pushes every interim transcript (throttle 0) and
+    waits for the pipeline to go idle after each event, as if the scenario's
+    utterances were seconds apart; nothing depends on wall-clock time.
+    ``real_time`` honors ``delay_ms``, the production rate limit and the
+    300 ms interim throttle instead.
 
     Usage:
         runner = ReplayRunner(scenario, llm_mode="mock")
@@ -194,7 +211,11 @@ class ReplayRunner:
 
         with recording(recorder), latency:
             async with EventCollector() as collector:
-                worker = self.pipeline_factory(session_id, fm, self.min_analysis_interval_s)
+                timing = PipelineTiming(
+                    min_analysis_interval_s=self.min_analysis_interval_s,
+                    interim_throttle_s=0.3 if self.real_time else 0.0,
+                )
+                worker = self.pipeline_factory(session_id, fm, timing)
                 try:
                     error = await self._drive(worker, session_id, scenario_clock, hint_responses, code_ratings)
                     final_state = worker.to_dict()

@@ -46,8 +46,14 @@ async def replay(request) -> AsyncIterator:
     await cp.open(settings.database_url_sync)
     threads: list[str] = []
 
-    def factory(session_id, fm, min_interval_s):
-        return LangGraphSessionPipeline(session_id, fm, cp, min_analysis_interval_s=min_interval_s)
+    def factory(session_id, fm, timing):
+        return LangGraphSessionPipeline(
+            session_id,
+            fm,
+            cp,
+            min_analysis_interval_s=timing.min_analysis_interval_s,
+            interim_throttle_s=timing.interim_throttle_s,
+        )
 
     async def run_graph(name: str) -> ReplayReport:
         scenario = load_scenario(SCENARIOS_DIR / name)

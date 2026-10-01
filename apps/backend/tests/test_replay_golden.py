@@ -52,9 +52,13 @@ async def checkpointer() -> AsyncIterator[Checkpointer]:
 
 
 def graph_factory(checkpointer: Checkpointer) -> PipelineFactory:
-    def factory(session_id, fm, min_interval_s):
+    def factory(session_id, fm, timing):
         return LangGraphSessionPipeline(
-            session_id, fm, checkpointer, get_speaker_snapshot=lambda: {}, min_analysis_interval_s=min_interval_s
+            session_id,
+            fm,
+            checkpointer,
+            min_analysis_interval_s=timing.min_analysis_interval_s,
+            interim_throttle_s=timing.interim_throttle_s,
         )
 
     return factory

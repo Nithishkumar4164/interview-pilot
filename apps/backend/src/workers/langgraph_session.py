@@ -167,17 +167,12 @@ class LangGraphSessionPipeline:
         if event.speaker_changed and self._get_speaker_snapshot is not None:
             await dashboard_manager.send_speaker_snapshot(self.session_id, self._get_speaker_snapshot())
 
-        self._enqueue(
-            UtteranceIn(
-                id=event.id,
-                speaker=speaker,
-                text=event.text,
-                timestamp=event.timestamp,
-                is_final=event.is_final,
-            )
-        )
-
+        # Interims only preview a sentence that arrives again as a final;
+        # they go to the dashboard above, never into memory.
         if event.is_final:
+            self._enqueue(
+                UtteranceIn(id=event.id, speaker=speaker, text=event.text, timestamp=event.timestamp, is_final=True)
+            )
             self._transcript_history.append(transcript_event)
             safe_enqueue(
                 "transcript",

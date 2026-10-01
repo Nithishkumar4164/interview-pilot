@@ -82,8 +82,14 @@ async def thread(checkpointer: Checkpointer) -> AsyncIterator[str]:
 
 
 def _graph_factory(checkpointer: Checkpointer) -> PipelineFactory:
-    def factory(session_id, fm, min_interval_s):
-        return LangGraphSessionPipeline(session_id, fm, checkpointer, min_analysis_interval_s=min_interval_s)
+    def factory(session_id, fm, timing):
+        return LangGraphSessionPipeline(
+            session_id,
+            fm,
+            checkpointer,
+            min_analysis_interval_s=timing.min_analysis_interval_s,
+            interim_throttle_s=timing.interim_throttle_s,
+        )
 
     return factory
 
@@ -192,7 +198,9 @@ async def test_pending_candidate_is_analyzed_against_its_own_question(checkpoint
 # ── Latency ────────────────────────────────────────────────────────────────
 
 
-async def _push_latencies_ms(pipeline, utterances: list[TranscriptEvent], settle: bool = True) -> list[float]:
+async def _push_latencies_ms(
+    pipeline, utterances: list[TranscriptEvent], settle: bool = True, first_id: int = 0
+) -> list[float]:
     """Time from each final utterance to its analysis reaching the dashboard."""
     latencies: list[float] = []
     sent_at = 0.0
@@ -206,7 +214,7 @@ async def _push_latencies_ms(pipeline, utterances: list[TranscriptEvent], settle
                 sent_at = time.perf_counter()
                 await pipeline.on_transcript_event(
                     TranscriptEventSchema(
-                        id=f"{pipeline.session_id}-{n}",
+                        id=f"{pipeline.session_id}-{first_id + n}",
                         session_id=pipeline.session_id,
                         speaker_role=ev.speaker_role,
                         text=ev.text,
@@ -291,7 +299,7 @@ async def test_new_pipeline_continues_from_checkpointed_state(checkpointer: Chec
         assert hint["generation_number"] == 1
         assert f"[candidate]: {CLAIM}" in recorder.calls[0].user_content
 
-        await _push_latencies_ms(second, [_c(DENIAL)])
+        await _push_latencies_ms(second, [_c(DENIAL)], first_id=1)
     after = second.to_dict()
 
     prompt = next(c.user_content for c in recorder.calls if c.kind == "utterance_analysis")

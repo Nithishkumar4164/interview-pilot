@@ -89,6 +89,7 @@ class LangGraphSessionPipeline:
         min_analysis_interval_s: float = MIN_ANALYSIS_INTERVAL_S,
         clock: Callable[[], float] = time.monotonic,
         durability: Durability = "async",
+        interim_throttle_s: float = INTERIM_THROTTLE_S,
     ) -> None:
         self.session_id = session_id
         self._failover = failover_manager
@@ -97,6 +98,7 @@ class LangGraphSessionPipeline:
         self._min_interval = min_analysis_interval_s
         self._clock = clock
         self._durability: Durability = durability
+        self._interim_throttle_s = interim_throttle_s
         self._graph = build_session_graph(failover_manager, session_id)
         self._app: CompiledStateGraph | None = None
         self._config: RunnableConfig = {"configurable": {"thread_id": thread_id_for(session_id)}}
@@ -158,7 +160,7 @@ class LangGraphSessionPipeline:
             await dashboard_manager.send_transcript(self.session_id, transcript_event)
         else:
             now = asyncio.get_running_loop().time()
-            if now - self._last_interim_push >= INTERIM_THROTTLE_S:
+            if now - self._last_interim_push >= self._interim_throttle_s:
                 self._last_interim_push = now
                 await dashboard_manager.send_transcript(self.session_id, transcript_event)
 

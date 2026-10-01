@@ -47,6 +47,7 @@ class AnalysisWorker:
         failover_manager: FailoverManager,
         get_speaker_snapshot: Callable[[], dict] | None = None,
         min_analysis_interval_s: float = MIN_ANALYSIS_INTERVAL_S,
+        interim_throttle_s: float = 0.3,
     ) -> None:
         self.session_id = session_id
         self._failover = failover_manager
@@ -70,7 +71,7 @@ class AnalysisWorker:
 
         # Throttle interim transcript pushes (max once per 300ms)
         self._last_interim_push: float = 0
-        self._INTERIM_THROTTLE_S = 0.3
+        self._INTERIM_THROTTLE_S = interim_throttle_s
 
         # Transcript history for catch-up on dashboard connect
         self._transcript_history: list[dict] = []

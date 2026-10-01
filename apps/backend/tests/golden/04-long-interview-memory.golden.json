@@ -1838,16 +1838,6 @@
     }
   ],
   "llm_calls_by_kind": {
-    "contradiction": [
-      {
-        "max_tokens": 200,
-        "response_format": "json",
-        "system_prompt_sha": "fd5a17c17593",
-        "task_type": "real_time_analysis",
-        "temperature": 0.2,
-        "user_content": "You are analyzing an interview transcript for contradictions.\n\nPrevious statement by the candidate:\n\"I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\"\n\nNew statement by the candidate:\n\"Sure. I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\"\n\nAre these statements contradictory? Consider:\n1. Direct contradictions (said X, now says not X)\n2. Temporal contradictions (said 5 years experience, but timeline doesn't add up)\n3. Technical contradictions (claimed to lead a project, but doesn't know basic details)\n\nRespond in JSON:\n{\n  \"is_contradiction\": true/false,\n  \"confidence\": 0.0-1.0,\n  \"explanation\": \"Brief explanation\",\n  \"suggested_probe\": \"A question the interviewer could ask to clarify\"\n}"
-      }
-    ],
     "fact_extraction": [
       {
         "max_tokens": 300,

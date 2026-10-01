@@ -247,6 +247,7 @@ class AnalysisWorker:
             contradictions = await self.contradictions.check(
                 text,
                 self.memory.fact_store,
+                exclude_claims=set(self.memory.claims_from(text)),
             )
             for c in contradictions:
                 await dashboard_manager.send_red_flag(

@@ -31,6 +31,9 @@ logger = get_logger("memory_service")
 # Tier 1 settings
 WORKING_MEMORY_SIZE = 10
 
+# Fact provenance kept for this many recent utterances (contradiction self-exclusion)
+CLAIM_PROVENANCE_SIZE = 20
+
 # Tier 2 settings — compress after this many new utterances
 SUMMARY_TRIGGER_COUNT = 20
 
@@ -75,8 +78,9 @@ class FactStore:
     key_numbers: list[str] = field(default_factory=list)
     hint_interactions: list[dict] = field(default_factory=list)
 
-    def merge(self, extracted: dict) -> None:
-        """Merge newly extracted facts, avoiding duplicates."""
+    def merge(self, extracted: dict) -> list[str]:
+        """Merge newly extracted facts, avoiding duplicates. Returns the items that were new."""
+        added: list[str] = []
         for key in (
             "claimed_experience",
             "technical_positions",
@@ -87,6 +91,8 @@ class FactStore:
             for item in extracted.get(key, []):
                 if item and item not in existing:
                     existing.append(item)
+                    added.append(item)
+        return added
 
     def to_text(self) -> str:
         """Render fact store as concise text for the LLM context."""
@@ -259,6 +265,9 @@ class MemoryService:
         self._bg_compress_task: asyncio.Task | None = None
         self._bg_extract_tasks: set[asyncio.Task] = set()
 
+        # Facts each recent utterance added, so its own contradiction check can skip them
+        self._claims_by_text: dict[str, list[str]] = {}
+
         # Stats
         self._total_utterances = 0
 
@@ -368,7 +377,13 @@ class MemoryService:
         """Extract structured facts from a substantial utterance."""
         extracted = await extract_facts(self._failover, self.session_id, speaker, text)
         if extracted:
-            self.fact_store.merge(extracted)
+            self._claims_by_text[text] = self.fact_store.merge(extracted)
+            while len(self._claims_by_text) > CLAIM_PROVENANCE_SIZE:
+                self._claims_by_text.pop(next(iter(self._claims_by_text)))
+
+    def claims_from(self, text: str) -> list[str]:
+        """Facts first extracted from the utterance ``text`` (recent utterances only)."""
+        return self._claims_by_text.get(text, [])
 
     def add_hint_interaction(self, hint_data: dict) -> None:
         """Record a hint interaction in the fact store."""

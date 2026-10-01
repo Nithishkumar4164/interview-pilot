@@ -52,6 +52,8 @@ class Settings(BaseSettings):
 
     # Upper bound on parallel LLM calls while generating one interview plan.
     plan_generation_max_concurrency: int = 4
+    # Real-time pipeline: the LangGraph session graph instead of AnalysisWorker.
+    use_langgraph_session: bool = False
 
     # Storage
     s3_endpoint: str = "http://localhost:9000"

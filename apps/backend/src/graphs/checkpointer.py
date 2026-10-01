@@ -6,7 +6,9 @@ of the app keeps using SQLAlchemy + asyncpg. Checkpoint tables are owned by
 ``CHECKPOINT_TABLES`` and ``alembic/env.py``.
 """
 
+import asyncio
 import contextlib
+import time
 from collections.abc import AsyncIterator
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -53,14 +55,14 @@ class Checkpointer:
 
     def __init__(self) -> None:
         self._pool: AsyncConnectionPool[AsyncConnection[DictRow]] | None = None
+        self._lock_pool: AsyncConnectionPool[AsyncConnection[DictRow]] | None = None
         self._saver: AsyncPostgresSaver | None = None
 
-    async def open(self, conninfo: str, *, min_size: int = 1, max_size: int = 10) -> AsyncPostgresSaver:
-        if self._saver is not None:
-            return self._saver
+    @staticmethod
+    def _new_pool(conninfo: str, min_size: int, max_size: int) -> AsyncConnectionPool[AsyncConnection[DictRow]]:
         # AsyncPostgresSaver requires autocommit, dict rows, and no server-side
         # prepared statements (same kwargs as AsyncPostgresSaver.from_conn_string).
-        pool = AsyncConnectionPool(
+        return AsyncConnectionPool(
             conninfo,
             connection_class=AsyncConnection[DictRow],
             min_size=min_size,
@@ -68,11 +70,23 @@ class Checkpointer:
             kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
             open=False,
         )
+
+    async def open(
+        self, conninfo: str, *, min_size: int = 1, max_size: int = 10, lock_pool_size: int = 10
+    ) -> AsyncPostgresSaver:
+        if self._saver is not None:
+            return self._saver
+        pool = self._new_pool(conninfo, min_size, max_size)
+        # Advisory locks are held on a connection for the length of a graph run,
+        # and that run needs saver connections to write checkpoints. Separate
+        # pools mean lock holders can never starve the writes they wait on.
+        lock_pool = self._new_pool(conninfo, 1, lock_pool_size)
         await pool.open(wait=True)
+        await lock_pool.open(wait=True)
         saver = AsyncPostgresSaver(pool, serde=build_serializer())
         await saver.setup()
-        self._pool, self._saver = pool, saver
-        logger.info("checkpointer_ready", max_pool_size=max_size)
+        self._pool, self._lock_pool, self._saver = pool, lock_pool, saver
+        logger.info("checkpointer_ready", max_pool_size=max_size, lock_pool_size=lock_pool_size)
         return saver
 
     @property
@@ -90,9 +104,9 @@ class Checkpointer:
         it is released automatically if this process dies — letting another
         worker take over a crashed run.
         """
-        if self._pool is None:
+        if self._lock_pool is None:
             raise RuntimeError("Checkpointer is not open; call open() during app startup")
-        async with self._pool.connection() as conn:
+        async with self._lock_pool.connection() as conn:
             row = await (
                 await conn.execute("SELECT pg_try_advisory_lock(hashtextextended(%s, 0)) AS locked", (key,))
             ).fetchone()
@@ -103,11 +117,38 @@ class Checkpointer:
                 if locked:
                     await conn.execute("SELECT pg_advisory_unlock(hashtextextended(%s, 0))", (key,))
 
+    @contextlib.asynccontextmanager
+    async def advisory_lock(self, key: str, *, timeout_s: float = 30.0, poll_s: float = 0.02) -> AsyncIterator[None]:
+        """Hold the advisory lock for ``key``, waiting up to ``timeout_s`` for it.
+
+        Polls ``pg_try_advisory_lock`` rather than blocking in
+        ``pg_advisory_lock``, so a cancelled waiter never leaves a backend
+        stuck waiting on the server. Raises TimeoutError if not acquired.
+        """
+        if self._lock_pool is None:
+            raise RuntimeError("Checkpointer is not open; call open() during app startup")
+        deadline = time.monotonic() + timeout_s
+        async with self._lock_pool.connection() as conn:
+            while True:
+                row = await (
+                    await conn.execute("SELECT pg_try_advisory_lock(hashtextextended(%s, 0)) AS locked", (key,))
+                ).fetchone()
+                if row and row["locked"]:
+                    break
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"advisory lock {key!r} not acquired in {timeout_s}s")
+                await asyncio.sleep(poll_s)
+            try:
+                yield
+            finally:
+                await conn.execute("SELECT pg_advisory_unlock(hashtextextended(%s, 0))", (key,))
+
     async def delete_threads(self, *thread_ids: str) -> None:
         for thread_id in thread_ids:
             await self.saver.adelete_thread(thread_id)
 
     async def close(self) -> None:
-        if self._pool is not None:
-            await self._pool.close()
-        self._pool, self._saver = None, None
+        for pool in (self._pool, self._lock_pool):
+            if pool is not None:
+                await pool.close()
+        self._pool, self._lock_pool, self._saver = None, None, None

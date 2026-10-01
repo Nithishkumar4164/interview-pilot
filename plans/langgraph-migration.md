@@ -216,7 +216,7 @@ load_session_data (DB: transcripts, analyses, hints, code snapshots, contradicti
 | 0 | Commit the replay harness. Record golden baselines (**(rev 3)** against an input-sensitive `ScriptedProvider`, since the stock mock returns one string per task type and would pass even when the context sent to the LLM is wrong). Add deps. Wire up the checkpointer lifespan, strict serde, Alembic exclusion, OTel setup + LLM spans, `SessionPipeline` Protocol, idempotency-key migration | Golden files are committed. A trivial graph checkpoints to the dev DB and round-trips `EnhancedAnalysisResult` / `FactStore`. `AnalysisWorker` is reached only through the Protocol |
 | 1 | **ReportGraph**, deterministic single-call mode, per-attempt threads, thread cleanup | Report tests pass. A report resumes after a killed process. **Done** — see §9 |
 | 2 | **PlanGraph** with `Send` fan-out | Plan tests pass. SSE shows per-phase progress. Latency improves. **Done except SSE progress** — see §10 |
-| 3 | **SessionGraph** utterances and question_change paths, **MemoryGraph**, `SessionIngress`, `EffectsSink`, behind `USE_LANGGRAPH_SESSION` | Replay parity, crash/resume, and latency tests pass. The factory switches to the new pipeline under the flag |
+| 3 | **SessionGraph** utterances and question_change paths, **MemoryGraph**, `SessionIngress`, `EffectsSink`, behind `USE_LANGGRAPH_SESSION` | Replay parity, crash/resume, and latency tests pass. The factory switches to the new pipeline under the flag. **Done** — see §11 |
 | 4 | Move the code_snapshot path, `RuntimeHintGraph` and `CodeRatingGraph` in. `code_handler` switches over. `/state` adapter | Code-hint tests pass. The `code_handler` per-process dict and `SessionStateService` snapshot loop are gone |
 | 5 | Add `invoke_with_tools` to the LLM layer. Agentic routing on the hot path. Agentic report scoring with `synthesize` | Agentic scenario assertions pass. Manually compare reports from both modes on real sessions |
 | 6 | Delete `AnalysisWorker`, service-level state and `SessionStateService`. Drop `session_snapshots`. Update `ARCHITECTURE.md` §4.7, §10, §11, §13.5 | No references to the old code remain. The full test suite is green |
@@ -288,3 +288,42 @@ Decisions that differ from the draft plan:
 - **No checkpointer.** Plan generation belongs to one HTTP request, so a resumed run after a crash would have nobody to deliver the plan to.
 - **No SSE progress yet.** There is no plan-progress endpoint, and the frontend awaits the POST. Streaming needs a new endpoint plus UI work, and is a follow-up if 2 s turns out to feel slow.
 - **Error behavior unchanged.** A failed question or hint call still fails the plan request, as before. The "fall back to bank questions" idea stays for Phase 5, since the API doesn't currently pass bank questions at all.
+
+## 11. Phase 3 notes (SessionGraph)
+
+Built as `src/graphs/session_graph.py` (the graph) and `src/workers/langgraph_session.py` (`LangGraphSessionPipeline`: transport, ingress queue, rate limit, effect sink, compression task, resume). `create_session_pipeline` returns it when `USE_LANGGRAPH_SESSION=true`; the default is still `AnalysisWorker`.
+
+```
+apply_events ─┬─► Send(extract_facts) × long final utterances ─┐
+              ├─► Send(analyze)  (when the ingress chose one)  ─┴─► merge_results ─► follow_up ─► END
+              └─► END
+```
+
+**Oracle first.** The Phase 0 goldens used a zero-latency scripted LLM, where a background fact extraction always finished before the analysis of the same utterance started. Against a real provider they run concurrently. The harness now gives each call site a latency (`REPLAY_LATENCY_MS`) and waits for the pipeline to go idle between events. It also captures DB writes and the `/state` snapshot. The goldens were re-recorded **from `AnalysisWorker`**. For 01–03 the only differences are analysis prompts no longer containing same-utterance facts, plus the outputs derived from them. Three scenarios were added: 04 (mid-session and question-change compression, long interviewer utterance, hints, a real contradiction), 05 (interims) and 06 (LLM failures). The service logic moved to plain functions shared by both implementations.
+
+Verified:
+- **Parity:** all 6 goldens pass through the graph on the real Postgres checkpointer. Seven graph mutations and seven ingress/durability mutations each fail at least one test.
+- **Rate limit:** in real time with a 0.5 s window, the graph analyzes the same utterances as `AnalysisWorker` for a "latest wins" timeline and a 20 ms-spaced burst.
+- **Latency** (utterance → analysis push, 30 ms scripted analysis): worker median 32 ms, graph median 38 ms (max 46 ms). The budget asserted in tests is a median within worker + 15 ms; the per-run advisory lock costs 0.2 ms median and the rest is graph steps. A 1 s compression in flight does not delay the next analysis.
+- **Durability:** a restarted pipeline continues from the checkpoint, and reads served before its first run (runtime hints) see it. Two pipelines on one session lose no updates, because the per-run advisory lock serializes them. A child process SIGKILLed inside `follow_up` is finished on restart under both `sync` and `async` durability, with one `analysis_events` row per idempotency key.
+- **End to end** (uvicorn, mock Deepgram over the real audio and dashboard WebSockets, mock LLM at 300 ms):
+  - Before the kill: transcripts and analyses reached the dashboard.
+  - The kill: `kill -9` 122 ms into an analysis left the checkpoint at `next=('analyze',)` with all 5 utterances in memory.
+  - After restart: reconnecting logged `session_run_resuming`, finished the analysis and pushed it.
+  - End state: 6 utterances and 4 analyses across three server lives, with no duplicate rows.
+  - Ending the session produced a completed report.
+
+Decisions that differ from the draft plan:
+- **Fact extraction runs inside the session run**, in parallel with analysis and joined before the contradiction check, not in a memory side graph. That reproduces today's production ordering deterministically: the contradiction check sees the facts from all earlier utterances. With extraction in a side graph, facts from the previous utterance could still be in flight when the next check runs, so adjacent contradictions would be missed.
+- **"MemoryGraph" is a task, not a graph.** Compression is one LLM call, and its crash safety comes from the session state: the buffer stays there until the `SummaryCompressed` event lands. A one-node graph would add a thread and nothing else.
+- **Advisory locks have their own pool** (`Checkpointer.advisory_lock`, `lock_pool_size=10`). A run holds its lock while it needs saver connections to checkpoint, so a shared pool could deadlock once 10 runs are in flight. `try_advisory_lock` (reports) moved to the lock pool too. At most 10 session runs per process can be in flight at once; the 11th waits.
+- **Rate-limit edges, deliberately different from `AnalysisWorker`:**
+  - The old limiter stamped its clock when an analysis task started, so utterances delivered in the same event-loop tick all bypassed the window. The ingress stamps the clock when it picks the target.
+  - A candidate still waiting out the window when the question changes is analyzed against its own question just before the switch. The old worker analyzed it later, against the new question.
+- **Interims still enter memory** (parity). Fixing that is one of the four approved follow-ups below.
+
+New failure mode: the live analysis path now needs Postgres (checkpoints and the lock). Persistence, reports and auth already did.
+
+Approved follow-ups, each a separate commit that reproduces the bug in a scenario first: self-contradiction, interviewer facts, interims in memory, session teardown (which also deletes the session thread).
+
+Known gaps carried forward: the transcript of an utterance spoken within 2 s of a crash is lost because `PersistenceService` buffers in memory (same as before). Two gunicorn workers still give each process its own `dashboard_manager`, so a dashboard and an audio socket for one session that land on different workers do not see each other. That issue predates this migration.

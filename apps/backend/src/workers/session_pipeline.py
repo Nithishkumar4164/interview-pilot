@@ -56,6 +56,16 @@ def create_session_pipeline(
     failover_manager: FailoverManager,
     get_speaker_snapshot: Callable[[], dict] | None = None,
 ) -> SessionPipeline:
+    from src.config import settings
+
+    if settings.use_langgraph_session:
+        from src.dependencies import get_checkpointer
+        from src.workers.langgraph_session import LangGraphSessionPipeline
+
+        return LangGraphSessionPipeline(
+            session_id, failover_manager, get_checkpointer(), get_speaker_snapshot=get_speaker_snapshot
+        )
+
     from src.workers.analysis_worker import AnalysisWorker
 
     return AnalysisWorker(session_id, failover_manager, get_speaker_snapshot=get_speaker_snapshot)

@@ -42,3 +42,13 @@ async def test_get_transcripts_by_ids_returns_matching_finals_in_order() -> None
     worker._transcript_history.extend({"id": i, "text": f"t{i}"} for i in ("a", "b", "c"))
     assert [t["id"] for t in worker.get_transcripts_by_ids({"c", "a"})] == ["a", "c"]
     assert worker.get_transcripts_by_ids(set()) == []
+
+
+def test_factory_returns_the_langgraph_pipeline_under_the_flag(monkeypatch) -> None:
+    from src.config import settings
+    from src.workers.langgraph_session import LangGraphSessionPipeline
+
+    monkeypatch.setattr(settings, "use_langgraph_session", True)
+    pipeline = create_session_pipeline("s-3", build_scripted_failover_manager())
+    assert isinstance(pipeline, LangGraphSessionPipeline)
+    assert isinstance(pipeline, SessionPipeline)

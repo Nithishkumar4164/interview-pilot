@@ -1,7 +1,9 @@
 """Golden parity for the real-time pipeline under the scripted LLM.
 
-These goldens were recorded from the pre-LangGraph AnalysisWorker. Any
-reimplementation of the real-time pipeline must reproduce them.
+These goldens were recorded from the pre-LangGraph AnalysisWorker. Every
+implementation of the real-time pipeline must reproduce them; each scenario
+runs through AnalysisWorker and through the LangGraph session pipeline (on
+the real Postgres checkpointer).
 
 To re-record after an intentional behavior change:
     REPLAY_UPDATE_GOLDEN=1 uv run pytest tests/test_replay_golden.py
@@ -9,13 +11,18 @@ and review the diff before committing.
 """
 
 import os
+from collections.abc import AsyncIterator
 from pathlib import Path
 
+import psycopg
 import pytest
 
+from src.config import settings
+from src.graphs.checkpointer import Checkpointer
 from src.replay.golden import golden_path, normalize, read_golden, write_golden
-from src.replay.runner import ReplayRunner
+from src.replay.runner import PipelineFactory, ReplayRunner, analysis_worker_factory
 from src.replay.scenario import load_scenario
+from src.workers.langgraph_session import LangGraphSessionPipeline, thread_id_for
 
 SCENARIOS_DIR = Path(__file__).parent / "scenarios"
 GOLDEN_DIR = Path(__file__).parent / "golden"
@@ -26,10 +33,60 @@ def _scenario_paths() -> list[Path]:
     return sorted(SCENARIOS_DIR.glob("*.scenario.json"))
 
 
-async def _run(path: Path) -> dict:
+def _postgres_available() -> bool:
+    try:
+        with psycopg.connect(settings.database_url_sync, connect_timeout=2):
+            return True
+    except psycopg.OperationalError:
+        return False
+
+
+@pytest.fixture
+async def checkpointer() -> AsyncIterator[Checkpointer]:
+    if not _postgres_available():
+        pytest.skip("Postgres not reachable")
+    cp = Checkpointer()
+    await cp.open(settings.database_url_sync)
+    yield cp
+    await cp.close()
+
+
+def graph_factory(checkpointer: Checkpointer) -> PipelineFactory:
+    def factory(session_id, fm, min_interval_s):
+        return LangGraphSessionPipeline(
+            session_id, fm, checkpointer, get_speaker_snapshot=lambda: {}, min_analysis_interval_s=min_interval_s
+        )
+
+    return factory
+
+
+async def _run(path: Path, factory: PipelineFactory = analysis_worker_factory) -> dict:
     scenario = load_scenario(path)
-    report = await ReplayRunner(scenario, llm_mode="scripted").run()
+    report = await ReplayRunner(scenario, llm_mode="scripted", pipeline_factory=factory).run()
     return normalize(report)
+
+
+async def _run_graph(path: Path, checkpointer: Checkpointer) -> dict:
+    thread = thread_id_for(load_scenario(path).meta.id)
+    await checkpointer.delete_threads(thread)
+    try:
+        return await _run(path, graph_factory(checkpointer))
+    finally:
+        await checkpointer.delete_threads(thread)
+
+
+def _assert_matches(actual: dict, expected: dict) -> None:
+    # Compare section by section so a failure names what diverged.
+    for section in expected:
+        assert actual.get(section) == expected[section], f"golden section {section!r} diverged"
+    assert set(actual) == set(expected)
+
+
+@pytest.mark.parametrize("scenario_path", _scenario_paths(), ids=lambda p: p.stem)
+async def test_langgraph_pipeline_matches_golden(scenario_path: Path, checkpointer: Checkpointer) -> None:
+    path = golden_path(GOLDEN_DIR, load_scenario(scenario_path).meta.id)
+    assert path.exists(), f"missing golden {path}; record with REPLAY_UPDATE_GOLDEN=1"
+    _assert_matches(await _run_graph(scenario_path, checkpointer), read_golden(path))
 
 
 @pytest.mark.parametrize("scenario_path", _scenario_paths(), ids=lambda p: p.stem)
@@ -43,12 +100,7 @@ async def test_replay_matches_golden(scenario_path: Path) -> None:
         pytest.skip(f"golden re-recorded: {path.name}")
 
     assert path.exists(), f"missing golden {path}; record with REPLAY_UPDATE_GOLDEN=1"
-    expected = read_golden(path)
-
-    # Compare section by section so a failure names what diverged.
-    for section in expected:
-        assert actual.get(section) == expected[section], f"golden section {section!r} diverged"
-    assert set(actual) == set(expected)
+    _assert_matches(actual, read_golden(path))
 
 
 @pytest.mark.parametrize("scenario_path", _scenario_paths(), ids=lambda p: p.stem)

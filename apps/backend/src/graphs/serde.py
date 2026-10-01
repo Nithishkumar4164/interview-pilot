@@ -12,6 +12,14 @@ When a new type is added to any graph's state, add it to CHECKPOINT_TYPES.
 
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
+from src.graphs.session_graph import (
+    HintAcknowledged,
+    HintRevealed,
+    QuestionChanged,
+    RuntimeHintGenerated,
+    SummaryCompressed,
+    UtteranceIn,
+)
 from src.schemas.analysis import (
     BehavioralSignalDimension,
     CommunicationQualityDimension,
@@ -45,6 +53,13 @@ CHECKPOINT_TYPES: tuple[type, ...] = (
     FactStore,
     # contradictions
     Contradiction,
+    # session graph ingress events
+    UtteranceIn,
+    QuestionChanged,
+    HintRevealed,
+    HintAcknowledged,
+    RuntimeHintGenerated,
+    SummaryCompressed,
     # report graph
     ReportInput,
     GeneratedReport,

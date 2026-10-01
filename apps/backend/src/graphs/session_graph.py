@@ -4,7 +4,7 @@ Each run processes one batch of ingress events on thread ``session_id``;
 ``LangGraphSessionPipeline`` (src/workers/langgraph_session.py) queues events,
 chooses the batch and the utterance to analyze, and runs the graph.
 
-    apply_events ─┬─► Send(extract_facts) × long final utterances ─┐
+    apply_events ─┬─► Send(extract_facts) × long final candidate utterances ─┐
                   ├─► Send(analyze)   (when the ingress chose one) ─┴─► merge_results ─► follow_up ─► END
                   └─► END             (nothing to extract or analyze)                 └─► END (no analysis)
 
@@ -331,7 +331,9 @@ def build_session_graph(failover: FailoverManager, session_id: str) -> StateGrap
         sends = [
             Send("extract_facts", ExtractTask(index=i, speaker=ev.speaker, text=ev.text))
             for i, ev in enumerate(state["events"])
-            if isinstance(ev, UtteranceIn) and ev.text.strip() and should_extract_facts(ev.text, ev.is_final)
+            if isinstance(ev, UtteranceIn)
+            and ev.text.strip()
+            and should_extract_facts(ev.speaker, ev.text, ev.is_final)
         ]
         target = state.get("analyze")
         if target is not None:

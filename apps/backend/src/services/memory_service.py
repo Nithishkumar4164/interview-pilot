@@ -132,9 +132,13 @@ class FactStore:
 # ── Pure helpers (shared by MemoryService and the LangGraph session graph) ──
 
 
-def should_extract_facts(text: str, is_final: bool) -> bool:
-    """Tier 3 runs on substantial final utterances only."""
-    return is_final and len(text.split()) > 20
+def should_extract_facts(speaker: str, text: str, is_final: bool) -> bool:
+    """Tier 3 holds the candidate's claims: substantial final candidate utterances only.
+
+    Interviewer utterances are not mined; their statements are not the
+    candidate's claims and must not be contradiction-checked against.
+    """
+    return speaker == "candidate" and is_final and len(text.split()) > 20
 
 
 def format_utterances(utterances: Iterable[Utterance]) -> str:
@@ -305,7 +309,7 @@ class MemoryService:
             self._schedule_compress()
 
         # Tier 3: Schedule fact extraction in background for substantial utterances
-        if should_extract_facts(text, is_final):
+        if should_extract_facts(speaker, text, is_final):
             self._schedule_extract_facts(speaker, text)
 
     # ── Background Task Scheduling ─────────────────────────────────

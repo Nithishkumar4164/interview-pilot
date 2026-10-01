@@ -89,3 +89,20 @@ async def test_a_real_contradiction_is_still_flagged(replay) -> None:
     assert [(f["claim"][:40], f["new_statement"][:40]) for f in flags] == [
         ("I have used Kafka for about four years, ", "Actually I've never used Kafka Connect o")
     ]
+
+
+INTERVIEWER_KAFKA = "On our team we used Kafka for years, so I'm curious how yours compared."
+
+
+async def test_interviewer_statements_are_not_candidate_facts(replay) -> None:
+    """Scenario 04's interviewer mentions their own team's Kafka use; the candidate
+    later says they never used Kafka. Only the candidate's words are claims."""
+    report = await replay("04_long_interview_memory.scenario.json")
+    facts = report.final_state["memory"]["fact_store"]
+    assert not any(
+        INTERVIEWER_KAFKA in item for items in facts.values() if isinstance(items, list) for item in map(str, items)
+    )
+    assert all(f["claim"] != INTERVIEWER_KAFKA for f in _contradiction_flags(report))
+    assert not [
+        c for c in report.llm_calls if c["kind"] == "fact_extraction" and "(by interviewer)" in c["user_content"]
+    ]

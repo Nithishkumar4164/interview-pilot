@@ -63,7 +63,19 @@ class ActiveHintEvent(BaseModel):
     delay_ms: int = 0
 
 
+class CodeUpdateEvent(BaseModel):
+    """A live editor snapshot from the code WebSocket (``SessionPipeline.on_code_snapshot``)."""
+
+    type: Literal["code_update"] = "code_update"
+    code: str
+    language: str = "python"
+    source: str = "codemirror"
+    delay_ms: int = 0
+
+
 class CodeSnapshotEvent(BaseModel):
+    """The interviewer asked for a rating of this code (``handle_code_rating``)."""
+
     type: Literal["code_snapshot"] = "code_snapshot"
     code: str
     language: str = "python"
@@ -72,7 +84,13 @@ class CodeSnapshotEvent(BaseModel):
 
 
 ScenarioEvent = Annotated[
-    TranscriptEvent | QuestionChangeEvent | HintRequestEvent | HintAckEvent | ActiveHintEvent | CodeSnapshotEvent,
+    TranscriptEvent
+    | QuestionChangeEvent
+    | HintRequestEvent
+    | HintAckEvent
+    | ActiveHintEvent
+    | CodeUpdateEvent
+    | CodeSnapshotEvent,
     Field(discriminator="type"),
 ]
 

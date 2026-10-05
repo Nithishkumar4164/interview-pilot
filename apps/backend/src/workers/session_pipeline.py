@@ -25,6 +25,10 @@ class SessionPipeline(Protocol):
 
     async def handle_runtime_hint_ack(self, data: dict) -> None: ...
 
+    async def on_code_snapshot(self, code: str, language: str, source: str) -> None:
+        """A snapshot of the candidate's editor, from the code WebSocket."""
+        ...
+
     # ── Request/response ──────────────────────────────────────────────
     async def handle_runtime_hint_request(self, request_data: dict) -> dict: ...
 
@@ -36,7 +40,7 @@ class SessionPipeline(Protocol):
     def get_transcripts_by_ids(self, transcript_ids: set[str]) -> list[dict]: ...
 
     def report_snapshot(self) -> dict:
-        """Session-derived inputs for report generation (facts, summary, analyses, contradictions)."""
+        """Session-derived inputs for report generation (facts, summary, analyses, contradictions, code)."""
         ...
 
     def to_dict(self) -> dict: ...

@@ -43,6 +43,11 @@ EXPECTED = {
         "min_analyses": 2,
     },
     # Failure markers only affect the scripted LLM; under mock it is a normal run.
+    "07-live-coding": {
+        "min_transcripts": 4,
+        "min_analyses": 3,
+        "min_code_ratings": 1,
+    },
     "06-llm-failures": {
         "min_transcripts": 4,
         "min_analyses": 3,

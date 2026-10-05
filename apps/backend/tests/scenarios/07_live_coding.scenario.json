@@ -1,0 +1,127 @@
+{
+  "meta": {
+    "id": "07-live-coding",
+    "description": "Live code snapshots across two questions: progress from skeleton to complete, approach detection, stuck detection on an editor that stops changing, a question change, and a code rating.",
+    "tags": [
+      "code",
+      "stuck",
+      "question-change"
+    ]
+  },
+  "events": [
+    {
+      "type": "question_change",
+      "question_text": "Given an array of integers and a target, return the indices of the two numbers that add up to the target.",
+      "question_index": 0,
+      "question_plan": {
+        "id": "q-two-sum",
+        "text": "Two Sum",
+        "optimal_approaches": [
+          {
+            "name": "hash_map",
+            "expected_complexity": {
+              "time": "O(n)",
+              "space": "O(n)"
+            }
+          }
+        ],
+        "brute_force_approach": "nested loops",
+        "common_pitfalls": [
+          "using the same index twice"
+        ]
+      }
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Go ahead and code it up, talk me through it as you go.",
+      "channel": "tab"
+    },
+    {
+      "type": "code_update",
+      "code": "def two_sum(nums, target):\n    pass\n",
+      "language": "python"
+    },
+    {
+      "type": "code_update",
+      "code": "def two_sum(nums, target):\n    seen = {}\n    for i, n in enumerate(nums):\n        pass\n",
+      "language": "python"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "I'm keeping a dictionary from value to index so each lookup for the complement is constant time.",
+      "channel": "microphone"
+    },
+    {
+      "type": "code_update",
+      "code": "def two_sum(nums, target):\n    seen = {}\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i\n    return []\n",
+      "language": "python"
+    },
+    {
+      "type": "code_update",
+      "code": "def two_sum(nums, target):\n    # map value -> index\n    if nums is None or len(nums) == 0:\n        return []\n    seen = {}\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i\n    return []\n",
+      "language": "python"
+    },
+    {
+      "type": "code_update",
+      "code": "def two_sum(nums, target):\n    # map value to index\n    if nums is None or len(nums) == 0:\n        return []\n    seen = {}\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i\n    return []\n",
+      "language": "python"
+    },
+    {
+      "type": "code_update",
+      "code": "def two_sum(nums, target):\n    # map value -> index\n    if nums is None or len(nums) == 0:\n        return [ ]\n    seen = {}\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i\n    return []\n",
+      "language": "python"
+    },
+    {
+      "type": "code_update",
+      "code": "def two_sum(nums, target):\n    # map value to index\n    if nums is None or len(nums) == 0:\n        return []\n    seen = {}\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i\n    return []\n",
+      "language": "python"
+    },
+    {
+      "type": "code_update",
+      "code": "def two_sum(nums, target):\n    # map value -> index\n    if nums is None or len(nums) == 0:\n        return []\n    seen = {}\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i\n    return []\n",
+      "language": "python"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "I think that's done, it handles the empty input and returns an empty list when there's no pair.",
+      "channel": "microphone"
+    },
+    {
+      "type": "question_change",
+      "question_text": "Reverse a singly linked list in place.",
+      "question_index": 1,
+      "question_plan": {
+        "id": "q-reverse",
+        "text": "Reverse a linked list",
+        "optimal_approaches": [
+          "iterative three pointers"
+        ]
+      }
+    },
+    {
+      "type": "code_update",
+      "code": "class ListNode:\n    def __init__(self, val=0, next=None):\n        self.val = val\n        self.next = next\n\n# iterate once, keep the previous node\ndef reverse(head):\n    # flip pointers in place\n    prev = None\n    curr = head\n    while curr:\n        curr = curr.next\n    return prev\n",
+      "language": "python"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "I'll walk the list with previous and current pointers and flip each next pointer as I go.",
+      "channel": "microphone"
+    },
+    {
+      "type": "code_update",
+      "code": "class ListNode:\n    def __init__(self, val=0, next=None):\n        self.val = val\n        self.next = next\n\ndef reverse(head):\n    if head is None:\n        return None\n    prev = None\n    curr = head\n    while curr:\n        nxt = curr.next\n        curr.next = prev\n        prev = curr\n        curr = nxt\n    return prev\n",
+      "language": "python"
+    },
+    {
+      "type": "code_snapshot",
+      "code": "class ListNode:\n    def __init__(self, val=0, next=None):\n        self.val = val\n        self.next = next\n\ndef reverse(head):\n    if head is None:\n        return None\n    prev = None\n    curr = head\n    while curr:\n        nxt = curr.next\n        curr.next = prev\n        prev = curr\n        curr = nxt\n    return prev\n",
+      "language": "python",
+      "question_id": "q-reverse"
+    }
+  ]
+}

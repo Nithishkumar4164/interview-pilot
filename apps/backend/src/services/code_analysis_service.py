@@ -143,6 +143,16 @@ Respond in JSON:
 # ── Pure helpers (shared by CodeAnalysisService and the LangGraph session graph) ──
 
 
+def code_report_fields(latest: "CodeAnalysisResult | None") -> dict:
+    """The report inputs derived from the latest code analysis (``unknown`` before any code)."""
+    if latest is None:
+        return {"code_progress": "unknown", "detected_approach": None}
+    return {
+        "code_progress": latest.progress_state.value,
+        "detected_approach": latest.detected_approach.name if latest.detected_approach else None,
+    }
+
+
 def normalize_code(code: str) -> str:
     """Normalize code whitespace and remove trailing spaces."""
     lines = code.splitlines()

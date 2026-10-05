@@ -23,6 +23,7 @@ from src.utils.logging import get_logger
 logger = get_logger("persistence")
 
 FLUSH_INTERVAL_S = 2.0
+_CODE_SNAPSHOT_ID_NAMESPACE = uuid.UUID("0b8f3f8e-6c1e-4a55-9a1e-6d3f2c7b9e41")
 MAX_BATCH_SIZE = 50
 
 
@@ -191,10 +192,15 @@ class PersistenceService:
         diff: str | None = None,
         approach: str | None = None,
         progress_state: str = "unknown",
+        idempotency_key: str | None = None,
     ) -> None:
-        """Enqueue a code snapshot for persistence."""
+        """Enqueue a code snapshot for persistence.
+
+        ``code_snapshots`` has no idempotency column; a key instead fixes the
+        row's primary key, so a re-emitted snapshot hits ON CONFLICT DO NOTHING.
+        """
         entity = CodeSnapshot(
-            id=uuid.uuid4(),
+            id=uuid.uuid5(_CODE_SNAPSHOT_ID_NAMESPACE, idempotency_key) if idempotency_key else uuid.uuid4(),
             session_id=uuid.UUID(session_id),
             code=code,
             language=language,

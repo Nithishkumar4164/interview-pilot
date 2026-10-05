@@ -1,0 +1,1051 @@
+{
+  "code_ratings": [
+    {
+      "approach_match": "unclear",
+      "approach_name": "scripted-approach-44",
+      "complexity_actual": {
+        "space": "O(n)",
+        "time": "O(n)"
+      },
+      "complexity_expected": {
+        "space": "O(n)",
+        "time": "O(n)"
+      },
+      "complexity_match": true,
+      "correctness": "correct",
+      "correctness_issues": [],
+      "improvement_areas": [],
+      "latency_ms": "<volatile>",
+      "overall_score": 5,
+      "pitfalls_avoided": [],
+      "pitfalls_hit": [],
+      "provider": "scripted",
+      "question_id": "q-reverse",
+      "strengths": [
+        "scripted-strength"
+      ],
+      "summary": "scripted-code-summary-044"
+    }
+  ],
+  "dashboard_events": [
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "5ad01ba1-e88c-595d-8ba5-868a96c8923a",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "Go ahead and code it up, talk me through it as you go.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_code_analysis",
+      "payload": {
+        "bugs": [],
+        "code_length": 36,
+        "complexity_estimate": {},
+        "detected_approach": null,
+        "is_stuck": false,
+        "language": "python",
+        "progress_state": "skeleton",
+        "source": "codemirror",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_code_analysis",
+      "payload": {
+        "bugs": [],
+        "code_length": 87,
+        "complexity_estimate": {},
+        "detected_approach": {
+          "confidence": 0.14285714285714285,
+          "data_structures": [
+            "hash_map"
+          ],
+          "expected_complexity": {},
+          "name": "hash_map"
+        },
+        "is_stuck": false,
+        "language": "python",
+        "progress_state": "partial",
+        "source": "codemirror",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "60e8b690-66e1-564b-8c61-176d0e5c9d6c",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "I'm keeping a dictionary from value to index so each lookup for the complement is constant time.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 2,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "adequate",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "medium",
+            "confidence": "medium",
+            "justification": "scripted",
+            "score": "adequate",
+            "structure": "high"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "weak"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "excellent"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "full",
+            "justification": "scripted",
+            "score": "weak"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "excellent"
+          }
+        },
+        "hint_signal": "guide",
+        "insight": "scripted-insight-7471",
+        "latency_ms": "<volatile>",
+        "on_track": false,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-471",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "guide",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_code_analysis",
+      "payload": {
+        "bugs": [],
+        "code_length": 194,
+        "complexity_estimate": {},
+        "detected_approach": {
+          "confidence": 0.14285714285714285,
+          "data_structures": [
+            "array/list",
+            "hash_map"
+          ],
+          "expected_complexity": {},
+          "name": "hash_map"
+        },
+        "is_stuck": false,
+        "language": "python",
+        "progress_state": "partial",
+        "source": "codemirror",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_code_analysis",
+      "payload": {
+        "bugs": [],
+        "code_length": 276,
+        "complexity_estimate": {},
+        "detected_approach": {
+          "confidence": 0.14285714285714285,
+          "data_structures": [
+            "array/list",
+            "hash_map"
+          ],
+          "expected_complexity": {},
+          "name": "hash_map"
+        },
+        "is_stuck": false,
+        "language": "python",
+        "progress_state": "near_complete",
+        "source": "codemirror",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_code_analysis",
+      "payload": {
+        "bugs": [],
+        "code_length": 276,
+        "complexity_estimate": {},
+        "detected_approach": {
+          "confidence": 0.14285714285714285,
+          "data_structures": [
+            "array/list",
+            "hash_map"
+          ],
+          "expected_complexity": {},
+          "name": "hash_map"
+        },
+        "is_stuck": false,
+        "language": "python",
+        "progress_state": "near_complete",
+        "source": "codemirror",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_code_analysis",
+      "payload": {
+        "bugs": [],
+        "code_length": 277,
+        "complexity_estimate": {},
+        "detected_approach": {
+          "confidence": 0.14285714285714285,
+          "data_structures": [
+            "array/list",
+            "hash_map"
+          ],
+          "expected_complexity": {},
+          "name": "hash_map"
+        },
+        "is_stuck": false,
+        "language": "python",
+        "progress_state": "near_complete",
+        "source": "codemirror",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_code_analysis",
+      "payload": {
+        "bugs": [],
+        "code_length": 276,
+        "complexity_estimate": {},
+        "detected_approach": {
+          "confidence": 0.14285714285714285,
+          "data_structures": [
+            "array/list",
+            "hash_map"
+          ],
+          "expected_complexity": {},
+          "name": "hash_map"
+        },
+        "is_stuck": false,
+        "language": "python",
+        "progress_state": "near_complete",
+        "source": "codemirror",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_code_analysis",
+      "payload": {
+        "bugs": [],
+        "code_length": 276,
+        "complexity_estimate": {},
+        "detected_approach": {
+          "confidence": 0.14285714285714285,
+          "data_structures": [
+            "array/list",
+            "hash_map"
+          ],
+          "expected_complexity": {},
+          "name": "hash_map"
+        },
+        "is_stuck": true,
+        "language": "python",
+        "progress_state": "near_complete",
+        "source": "codemirror",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "b519acd8-745a-572a-bdfc-ac0ea24137d0",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "I think that's done, it handles the empty input and returns an empty list when there's no pair.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 3,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "poor",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "high",
+            "confidence": "high",
+            "justification": "scripted",
+            "score": "poor",
+            "structure": "medium"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "poor"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "none",
+            "justification": "scripted",
+            "score": "adequate"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": false,
+            "score": "weak"
+          }
+        },
+        "hint_signal": "guide",
+        "insight": "scripted-insight-1437",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-437",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "guide",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_code_analysis",
+      "payload": {
+        "bugs": [],
+        "code_length": 283,
+        "complexity_estimate": {},
+        "detected_approach": null,
+        "is_stuck": true,
+        "language": "python",
+        "progress_state": "near_complete",
+        "source": "codemirror",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "a41bd6fe-e3fc-5f83-80f6-9480c06a23da",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "I'll walk the list with previous and current pointers and flip each next pointer as I go.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 3,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "poor",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "medium",
+            "confidence": "medium",
+            "justification": "scripted",
+            "score": "poor",
+            "structure": "low"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "weak"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "full",
+            "justification": "scripted",
+            "score": "adequate"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "weak"
+          }
+        },
+        "hint_signal": "none",
+        "insight": "scripted-insight-1837",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-837",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_code_analysis",
+      "payload": {
+        "bugs": [],
+        "code_length": 319,
+        "complexity_estimate": {},
+        "detected_approach": null,
+        "is_stuck": false,
+        "language": "python",
+        "progress_state": "complete",
+        "source": "codemirror",
+        "timestamp": "<volatile>"
+      }
+    }
+  ],
+  "error": null,
+  "final_state": {
+    "analyses_run": 3,
+    "analysis": {
+      "analysis_count": 3,
+      "average_quality": 3.0,
+      "current_question": "Reverse a singly linked list in place.",
+      "recent_analyses": [
+        {
+          "answer_quality": 2,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "adequate",
+              "signals_detected": [
+                "structured_thinking"
+              ]
+            },
+            "communication_quality": {
+              "clarity": "medium",
+              "confidence": "medium",
+              "justification": "scripted",
+              "score": "adequate",
+              "structure": "high"
+            },
+            "contextual_consistency": {
+              "consistent": true,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "weak"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [
+                "scripted-missed"
+              ],
+              "score": "excellent"
+            },
+            "hint_reception": {
+              "acted_on_hint": false,
+              "incorporation_level": "full",
+              "justification": "scripted",
+              "score": "weak"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "excellent"
+            }
+          },
+          "hint_signal": "guide",
+          "insight": "scripted-insight-7471",
+          "latency_ms": "<volatile>",
+          "on_track": false,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-471",
+          "timestamp": "<volatile>"
+        },
+        {
+          "answer_quality": 3,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "poor",
+              "signals_detected": [
+                "structured_thinking"
+              ]
+            },
+            "communication_quality": {
+              "clarity": "high",
+              "confidence": "high",
+              "justification": "scripted",
+              "score": "poor",
+              "structure": "medium"
+            },
+            "contextual_consistency": {
+              "consistent": true,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "poor"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [
+                "scripted-missed"
+              ],
+              "score": "poor"
+            },
+            "hint_reception": {
+              "acted_on_hint": false,
+              "incorporation_level": "none",
+              "justification": "scripted",
+              "score": "adequate"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": false,
+              "score": "weak"
+            }
+          },
+          "hint_signal": "guide",
+          "insight": "scripted-insight-1437",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-437",
+          "timestamp": "<volatile>"
+        },
+        {
+          "answer_quality": 3,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "poor",
+              "signals_detected": [
+                "structured_thinking"
+              ]
+            },
+            "communication_quality": {
+              "clarity": "medium",
+              "confidence": "medium",
+              "justification": "scripted",
+              "score": "poor",
+              "structure": "low"
+            },
+            "contextual_consistency": {
+              "consistent": true,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "poor"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [
+                "scripted-missed"
+              ],
+              "score": "weak"
+            },
+            "hint_reception": {
+              "acted_on_hint": false,
+              "incorporation_level": "full",
+              "justification": "scripted",
+              "score": "adequate"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "weak"
+            }
+          },
+          "hint_signal": "none",
+          "insight": "scripted-insight-1837",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-837",
+          "timestamp": "<volatile>"
+        }
+      ],
+      "session_id": "07-live-coding"
+    },
+    "contradictions": {
+      "contradictions": []
+    },
+    "events_processed": 4,
+    "memory": {
+      "fact_store": {
+        "behavioral_signals": [],
+        "claimed_experience": [],
+        "hint_interactions": [],
+        "key_numbers": [],
+        "technical_positions": []
+      },
+      "rolling_summary": "scripted-summary-683810",
+      "session_id": "07-live-coding",
+      "total_utterances": 4,
+      "unsummarized_count": 0,
+      "working_memory": [
+        {
+          "speaker": "candidate",
+          "text": "I'll walk the list with previous and current pointers and flip each next pointer as I go.",
+          "timestamp": "<volatile>"
+        }
+      ]
+    },
+    "session_id": "07-live-coding"
+  },
+  "golden_version": 2,
+  "hint_responses": [],
+  "llm_calls_by_kind": {
+    "code_rating": [
+      {
+        "max_tokens": 800,
+        "response_format": "json",
+        "system_prompt_sha": "01ff93424721",
+        "task_type": "code_rating",
+        "temperature": 0.2,
+        "user_content": "## Interview Question\nReverse a singly linked list in place.\n\n## Optimal Approach 1\niterative three pointers\n\n## Candidate's Code (language: python)\n```python\nclass ListNode:\n    def __init__(self, val=0, next=None):\n        self.val = val\n        self.next = next\n\ndef reverse(head):\n    if head is None:\n        return None\n    prev = None\n    curr = head\n    while curr:\n        nxt = curr.next\n        curr.next = prev\n        prev = curr\n        curr = nxt\n    return prev\n\n```"
+      }
+    ],
+    "summary": [
+      {
+        "max_tokens": 500,
+        "response_format": null,
+        "system_prompt_sha": "84845177ca07",
+        "task_type": "summary_compression",
+        "temperature": 0.3,
+        "user_content": "Current summary:\n(empty)\n\nNew utterances:\n[interviewer]: Go ahead and code it up, talk me through it as you go.\n[candidate]: I'm keeping a dictionary from value to index so each lookup for the complement is constant time.\n[candidate]: I think that's done, it handles the empty input and returns an empty list when there's no pair."
+      },
+      {
+        "max_tokens": 500,
+        "response_format": null,
+        "system_prompt_sha": "84845177ca07",
+        "task_type": "summary_compression",
+        "temperature": 0.3,
+        "user_content": "Current summary:\nscripted-summary-581650\n\nNew utterances:\n[candidate]: I'll walk the list with previous and current pointers and flip each next pointer as I go."
+      }
+    ],
+    "utterance_analysis": [
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nGiven an array of integers and a target, return the indices of the two numbers that add up to the target.\n\n## Key Facts\n(No facts extracted yet)\n\n## Recent Conversation\n[interviewer]: Go ahead and code it up, talk me through it as you go.\n[candidate]: I'm keeping a dictionary from value to index so each lookup for the complement is constant time.\n\n## Expected Answer Outline\nOptimal approaches: {'name': 'hash_map', 'expected_complexity': {'time': 'O(n)', 'space': 'O(n)'}}\nCommon pitfalls: using the same index twice\nBrute-force approach: nested loops\n\n## Latest Utterance\n[candidate]: I'm keeping a dictionary from value to index so each lookup for the complement is constant time."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nGiven an array of integers and a target, return the indices of the two numbers that add up to the target.\n\n## Key Facts\n(No facts extracted yet)\n\n## Recent Conversation\n[interviewer]: Go ahead and code it up, talk me through it as you go.\n[candidate]: I'm keeping a dictionary from value to index so each lookup for the complement is constant time.\n[candidate]: I think that's done, it handles the empty input and returns an empty list when there's no pair.\n\n## Expected Answer Outline\nOptimal approaches: {'name': 'hash_map', 'expected_complexity': {'time': 'O(n)', 'space': 'O(n)'}}\nCommon pitfalls: using the same index twice\nBrute-force approach: nested loops\n\n## Latest Utterance\n[candidate]: I think that's done, it handles the empty input and returns an empty list when there's no pair."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nReverse a singly linked list in place.\n\n## Key Facts\n(No facts extracted yet)\n\n## Interview Summary\nscripted-summary-581650\n\n## Recent Conversation\n[candidate]: I'll walk the list with previous and current pointers and flip each next pointer as I go.\n\n## Expected Answer Outline\nOptimal approaches: iterative three pointers\n\n## Latest Utterance\n[candidate]: I'll walk the list with previous and current pointers and flip each next pointer as I go."
+      }
+    ]
+  },
+  "persisted": [
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "Go ahead and code it up, talk me through it as you go.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "approach": null,
+      "code": "def two_sum(nums, target):\n    pass\n",
+      "language": "python",
+      "progress_state": "skeleton",
+      "timestamp": "<volatile>",
+      "type": "code_snapshot"
+    },
+    {
+      "approach": "hash_map",
+      "code": "def two_sum(nums, target):\n    seen = {}\n    for i, n in enumerate(nums):\n        pass\n",
+      "language": "python",
+      "progress_state": "partial",
+      "timestamp": "<volatile>",
+      "type": "code_snapshot"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "I'm keeping a dictionary from value to index so each lookup for the complement is constant time.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 2,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "adequate",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "medium",
+          "confidence": "medium",
+          "justification": "scripted",
+          "score": "adequate",
+          "structure": "high"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "weak"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "excellent"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "full",
+          "justification": "scripted",
+          "score": "weak"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "excellent"
+        }
+      },
+      "hint_signal": "guide",
+      "insight": "scripted-insight-7471",
+      "on_track": false,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-471",
+      "type": "analysis"
+    },
+    {
+      "approach": "hash_map",
+      "code": "def two_sum(nums, target):\n    seen = {}\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i\n    return []\n",
+      "language": "python",
+      "progress_state": "partial",
+      "timestamp": "<volatile>",
+      "type": "code_snapshot"
+    },
+    {
+      "approach": "hash_map",
+      "code": "def two_sum(nums, target):\n    # map value -> index\n    if nums is None or len(nums) == 0:\n        return []\n    seen = {}\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i\n    return []\n",
+      "language": "python",
+      "progress_state": "near_complete",
+      "timestamp": "<volatile>",
+      "type": "code_snapshot"
+    },
+    {
+      "approach": "hash_map",
+      "code": "def two_sum(nums, target):\n    # map value to index\n    if nums is None or len(nums) == 0:\n        return []\n    seen = {}\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i\n    return []\n",
+      "language": "python",
+      "progress_state": "near_complete",
+      "timestamp": "<volatile>",
+      "type": "code_snapshot"
+    },
+    {
+      "approach": "hash_map",
+      "code": "def two_sum(nums, target):\n    # map value -> index\n    if nums is None or len(nums) == 0:\n        return [ ]\n    seen = {}\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i\n    return []\n",
+      "language": "python",
+      "progress_state": "near_complete",
+      "timestamp": "<volatile>",
+      "type": "code_snapshot"
+    },
+    {
+      "approach": "hash_map",
+      "code": "def two_sum(nums, target):\n    # map value to index\n    if nums is None or len(nums) == 0:\n        return []\n    seen = {}\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i\n    return []\n",
+      "language": "python",
+      "progress_state": "near_complete",
+      "timestamp": "<volatile>",
+      "type": "code_snapshot"
+    },
+    {
+      "approach": "hash_map",
+      "code": "def two_sum(nums, target):\n    # map value -> index\n    if nums is None or len(nums) == 0:\n        return []\n    seen = {}\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i\n    return []\n",
+      "language": "python",
+      "progress_state": "near_complete",
+      "timestamp": "<volatile>",
+      "type": "code_snapshot"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "I think that's done, it handles the empty input and returns an empty list when there's no pair.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 3,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "poor",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "high",
+          "confidence": "high",
+          "justification": "scripted",
+          "score": "poor",
+          "structure": "medium"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "poor"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "none",
+          "justification": "scripted",
+          "score": "adequate"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": false,
+          "score": "weak"
+        }
+      },
+      "hint_signal": "guide",
+      "insight": "scripted-insight-1437",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-437",
+      "type": "analysis"
+    },
+    {
+      "approach": null,
+      "code": "class ListNode:\n    def __init__(self, val=0, next=None):\n        self.val = val\n        self.next = next\n\n# iterate once, keep the previous node\ndef reverse(head):\n    # flip pointers in place\n    prev = None\n    curr = head\n    while curr:\n        curr = curr.next\n    return prev\n",
+      "language": "python",
+      "progress_state": "near_complete",
+      "timestamp": "<volatile>",
+      "type": "code_snapshot"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "I'll walk the list with previous and current pointers and flip each next pointer as I go.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 3,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "poor",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "medium",
+          "confidence": "medium",
+          "justification": "scripted",
+          "score": "poor",
+          "structure": "low"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "weak"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "full",
+          "justification": "scripted",
+          "score": "adequate"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "weak"
+        }
+      },
+      "hint_signal": "none",
+      "insight": "scripted-insight-1837",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-837",
+      "type": "analysis"
+    },
+    {
+      "approach": null,
+      "code": "class ListNode:\n    def __init__(self, val=0, next=None):\n        self.val = val\n        self.next = next\n\ndef reverse(head):\n    if head is None:\n        return None\n    prev = None\n    curr = head\n    while curr:\n        nxt = curr.next\n        curr.next = prev\n        prev = curr\n        curr = nxt\n    return prev\n",
+      "language": "python",
+      "progress_state": "complete",
+      "timestamp": "<volatile>",
+      "type": "code_snapshot"
+    }
+  ],
+  "scenario_id": "07-live-coding",
+  "session_state": {
+    "active_question_id": "q-reverse",
+    "analysis_count": 3,
+    "code_snapshot_count": 0,
+    "coverage_tracker": {},
+    "facts": {
+      "behavioral_signals": [],
+      "claimed_experience": [],
+      "hint_interactions": [],
+      "key_numbers": [],
+      "technical_positions": []
+    },
+    "hint_history": [],
+    "last_transcript_timestamp": null,
+    "plan_progress": {
+      "current_phase_index": 0,
+      "current_question_index": 1
+    },
+    "rolling_summary": "scripted-summary-581650",
+    "schema_version": 1,
+    "scores": {
+      "problem_solving": 2.7
+    },
+    "session_id": "07-live-coding",
+    "transcript_count": 4
+  }
+}

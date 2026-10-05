@@ -31,6 +31,7 @@ from sqlalchemy.pool import NullPool
 
 from src.config import settings
 from src.graphs.checkpointer import Checkpointer
+from src.graphs.code_graph import code_thread_id
 from src.models.analysis import AnalysisEvent
 from src.models.session import InterviewSession
 from src.models.transcript import Transcript
@@ -78,7 +79,7 @@ async def thread(checkpointer: Checkpointer) -> AsyncIterator[str]:
     """A fresh session id whose checkpoint thread is removed afterwards."""
     session_id = f"test-session-{uuid.uuid4()}"
     yield session_id
-    await checkpointer.delete_threads(thread_id_for(session_id))
+    await checkpointer.delete_threads(thread_id_for(session_id), code_thread_id(session_id))
 
 
 def _graph_factory(checkpointer: Checkpointer) -> PipelineFactory:
@@ -354,6 +355,7 @@ from sqlalchemy.pool import NullPool
 from src.config import settings
 from src.graphs import session_graph
 from src.graphs.checkpointer import Checkpointer
+from src.graphs.code_graph import code_thread_id
 from src.replay.runner import build_scripted_failover_manager
 from src.schemas.transcript import SpeakerRole, TranscriptEventSchema
 from src.services.persistence_service import PersistenceService
@@ -485,4 +487,27 @@ async def test_sigkill_mid_run_is_finished_on_restart_without_duplicates(
             # The analyze step was checkpointed before the kill, so it is not redone.
             assert not [m for m, _ in sent if m == "send_analysis"]
     finally:
-        await checkpointer.delete_threads(thread_id_for(session_id))
+        await checkpointer.delete_threads(thread_id_for(session_id), code_thread_id(session_id))
+
+
+async def test_code_updates_do_not_wait_behind_an_utterance_analysis(checkpointer: Checkpointer, thread: str) -> None:
+    """Editor snapshots run on their own graph thread: a one-second analysis in
+    flight on the session thread does not delay the code panel."""
+    fm = build_scripted_failover_manager()
+    pipeline = LangGraphSessionPipeline(thread, fm, checkpointer, min_analysis_interval_s=0)
+    pushed_at: list[float] = []
+
+    async def on_code(session_id, payload) -> None:
+        pushed_at.append(time.perf_counter())
+
+    with behavior({**REPLAY_LATENCY_MS, "utterance_analysis": 1000}):
+        async with EventCollector():
+            await pipeline.wait_idle()  # loaded
+            with patch.object(dashboard_manager, "send_code_analysis", on_code):
+                await _push_latencies_ms(pipeline, [_c(_answer(1))], settle=False)
+                await asyncio.sleep(0.05)  # the analysis is now running
+                sent = time.perf_counter()
+                await pipeline.on_code_snapshot("def f(x):\n    return x\n", "python", "codemirror")
+                await pipeline.wait_idle()
+    assert len(pushed_at) == 1
+    assert (pushed_at[0] - sent) * 1000 < 300, f"code push waited {(pushed_at[0] - sent) * 1000:.0f} ms"

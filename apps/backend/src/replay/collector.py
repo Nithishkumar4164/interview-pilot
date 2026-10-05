@@ -30,6 +30,7 @@ _CAPTURED_METHODS = (
     "send_red_flag",
     "send_hint",
     "send_speaker_snapshot",
+    "send_code_analysis",
 )
 
 

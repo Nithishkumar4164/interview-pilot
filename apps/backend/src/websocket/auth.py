@@ -16,6 +16,7 @@ from fastapi import WebSocket, status
 
 from src.dependencies import async_session_factory
 from src.models.session import InterviewSession
+from src.schemas.session import SessionStatus
 from src.services.access_control import DEV_USER_ID, dev_mode_active, principal_from_token
 from src.utils.logging import get_logger
 
@@ -79,3 +80,14 @@ async def authenticate_ws(websocket: WebSocket, session_id: str) -> uuid.UUID | 
         return None
 
     return principal.user_id
+
+
+async def session_has_ended(session_id: str) -> bool:
+    """Whether ``session_id`` names a session that has ended (audio/code sockets refuse those)."""
+    try:
+        sid = uuid.UUID(session_id)
+    except ValueError:
+        return False
+    async with async_session_factory() as db:
+        session = await db.get(InterviewSession, sid)
+    return session is not None and session.status == SessionStatus.ENDED

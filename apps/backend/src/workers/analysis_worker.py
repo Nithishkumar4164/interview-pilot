@@ -12,11 +12,13 @@ Provides rate limiting to avoid analyzing every interim result.
 import asyncio
 import contextlib
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 from src.llm.failover import FailoverManager
 from src.schemas.hint import RuntimeHintRequest
 from src.schemas.transcript import SpeakerRole, TranscriptEventSchema
 from src.services.analysis_service import AnalysisService
+from src.services.code_analysis_service import CodeAnalysisService, code_report_fields
 from src.services.contradiction_service import ContradictionService
 from src.services.memory_service import MemoryService
 from src.services.persistence_service import safe_enqueue, safe_update_session_state
@@ -58,6 +60,7 @@ class AnalysisWorker:
         self.analysis = AnalysisService(session_id, failover_manager, self.memory)
         self.contradictions = ContradictionService(session_id, failover_manager)
         self.runtime_hints = RuntimeHintService(session_id, failover_manager, self.memory)
+        self.code_analysis = CodeAnalysisService(session_id, failover_manager)
 
         # Rate limiting
         self._min_analysis_interval_s = min_analysis_interval_s
@@ -357,6 +360,28 @@ class AnalysisWorker:
             }
         )
 
+    async def on_code_snapshot(self, code: str, language: str, source: str) -> None:
+        """Analyze an editor snapshot, push it to the dashboard and persist it."""
+        result = await self.code_analysis.analyze_snapshot(code, language)
+        await dashboard_manager.send_code_analysis(
+            self.session_id,
+            {
+                "code_length": len(code),
+                "language": language,
+                "source": source,
+                **result.to_dict(),
+            },
+        )
+        safe_enqueue(
+            "code_snapshot",
+            self.session_id,
+            code=code,
+            language=language,
+            timestamp=datetime.now(UTC).isoformat(),
+            approach=result.detected_approach.name if result.detected_approach else None,
+            progress_state=result.progress_state.value,
+        )
+
     def get_recent_transcripts(self, limit: int = 50) -> list[dict]:
         """Return recent transcript events for catch-up replay."""
         return self._transcript_history[-limit:]
@@ -384,6 +409,7 @@ class AnalysisWorker:
             "contradictions": [
                 {"explanation": c.explanation, "confidence": c.confidence} for c in self.contradictions.contradictions
             ],
+            **code_report_fields(self.code_analysis.get_latest_result()),
         }
 
     async def drain(self) -> None:

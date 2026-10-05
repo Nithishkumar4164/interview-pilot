@@ -19,6 +19,7 @@ import pytest
 
 from src.config import settings
 from src.graphs.checkpointer import Checkpointer
+from src.graphs.code_graph import code_thread_id
 from src.replay.golden import golden_path, normalize, read_golden, write_golden
 from src.replay.runner import PipelineFactory, ReplayRunner, analysis_worker_factory
 from src.replay.scenario import load_scenario
@@ -72,11 +73,12 @@ async def _run(path: Path, factory: PipelineFactory = analysis_worker_factory) -
 
 async def _run_graph(path: Path, checkpointer: Checkpointer) -> dict:
     thread = thread_id_for(load_scenario(path).meta.id)
-    await checkpointer.delete_threads(thread)
+    threads = (thread, code_thread_id(load_scenario(path).meta.id))
+    await checkpointer.delete_threads(*threads)
     try:
         return await _run(path, graph_factory(checkpointer))
     finally:
-        await checkpointer.delete_threads(thread)
+        await checkpointer.delete_threads(*threads)
 
 
 def _assert_matches(actual: dict, expected: dict) -> None:

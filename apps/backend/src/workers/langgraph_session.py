@@ -33,6 +33,7 @@ import contextlib
 import time
 from collections import deque
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
@@ -40,6 +41,14 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Durability
 
 from src.graphs.checkpointer import Checkpointer
+from src.graphs.code_graph import (
+    CodeEvent,
+    CodeSnapshotIn,
+    build_code_graph,
+    code_thread_id,
+    initial_code_state,
+    new_snapshot_id,
+)
 from src.graphs.session_graph import (
     EFFECT_COMPRESS,
     EFFECT_COMPRESS_AFTER_IN_FLIGHT,
@@ -63,6 +72,7 @@ from src.llm.failover import FailoverManager
 from src.schemas.hint import RuntimeHintRequest
 from src.schemas.transcript import TranscriptEventSchema
 from src.services.analysis_service import rate_code
+from src.services.code_analysis_service import code_report_fields
 from src.services.memory_service import compress_summary, format_utterances
 from src.services.persistence_service import safe_enqueue, safe_update_session_state
 from src.services.runtime_hint_service import assemble_hint_context, generate_runtime_hint, resolve_directness
@@ -77,6 +87,91 @@ INTERIM_THROTTLE_S = 0.3
 
 def thread_id_for(session_id: str) -> str:
     return session_id
+
+
+class _CodeLane:
+    """CodeGraph's queue and consumer: one run at a time, each run takes everything queued.
+
+    Separate from the session lane so editor snapshots never wait behind an
+    utterance analysis. Effects go through the owning pipeline.
+    """
+
+    def __init__(self, owner: "LangGraphSessionPipeline") -> None:
+        self._owner = owner
+        self._config: RunnableConfig = {"configurable": {"thread_id": code_thread_id(owner.session_id)}}
+        self._graph = build_code_graph(owner.session_id)
+        self._app: CompiledStateGraph | None = None
+        self._queue: deque[CodeEvent] = deque()
+        self._wake = asyncio.Event()
+        self._consumer: asyncio.Task | None = None
+        self._loaded = asyncio.Event()
+        self._running_graph = False
+        self.values: dict[str, Any] = initial_code_state(owner.session_id)
+
+    def enqueue(self, event: CodeEvent) -> None:
+        self._queue.append(event)
+        self.ensure_consumer()
+        self._wake.set()
+
+    def ensure_consumer(self) -> None:
+        if self._consumer is None or self._consumer.done():
+            self._consumer = asyncio.create_task(self._consume(), name=f"code-graph:{self._owner.session_id}")
+
+    def busy(self) -> bool:
+        return bool(not self._loaded.is_set() or self._queue or self._running_graph)
+
+    def compiled(self) -> CompiledStateGraph:
+        if self._app is None:
+            self._app = self._graph.compile(checkpointer=self._owner._checkpointer.saver)
+        return self._app
+
+    async def _consume(self) -> None:
+        lock_key = f"code:{self._owner.session_id}"
+        if not self._loaded.is_set():
+            try:
+                async with self._owner._checkpointer.advisory_lock(lock_key):
+                    snapshot = await self.compiled().aget_state(self._config)
+                    if snapshot.next:
+                        logger.info("code_run_resuming", session_id=self._owner.session_id)
+                        await self._stream(None)
+                        snapshot = await self.compiled().aget_state(self._config)
+                if snapshot.values:
+                    self.values = {**initial_code_state(self._owner.session_id), **snapshot.values}
+            except Exception:
+                logger.exception("code_resume_failed", session_id=self._owner.session_id)
+            finally:
+                self._loaded.set()
+        while True:
+            await self._wake.wait()
+            self._wake.clear()
+            while self._queue:
+                events = list(self._queue)
+                self._queue.clear()
+                self._running_graph = True
+                try:
+                    async with self._owner._checkpointer.advisory_lock(lock_key):
+                        await self._stream({"session_id": self._owner.session_id, "events": events})
+                except Exception:
+                    logger.exception("code_run_failed", session_id=self._owner.session_id, events=len(events))
+                finally:
+                    self._running_graph = False
+
+    async def _stream(self, graph_input: dict | None) -> None:
+        async for mode, chunk in self.compiled().astream(
+            graph_input, self._config, stream_mode=["custom", "values"], durability=self._owner._durability
+        ):
+            data = cast(dict, chunk)
+            if mode == "values":
+                self.values = {**initial_code_state(self._owner.session_id), **data}
+            else:
+                await self._owner._perform(data)
+
+    async def close(self) -> None:
+        if self._consumer is not None and not self._consumer.done():
+            self._consumer.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self._consumer
+        await self._owner._checkpointer.delete_threads(code_thread_id(self._owner.session_id))
 
 
 class LangGraphSessionPipeline:
@@ -128,6 +223,9 @@ class LangGraphSessionPipeline:
         # Latest state values (updated after every step); reads are served from here.
         self._values: dict[str, Any] = initial_state(session_id)
         self._loaded = asyncio.Event()
+
+        # Editor snapshots run on their own graph thread and queue.
+        self._code = _CodeLane(self)
 
         # Runtime hint numbering must be synchronous so concurrent requests get distinct numbers.
         self._hint_counts: dict[str, int] = {}
@@ -196,7 +294,9 @@ class LangGraphSessionPipeline:
             question_index=question_index,
             question_text=question_text[:80],
         )
-        self._enqueue(QuestionChanged(question_text, question_plan or {}, question_index))
+        change = QuestionChanged(question_text, question_plan or {}, question_index)
+        self._enqueue(change)
+        self._code.enqueue(change)
 
     def set_active_hint(self, hint_text: str) -> None:
         self._enqueue(HintRevealed(hint_text))
@@ -207,6 +307,19 @@ class LangGraphSessionPipeline:
                 hint_id=data.get("hint_id", ""),
                 question_id=data.get("question_id", ""),
                 quality=data.get("quality", "none"),
+            )
+        )
+
+    async def on_code_snapshot(self, code: str, language: str, source: str) -> None:
+        if not self._running:
+            return
+        self._code.enqueue(
+            CodeSnapshotIn(
+                id=new_snapshot_id(),
+                code=code,
+                language=language,
+                source=source,
+                timestamp=datetime.now(UTC).isoformat(),
             )
         )
 
@@ -270,7 +383,7 @@ class LangGraphSessionPipeline:
         return [t for t in self._transcript_history if t["id"] in transcript_ids]
 
     def report_snapshot(self) -> dict:
-        return report_snapshot(self._values)
+        return {**report_snapshot(self._values), **code_report_fields(self._code.values["last_result"])}
 
     def to_dict(self) -> dict:
         return worker_dict(self._values, self._transport_events, self._compress_in_flight)
@@ -279,7 +392,8 @@ class LangGraphSessionPipeline:
 
     async def wait_idle(self) -> None:
         self._ensure_consumer()
-        while self._busy():
+        self._code.ensure_consumer()
+        while self._busy() or self._code.busy():
             await asyncio.sleep(0.005)
 
     async def drain(self) -> None:
@@ -317,6 +431,7 @@ class LangGraphSessionPipeline:
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await task
         try:
+            await self._code.close()
             await self._checkpointer.delete_threads(thread_id_for(self.session_id))
         except Exception:
             logger.exception("session_thread_delete_failed", session_id=self.session_id)

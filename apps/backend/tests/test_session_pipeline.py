@@ -31,7 +31,14 @@ async def test_report_snapshot_reflects_the_session(monkeypatch) -> None:
     assert report.error is None
 
     snap = captured["worker"].report_snapshot()
-    assert set(snap) == {"fact_store", "rolling_summary", "analysis_results", "contradictions"}
+    assert set(snap) == {
+        "fact_store",
+        "rolling_summary",
+        "analysis_results",
+        "contradictions",
+        "code_progress",
+        "detected_approach",
+    }
     assert len(snap["analysis_results"]) == report.summary.analyses
     assert len(snap["contradictions"]) == report.summary.contradictions >= 1
     assert snap["fact_store"]["claimed_experience"]

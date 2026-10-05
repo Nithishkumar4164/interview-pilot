@@ -6,16 +6,12 @@ routes them through the transcription service pipeline.
 Endpoint: ws://{host}/ws/audio/{session_id}
 """
 
-import uuid
-
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
-from src.dependencies import async_session_factory, failover_manager
-from src.models.session import InterviewSession
-from src.schemas.session import SessionStatus
+from src.dependencies import failover_manager
 from src.services.transcription_service import TranscriptionService
 from src.utils.logging import get_logger
-from src.websocket.auth import authenticate_ws
+from src.websocket.auth import authenticate_ws, session_has_ended
 from src.websocket.manager import dashboard_manager
 from src.workers.session_pipeline import SessionPipeline, create_session_pipeline
 
@@ -44,6 +40,16 @@ def get_transcription_service(session_id: str) -> TranscriptionService:
     return _active_sessions[session_id]
 
 
+def active_pipeline(session_id: str) -> SessionPipeline | None:
+    return _active_workers.get(session_id)
+
+
+def get_session_pipeline(session_id: str) -> SessionPipeline:
+    """The session's pipeline, created (with its not-yet-started transcription service) if needed."""
+    get_transcription_service(session_id)
+    return _active_workers[session_id]
+
+
 async def close_transcription_service(session_id: str) -> None:
     """The session ended: stop its transcription streams and close its pipeline."""
     worker = _active_workers.pop(session_id, None)
@@ -56,16 +62,6 @@ async def close_transcription_service(session_id: str) -> None:
         logger.info("transcription_service_closed", session_id=session_id)
 
 
-async def _session_ended(session_id: str) -> bool:
-    try:
-        sid = uuid.UUID(session_id)
-    except ValueError:
-        return False
-    async with async_session_factory() as db:
-        session = await db.get(InterviewSession, sid)
-    return session is not None and session.status == SessionStatus.ENDED
-
-
 @router.websocket("/ws/audio/{session_id}")
 async def audio_websocket(websocket: WebSocket, session_id: str) -> None:
     """Handle audio WebSocket connections from the Chrome extension.
@@ -75,7 +71,7 @@ async def audio_websocket(websocket: WebSocket, session_id: str) -> None:
     """
     if await authenticate_ws(websocket, session_id) is None:
         return
-    if await _session_ended(session_id):
+    if await session_has_ended(session_id):
         # Accepting would start a new transcription stream and pipeline for a
         # session that is over.
         logger.info("audio_ws_rejected_session_ended", session_id=session_id)

@@ -14,6 +14,7 @@ import pytest
 
 from src.config import settings
 from src.graphs.checkpointer import Checkpointer
+from src.graphs.code_graph import code_thread_id
 from src.replay.runner import ReplayReport, ReplayRunner, analysis_worker_factory
 from src.replay.scenario import load_scenario
 from src.workers.langgraph_session import LangGraphSessionPipeline, thread_id_for
@@ -58,8 +59,8 @@ async def replay(request) -> AsyncIterator:
 
     async def run_graph(name: str) -> ReplayReport:
         scenario = load_scenario(SCENARIOS_DIR / name)
-        threads.append(thread_id_for(scenario.meta.id))
-        await cp.delete_threads(threads[-1])
+        threads.extend((thread_id_for(scenario.meta.id), code_thread_id(scenario.meta.id)))
+        await cp.delete_threads(*threads[-2:])
         return await ReplayRunner(scenario, llm_mode="scripted", pipeline_factory=factory).run()
 
     yield run_graph
@@ -163,7 +164,7 @@ async def live_session(monkeypatch) -> AsyncIterator[str]:
     app.dependency_overrides[get_db] = _get_db
     monkeypatch.setattr(settings, "deepgram_api_key", "")  # MockDeepgramWorker
     monkeypatch.setattr(sessions_api, "_generate_report_background", _no_report)
-    monkeypatch.setattr(audio_handler, "async_session_factory", factory, raising=False)
+    monkeypatch.setattr("src.websocket.auth.async_session_factory", factory)
 
     sid = _uuid.uuid4()
     async with factory() as db:
@@ -238,6 +239,7 @@ async def test_ending_a_session_stops_its_transcription_and_pipeline(live_sessio
             patch.object(dashboard_manager, "send_analysis", AsyncMock()) as send_analysis,
         ):
             await pipeline.on_transcript_event(utterance(0))
+            await pipeline.on_code_snapshot("def two_sum(nums, target):\n    seen = {}\n", "python", "codemirror")
             await pipeline.wait_idle()
             assert send_analysis.await_count == 1
 
@@ -254,11 +256,15 @@ async def test_ending_a_session_stops_its_transcription_and_pipeline(live_sessio
         if cp is not None:
             state = await pipeline._compiled().aget_state({"configurable": {"thread_id": thread_id_for(sid)}})
             assert not state.values, "session checkpoints were not deleted"
+            code_state = await pipeline._code.compiled().aget_state(
+                {"configurable": {"thread_id": code_thread_id(sid)}}
+            )
+            assert not code_state.values, "code checkpoints were not deleted"
     finally:
         if service.is_running:
             await service.stop()
         if cp is not None:
-            await cp.delete_threads(thread_id_for(sid))
+            await cp.delete_threads(thread_id_for(sid), code_thread_id(sid))
             await cp.close()
 
 

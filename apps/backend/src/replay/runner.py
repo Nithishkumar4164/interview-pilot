@@ -17,6 +17,7 @@ from src.replay.collector import CapturedEvent, EventCollector, PersistedWrite
 from src.replay.scenario import (
     ActiveHintEvent,
     CodeSnapshotEvent,
+    CodeUpdateEvent,
     HintAckEvent,
     HintRequestEvent,
     QuestionChangeEvent,
@@ -296,6 +297,8 @@ class ReplayRunner:
                         }
                     )
                     code_ratings.append(rating)
+                elif isinstance(ev, CodeUpdateEvent):
+                    await worker.on_code_snapshot(ev.code, ev.language, ev.source)
                 elif isinstance(ev, ActiveHintEvent):
                     worker.set_active_hint(ev.text)
 

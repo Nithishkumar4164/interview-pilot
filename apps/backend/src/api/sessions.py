@@ -311,11 +311,9 @@ async def end_session(
         from src.models.report import Report
         from src.repositories.report_repo import ReportRepository
         from src.websocket.audio_handler import _active_workers
-        from src.websocket.code_handler import _active_analyzers
 
         worker = _active_workers.get(session_id)
         hint_service = _hint_services.get(session_id)
-        code_analyzer = _active_analyzers.get(session_id)
 
         # Drain in-flight background tasks so snapshots capture complete data
         # Use a hard timeout so the endpoint never hangs
@@ -357,16 +355,6 @@ async def end_session(
                 for h in hint_service.get_events()
             ]
             snapshots["hint_metrics"] = hint_service.get_metrics().model_dump()
-        if code_analyzer:
-            ca_result = code_analyzer.get_latest_result()
-            if ca_result:
-                snapshots["code_progress"] = ca_result.progress_state.value
-                snapshots["detected_approach"] = (
-                    ca_result.detected_approach.name if ca_result.detected_approach else None
-                )
-            else:
-                snapshots["code_progress"] = "unknown"
-
         # Create placeholder report row with status=pending
         report_repo = ReportRepository(db)
         placeholder_report = Report(

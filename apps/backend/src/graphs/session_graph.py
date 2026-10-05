@@ -31,6 +31,7 @@ the DB.
 
 import copy
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Annotated, Any, TypedDict
 
 from langgraph.config import get_stream_writer
@@ -115,7 +116,6 @@ EFFECT_DASHBOARD = "dashboard"  # {"method", "payload"} -> dashboard_manager.<me
 EFFECT_PERSIST = "persist"  # {"event_type", "fields", "idempotency_key"} -> safe_enqueue
 EFFECT_COMPRESS = "compress"  # {"upto": n}: compress unsummarized[:n] now
 EFFECT_COMPRESS_AFTER_IN_FLIGHT = "compress_after_in_flight"  # question change while a compression runs
-EFFECT_QUESTION_CHANGED = "question_changed"  # {"question_index", "question_id"} -> session-state service
 
 
 def _reset_or_merge(left: dict | None, right: dict | None) -> dict:
@@ -155,6 +155,7 @@ class SessionState(TypedDict, total=False):
     analysis_count: int
     quality_sum: int  # over analyses that count toward the average (scored and on track)
     quality_n: int
+    problem_solving_score: float | None  # mean quality of the scored analyses among the last 5, when any
     events_processed: int
 
     # ── contradictions ──
@@ -191,6 +192,7 @@ def initial_state(session_id: str) -> dict[str, Any]:
         "analysis_count": 0,
         "quality_sum": 0,
         "quality_n": 0,
+        "problem_solving_score": None,
         "events_processed": 0,
         "contradictions": [],
         "checked_pairs": set(),
@@ -209,6 +211,11 @@ def is_analysis_candidate(event: IngressEvent) -> bool:
         and event.speaker == "candidate"
         and len(event.text.split()) > 5
     )
+
+
+def _problem_solving_score(recent: list[EnhancedAnalysisResult], previous: float | None) -> float | None:
+    scored = [a.answer_quality for a in recent if a.answer_quality > 0]
+    return round(sum(scored) / len(scored), 1) if scored else previous
 
 
 def analysis_digest_row(a: EnhancedAnalysisResult) -> dict:
@@ -291,11 +298,6 @@ def build_session_graph(failover: FailoverManager, session_id: str) -> StateGrap
                 }
                 active_hint = ""
                 recent_insights = []
-                emit(
-                    EFFECT_QUESTION_CHANGED,
-                    question_index=ev.question_index,
-                    question_id=ev.question_plan.get("id"),
-                )
             elif isinstance(ev, HintRevealed):
                 active_hint = ev.text
             elif isinstance(ev, RuntimeHintGenerated):
@@ -414,7 +416,8 @@ def build_session_graph(failover: FailoverManager, session_id: str) -> StateGrap
                 "analysis_count": state.get("analysis_count", 0) + 1,
                 "quality_sum": state.get("quality_sum", 0) + (result.answer_quality if quality_counts(result) else 0),
                 "quality_n": state.get("quality_n", 0) + (1 if quality_counts(result) else 0),
-                "recent_analyses": [*state.get("recent_analyses", []), result][-RECENT_ANALYSES:],
+                "recent_analyses": (recent := [*state.get("recent_analyses", []), result][-RECENT_ANALYSES:]),
+                "problem_solving_score": _problem_solving_score(recent, state.get("problem_solving_score")),
                 "recent_insights": [*state.get("recent_insights", []), result][-RECENT_ANALYSES:],
                 "analysis_digest": [*state.get("analysis_digest", []), analysis_digest_row(result)][
                     -REPORT_DIGEST_SIZE:
@@ -530,4 +533,38 @@ def report_snapshot(values: dict) -> dict:
         "contradictions": [
             {"explanation": c.explanation, "confidence": c.confidence} for c in values["contradictions"]
         ],
+    }
+
+
+STATE_SNAPSHOT_SCHEMA_VERSION = 1  # SessionStateService.SNAPSHOT_SCHEMA_VERSION
+
+
+def state_snapshot(
+    values: dict,
+    code_snapshot_count: int,
+    hint_history: list[dict],
+    pending_transport_events: int = 0,
+) -> dict:
+    """The session-state snapshot GET /api/sessions/{id}/state serves, from graph state.
+
+    Same shape as ``SessionState.to_snapshot()``, but current: the old
+    snapshot was refreshed only when an analysis ran (and every 30 s to disk).
+    Fields nothing maintained keep their defaults.
+    """
+    score = values["problem_solving_score"]
+    return {
+        "session_id": values["session_id"],
+        "schema_version": STATE_SNAPSHOT_SCHEMA_VERSION,
+        "transcript_count": values["events_processed"] + pending_transport_events,
+        "last_transcript_timestamp": None,
+        "analysis_count": values["analysis_count"],
+        "code_snapshot_count": code_snapshot_count,
+        "hint_history": hint_history,
+        "active_question_id": values["active_question_id"],
+        "scores": {} if score is None else {"problem_solving": score},
+        "coverage_tracker": {},
+        "plan_progress": {"current_phase_index": 0, "current_question_index": values["question_index"]},
+        "facts": values["fact_store"].to_dict(),
+        "rolling_summary": values["rolling_summary"],
+        "captured_at": datetime.now(UTC).isoformat(),
     }

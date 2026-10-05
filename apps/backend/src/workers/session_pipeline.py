@@ -45,6 +45,10 @@ class SessionPipeline(Protocol):
 
     def to_dict(self) -> dict: ...
 
+    def state_snapshot(self, hint_history: list[dict] | None = None) -> dict:
+        """The session-state snapshot (GET /state shape) for this session."""
+        ...
+
     # ── Lifecycle ─────────────────────────────────────────────────────
     async def drain(self) -> None: ...
 

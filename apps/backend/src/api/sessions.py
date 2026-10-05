@@ -10,11 +10,15 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.authz import authorized_session, get_user_principal
+from src.config import settings
 from src.dependencies import get_db
+from src.models.resilience import SessionSnapshot
 from src.models.session import InterviewSession
 from src.repositories.session_repo import SessionRepository
 from src.schemas.auth import PairingTokenResponse
@@ -25,6 +29,10 @@ from src.schemas.session import (
 )
 from src.services.access_control import Principal
 from src.services.hint_service import HintService
+from src.services.session_state_service import SNAPSHOT_SCHEMA_VERSION
+from src.utils.logging import get_logger
+
+logger = get_logger("api.sessions")
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -143,19 +151,22 @@ async def get_session_state(
     )
     plan = plan_result.scalar_one_or_none()
 
-    # Get session state snapshot (in-memory or from DB)
+    # Get session state snapshot
     snapshot_data = None
     try:
-        from src.dependencies import get_session_state_service
-
-        sss = get_session_state_service()
-        state = sss.get_state_or_none(session_id)
-        if state:
-            snapshot_data = state.to_snapshot()
+        if settings.use_langgraph_session:
+            snapshot_data = await _graph_state_snapshot(session_id, hints, db)
         else:
-            recovered = await sss.recover_session(session_id, db)
-            if recovered:
-                snapshot_data = recovered.to_snapshot()
+            from src.dependencies import get_session_state_service
+
+            sss = get_session_state_service()
+            state = sss.get_state_or_none(session_id)
+            if state:
+                snapshot_data = state.to_snapshot()
+            else:
+                recovered = await sss.recover_session(session_id, db)
+                if recovered:
+                    snapshot_data = recovered.to_snapshot()
     except Exception:
         import logging
 
@@ -371,10 +382,32 @@ async def end_session(
         # Save final session snapshot before cleanup (with timeout)
         try:
             sss = get_session_state_service()
-            await asyncio.wait_for(sss.save_snapshot(session_id, db), timeout=3.0)
+            if settings.use_langgraph_session:
+                # The pipeline's checkpoints are deleted when it closes below; this
+                # row is what GET /state serves for the ended session.
+                if worker is not None:
+                    hint_history = [
+                        {
+                            "hint_id": h.hint_id,
+                            "question_id": h.question_id,
+                            "level": h.level,
+                            "displayed_at": h.displayed_at,
+                        }
+                        for h in (hint_service.get_events() if hint_service else [])
+                    ]
+                    db.add(
+                        SessionSnapshot(
+                            session_id=uuid.UUID(session_id),
+                            snapshot_data=jsonable_encoder(worker.state_snapshot(hint_history)),
+                            schema_version=SNAPSHOT_SCHEMA_VERSION,
+                        )
+                    )
+                    await db.flush()
+            else:
+                await asyncio.wait_for(sss.save_snapshot(session_id, db), timeout=3.0)
             sss.remove_state(session_id)
         except (TimeoutError, Exception):
-            pass
+            logger.warning("final_session_snapshot_failed", session_id=session_id, exc_info=True)
 
         await db.commit()
 
@@ -580,3 +613,26 @@ async def create_pairing_token(
         pairing_token=AuthService(db).create_pairing_token(str(principal.user_id), session_id),
         expires_in=settings.pairing_token_expire_hours * 3600,
     )
+
+
+async def _graph_state_snapshot(session_id: str, hints: list, db: AsyncSession) -> dict | None:
+    """/state snapshot with the LangGraph pipeline: the live checkpoints, else the final saved snapshot."""
+    from src.dependencies import failover_manager, get_checkpointer
+    from src.workers.langgraph_session import read_state_snapshot
+
+    hint_history = [
+        {"hint_id": str(h.id), "question_id": h.question_id, "level": h.level, "displayed_at": h.displayed_at}
+        for h in hints
+    ]
+    snapshot = await read_state_snapshot(get_checkpointer(), failover_manager, session_id, hint_history)
+    if snapshot is not None:
+        return jsonable_encoder(snapshot)
+    row = (
+        await db.execute(
+            select(SessionSnapshot)
+            .where(SessionSnapshot.session_id == uuid.UUID(session_id))
+            .order_by(SessionSnapshot.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return row.snapshot_data if row else None

@@ -29,8 +29,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Start health monitoring for LLM providers
     health_monitor.start()
 
-    # Start periodic session state snapshots
-    session_state_service.start_periodic_snapshots(async_session_factory)
+    # Periodic session-state snapshots. The LangGraph pipeline checkpoints
+    # session state itself, and GET /state reads it from there.
+    if not settings.use_langgraph_session:
+        session_state_service.start_periodic_snapshots(async_session_factory)
 
     # Start persistence service
     await persistence_service.start()

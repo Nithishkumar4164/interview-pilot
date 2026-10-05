@@ -54,7 +54,6 @@ from src.graphs.session_graph import (
     EFFECT_COMPRESS_AFTER_IN_FLIGHT,
     EFFECT_DASHBOARD,
     EFFECT_PERSIST,
-    EFFECT_QUESTION_CHANGED,
     HintAcknowledged,
     HintRevealed,
     IngressEvent,
@@ -66,6 +65,7 @@ from src.graphs.session_graph import (
     initial_state,
     is_analysis_candidate,
     report_snapshot,
+    state_snapshot,
     worker_dict,
 )
 from src.llm.failover import FailoverManager
@@ -74,7 +74,7 @@ from src.schemas.transcript import TranscriptEventSchema
 from src.services.analysis_service import rate_code
 from src.services.code_analysis_service import code_report_fields
 from src.services.memory_service import compress_summary, format_utterances
-from src.services.persistence_service import safe_enqueue, safe_update_session_state
+from src.services.persistence_service import safe_enqueue
 from src.services.runtime_hint_service import assemble_hint_context, generate_runtime_hint, resolve_directness
 from src.utils.logging import get_logger
 from src.websocket.manager import dashboard_manager
@@ -388,6 +388,11 @@ class LangGraphSessionPipeline:
     def to_dict(self) -> dict:
         return worker_dict(self._values, self._transport_events, self._compress_in_flight)
 
+    def state_snapshot(self, hint_history: list[dict] | None = None) -> dict:
+        return state_snapshot(
+            self._values, self._code.values["snapshot_count"], hint_history or [], self._transport_events
+        )
+
     # ── Lifecycle ─────────────────────────────────────────────────────
 
     async def wait_idle(self) -> None:
@@ -569,8 +574,6 @@ class LangGraphSessionPipeline:
         finally:
             self._running_graph = False
 
-        if target is not None:
-            safe_update_session_state(self.session_id, self.to_dict())
         if any(isinstance(ev, SummaryCompressed) for ev in events):
             self._compress_in_flight = 0
             if self._compress_after_in_flight:
@@ -608,16 +611,6 @@ class LangGraphSessionPipeline:
                 idempotency_key=effect["idempotency_key"],
                 **effect["fields"],
             )
-        elif kind == EFFECT_QUESTION_CHANGED:
-            try:
-                from src.dependencies import get_session_state_service
-
-                state = get_session_state_service().get_state(self.session_id)
-                state.plan_progress["current_question_index"] = effect["question_index"]
-                state.active_question_id = effect["question_id"]
-                state.mark_dirty()
-            except Exception:
-                logger.warning("session_state_question_update_failed")
 
     # ── Memory compression ────────────────────────────────────────────
 
@@ -640,3 +633,21 @@ class LangGraphSessionPipeline:
                 self._start_compression(len(self._values["unsummarized"]))
             return
         self._enqueue(SummaryCompressed(new_summary, len(buffer)))
+
+
+async def read_state_snapshot(
+    checkpointer: Checkpointer, failover_manager: FailoverManager, session_id: str, hint_history: list[dict]
+) -> dict | None:
+    """The /state snapshot straight from the session's checkpoints (works from any process).
+
+    None when the session has no checkpointed state (never ran, or ended and
+    torn down).
+    """
+    session_app = build_session_graph(failover_manager, session_id).compile(checkpointer=checkpointer.saver)
+    session = await session_app.aget_state({"configurable": {"thread_id": thread_id_for(session_id)}})
+    if not session.values:
+        return None
+    code_app = build_code_graph(session_id).compile(checkpointer=checkpointer.saver)
+    code = await code_app.aget_state({"configurable": {"thread_id": code_thread_id(session_id)}})
+    values = {**initial_state(session_id), **session.values}
+    return state_snapshot(values, (code.values or {}).get("snapshot_count", 0), hint_history)

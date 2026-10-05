@@ -11,6 +11,7 @@ Analyzes candidate code snapshots during live coding interviews:
 import json
 import re
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
@@ -23,6 +24,9 @@ logger = get_logger("code_analysis_service")
 
 # Debounce interval between snapshots (seconds)
 CODE_DEBOUNCE_S = 2.0
+
+# Snapshots kept for stuck detection
+MAX_SNAPSHOT_HISTORY = 20
 
 
 class ProgressState(str, Enum):
@@ -136,6 +140,236 @@ Respond in JSON:
 }}"""
 
 
+# ── Pure helpers (shared by CodeAnalysisService and the LangGraph session graph) ──
+
+
+def normalize_code(code: str) -> str:
+    """Normalize code whitespace and remove trailing spaces."""
+    lines = code.splitlines()
+    lines = [line.rstrip() for line in lines]
+    # Remove leading/trailing blank lines
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join(lines)
+
+
+def detect_progress(code: str) -> ProgressState:
+    """Detect code progress state heuristically."""
+    if not code.strip():
+        return ProgressState.EMPTY
+
+    lines = [
+        l for l in code.splitlines() if l.strip() and not l.strip().startswith("#") and not l.strip().startswith("//")
+    ]
+    non_comment_lines = len(lines)
+
+    if non_comment_lines <= 3:
+        return ProgressState.SKELETON
+
+    # Check for function/class definitions with bodies
+    has_function = bool(re.search(r"def\s+\w+|function\s+\w+|public\s+\w+\s+\w+\s*\(", code))
+    has_return = "return " in code
+    has_loop = bool(re.search(r"\bfor\b|\bwhile\b", code))
+
+    if not has_function:
+        return ProgressState.SKELETON
+
+    if non_comment_lines < 10 or not (has_return or has_loop):
+        return ProgressState.PARTIAL
+
+    # Check for edge case handling
+    has_edge_cases = bool(re.search(r"if.*(?:None|null|empty|len.*==.*0|\.length.*===?\s*0)", code))
+
+    if has_edge_cases and non_comment_lines >= 12:
+        return ProgressState.COMPLETE
+
+    return ProgressState.NEAR_COMPLETE
+
+
+def detect_approach_local(code: str) -> ApproachInfo | None:
+    """Detect the coding approach using keyword matching."""
+    if not code.strip():
+        return None
+
+    code_lower = code.lower()
+    scores: dict[str, float] = {}
+
+    for approach_name, keywords in APPROACH_PATTERNS.items():
+        score = 0.0
+        for keyword in keywords:
+            if keyword.startswith(r"\b"):
+                # Regex pattern for word-boundary matching
+                if re.search(keyword, code_lower):
+                    score += 1.0
+            elif keyword.lower() in code_lower:
+                score += 1.0
+        if score > 0:
+            scores[approach_name] = score / len(keywords)
+
+    if not scores:
+        return None
+
+    best = max(scores, key=scores.get)  # type: ignore
+    confidence = min(1.0, scores[best])
+
+    return ApproachInfo(
+        name=best,
+        confidence=confidence,
+        data_structures=extract_data_structures(code),
+    )
+
+
+def extract_data_structures(code: str) -> list[str]:
+    """Extract data structures used in the code."""
+    structures = []
+    patterns = {
+        "array/list": r"\[.*\]|list\(|ArrayList|Array\(",
+        "hash_map": r"dict\(|\{\}|HashMap|Map\(|defaultdict|Counter",
+        "set": r"set\(|HashSet|Set\(",
+        "stack": r"stack|\.append.*\.pop|Stack\(",
+        "queue": r"queue|deque|Queue\(",
+        "heap": r"heapq|heappush|PriorityQueue",
+        "tree": r"TreeNode|BinaryTree",
+        "linked_list": r"ListNode|LinkedList|\.next",
+    }
+    for name, pattern in patterns.items():
+        if re.search(pattern, code, re.IGNORECASE):
+            structures.append(name)
+    return structures
+
+
+def detect_stuck(char_counts: Sequence[int]) -> bool:
+    """Detect if the candidate is stuck based on code oscillation.
+
+    Looks at the last 5+ snapshot lengths for oscillation (adding and
+    removing code without net progress) or no significant change.
+    """
+    if len(char_counts) < 5:
+        return False
+
+    lengths = list(char_counts[-5:])
+
+    # Check for oscillation: length goes up-down-up-down
+    deltas = [lengths[i + 1] - lengths[i] for i in range(len(lengths) - 1)]
+    sign_changes = sum(1 for i in range(len(deltas) - 1) if deltas[i] * deltas[i + 1] < 0)
+
+    # If sign changes >= 3 in last 4 deltas, candidate is oscillating
+    if sign_changes >= 3:
+        return True
+
+    # Also stuck if code length hasn't changed significantly
+    max_len = max(lengths)
+    min_len = min(lengths)
+    return bool(max_len > 0 and (max_len - min_len) / max_len < 0.05)
+
+
+def should_run_llm_analysis(question: str, history: Sequence[CodeSnapshot]) -> bool:
+    """Whether the newest snapshot in ``history`` warrants the (expensive) LLM analysis."""
+    if not question:
+        return False
+    snapshot = history[-1]
+
+    # Run on first substantial snapshot
+    if len(history) == 1 and snapshot.line_count > 5:
+        return True
+
+    # Run every 5 snapshots
+    if len(history) % 5 == 0:
+        return True
+
+    # Run on significant code growth
+    if len(history) >= 2:
+        prev = history[-2]
+        growth = abs(snapshot.char_count - prev.char_count)
+        if growth > 200:
+            return True
+
+    return False
+
+
+def make_snapshot(code: str, language: str) -> CodeSnapshot:
+    """A normalized snapshot of ``code``."""
+    code = normalize_code(code)
+    return CodeSnapshot(
+        code=code,
+        language=language,
+        line_count=code.count("\n") + 1 if code.strip() else 0,
+        char_count=len(code),
+    )
+
+
+def analyze_locally(snapshot: CodeSnapshot, history: Sequence[CodeSnapshot]) -> CodeAnalysisResult:
+    """Heuristic analysis of the newest snapshot (``history`` ends with it). No I/O."""
+    return CodeAnalysisResult(
+        progress_state=detect_progress(snapshot.code),
+        detected_approach=detect_approach_local(snapshot.code),
+        is_stuck=detect_stuck([s.char_count for s in history]),
+    )
+
+
+async def llm_analyze_code(
+    failover: FailoverManager,
+    session_id: str,
+    question: str,
+    code: str,
+    language: str,
+    progress: ProgressState,
+    approach: ApproachInfo | None,
+) -> CodeAnalysisResult | None:
+    """Run LLM-based code analysis for deeper insights."""
+    prompt = CODE_ANALYSIS_PROMPT.format(
+        question=question,
+        language=language,
+        code=code,
+        approach=approach.name if approach else "none detected",
+        progress=progress.value,
+    )
+
+    try:
+        result = await failover.analyze(
+            AnalysisContext(
+                system_prompt="Analyze interview code. Return JSON.",
+                user_content=prompt,
+                task_type=TaskType.CODE_ANALYSIS,
+            ),
+            LLMConfig(max_tokens=400, temperature=0.2, response_format="json"),
+            session_id=session_id,
+        )
+
+        parsed = result.parsed
+        if not parsed:
+            try:
+                parsed = json.loads(result.content)
+            except json.JSONDecodeError:
+                return None
+
+        approach_data = parsed.get("approach", {})
+        detected_approach = None
+        if approach_data and approach_data.get("name"):
+            detected_approach = ApproachInfo(
+                name=approach_data["name"],
+                confidence=approach_data.get("confidence", 0.5),
+                data_structures=approach_data.get("data_structures", []),
+                expected_complexity=approach_data.get("complexity", {}),
+            )
+
+        return CodeAnalysisResult(
+            progress_state=ProgressState(parsed.get("progress_state", progress.value)),
+            detected_approach=detected_approach or approach,
+            bugs=parsed.get("bugs", []),
+            complexity_estimate=approach_data.get("complexity", {}),
+        )
+    except Exception as e:
+        logger.error(
+            "llm_code_analysis_failed",
+            session_id=session_id,
+            error=str(e),
+        )
+        return None
+
+
 class CodeAnalysisService:
     """Analyzes candidate code snapshots in real-time.
 
@@ -159,7 +393,7 @@ class CodeAnalysisService:
 
         # Snapshot history for stuck detection
         self._snapshots: list[CodeSnapshot] = []
-        self._max_snapshot_history = 20
+        self._max_snapshot_history = MAX_SNAPSHOT_HISTORY
 
         # Analysis state
         self._current_progress = ProgressState.EMPTY
@@ -184,34 +418,20 @@ class CodeAnalysisService:
         language: str = "unknown",
     ) -> CodeAnalysisResult:
         """Analyze a code snapshot and return structured results."""
-        # Normalize
-        code = self._normalize_code(code)
-
-        # Create snapshot
-        snapshot = CodeSnapshot(
-            code=code,
-            language=language,
-            line_count=code.count("\n") + 1 if code.strip() else 0,
-            char_count=len(code),
-        )
+        snapshot = make_snapshot(code, language)
         self._snapshots.append(snapshot)
         if len(self._snapshots) > self._max_snapshot_history:
             self._snapshots.pop(0)
 
         # Quick local analysis
-        progress = self._detect_progress(code)
-        approach = self._detect_approach_local(code)
-        is_stuck = self._detect_stuck()
-
-        result = CodeAnalysisResult(
-            progress_state=progress,
-            detected_approach=approach,
-            is_stuck=is_stuck,
-        )
+        result = analyze_locally(snapshot, self._snapshots)
+        is_stuck = result.is_stuck
 
         # LLM analysis for deeper insights (only on significant changes)
         if self._should_run_llm_analysis(snapshot):
-            llm_result = await self._llm_analyze(code, language, progress, approach)
+            llm_result = await self._llm_analyze(
+                snapshot.code, language, result.progress_state, result.detected_approach
+            )
             if llm_result:
                 result = llm_result
                 result.is_stuck = is_stuck
@@ -224,146 +444,22 @@ class CodeAnalysisService:
         return result
 
     def _normalize_code(self, code: str) -> str:
-        """Normalize code whitespace and remove trailing spaces."""
-        lines = code.splitlines()
-        lines = [line.rstrip() for line in lines]
-        # Remove leading/trailing blank lines
-        while lines and not lines[0].strip():
-            lines.pop(0)
-        while lines and not lines[-1].strip():
-            lines.pop()
-        return "\n".join(lines)
+        return normalize_code(code)
 
     def _detect_progress(self, code: str) -> ProgressState:
-        """Detect code progress state heuristically."""
-        if not code.strip():
-            return ProgressState.EMPTY
-
-        lines = [
-            l
-            for l in code.splitlines()
-            if l.strip() and not l.strip().startswith("#") and not l.strip().startswith("//")
-        ]
-        non_comment_lines = len(lines)
-
-        if non_comment_lines <= 3:
-            return ProgressState.SKELETON
-
-        # Check for function/class definitions with bodies
-        has_function = bool(re.search(r"def\s+\w+|function\s+\w+|public\s+\w+\s+\w+\s*\(", code))
-        has_return = "return " in code
-        has_loop = bool(re.search(r"\bfor\b|\bwhile\b", code))
-
-        if not has_function:
-            return ProgressState.SKELETON
-
-        if non_comment_lines < 10 or not (has_return or has_loop):
-            return ProgressState.PARTIAL
-
-        # Check for edge case handling
-        has_edge_cases = bool(re.search(r"if.*(?:None|null|empty|len.*==.*0|\.length.*===?\s*0)", code))
-
-        if has_edge_cases and non_comment_lines >= 12:
-            return ProgressState.COMPLETE
-
-        return ProgressState.NEAR_COMPLETE
+        return detect_progress(code)
 
     def _detect_approach_local(self, code: str) -> ApproachInfo | None:
-        """Detect the coding approach using keyword matching."""
-        if not code.strip():
-            return None
-
-        code_lower = code.lower()
-        scores: dict[str, float] = {}
-
-        for approach_name, keywords in APPROACH_PATTERNS.items():
-            score = 0.0
-            for keyword in keywords:
-                if keyword.startswith(r"\b"):
-                    # Regex pattern for word-boundary matching
-                    if re.search(keyword, code_lower):
-                        score += 1.0
-                elif keyword.lower() in code_lower:
-                    score += 1.0
-            if score > 0:
-                scores[approach_name] = score / len(keywords)
-
-        if not scores:
-            return None
-
-        best = max(scores, key=scores.get)  # type: ignore
-        confidence = min(1.0, scores[best])
-
-        return ApproachInfo(
-            name=best,
-            confidence=confidence,
-            data_structures=self._extract_data_structures(code),
-        )
+        return detect_approach_local(code)
 
     def _extract_data_structures(self, code: str) -> list[str]:
-        """Extract data structures used in the code."""
-        structures = []
-        patterns = {
-            "array/list": r"\[.*\]|list\(|ArrayList|Array\(",
-            "hash_map": r"dict\(|\{\}|HashMap|Map\(|defaultdict|Counter",
-            "set": r"set\(|HashSet|Set\(",
-            "stack": r"stack|\.append.*\.pop|Stack\(",
-            "queue": r"queue|deque|Queue\(",
-            "heap": r"heapq|heappush|PriorityQueue",
-            "tree": r"TreeNode|BinaryTree",
-            "linked_list": r"ListNode|LinkedList|\.next",
-        }
-        for name, pattern in patterns.items():
-            if re.search(pattern, code, re.IGNORECASE):
-                structures.append(name)
-        return structures
+        return extract_data_structures(code)
 
     def _detect_stuck(self) -> bool:
-        """Detect if the candidate is stuck based on code oscillation.
-
-        Looks at the last 5+ snapshots for code length oscillation
-        (adding and removing code without net progress).
-        """
-        if len(self._snapshots) < 5:
-            return False
-
-        recent = self._snapshots[-5:]
-        lengths = [s.char_count for s in recent]
-
-        # Check for oscillation: length goes up-down-up-down
-        deltas = [lengths[i + 1] - lengths[i] for i in range(len(lengths) - 1)]
-        sign_changes = sum(1 for i in range(len(deltas) - 1) if deltas[i] * deltas[i + 1] < 0)
-
-        # If sign changes >= 3 in last 4 deltas, candidate is oscillating
-        if sign_changes >= 3:
-            return True
-
-        # Also stuck if code length hasn't changed significantly
-        max_len = max(lengths)
-        min_len = min(lengths)
-        return bool(max_len > 0 and (max_len - min_len) / max_len < 0.05)
+        return detect_stuck([s.char_count for s in self._snapshots])
 
     def _should_run_llm_analysis(self, snapshot: CodeSnapshot) -> bool:
-        """Determine if we should run expensive LLM analysis."""
-        if not self._current_question:
-            return False
-
-        # Run on first substantial snapshot
-        if len(self._snapshots) == 1 and snapshot.line_count > 5:
-            return True
-
-        # Run every 5 snapshots
-        if len(self._snapshots) % 5 == 0:
-            return True
-
-        # Run on significant code growth
-        if len(self._snapshots) >= 2:
-            prev = self._snapshots[-2]
-            growth = abs(snapshot.char_count - prev.char_count)
-            if growth > 200:
-                return True
-
-        return False
+        return should_run_llm_analysis(self._current_question, self._snapshots)
 
     async def _llm_analyze(
         self,
@@ -372,56 +468,9 @@ class CodeAnalysisService:
         progress: ProgressState,
         approach: ApproachInfo | None,
     ) -> CodeAnalysisResult | None:
-        """Run LLM-based code analysis for deeper insights."""
-        prompt = CODE_ANALYSIS_PROMPT.format(
-            question=self._current_question,
-            language=language,
-            code=code,
-            approach=approach.name if approach else "none detected",
-            progress=progress.value,
+        return await llm_analyze_code(
+            self._failover, self.session_id, self._current_question, code, language, progress, approach
         )
-
-        try:
-            result = await self._failover.analyze(
-                AnalysisContext(
-                    system_prompt="Analyze interview code. Return JSON.",
-                    user_content=prompt,
-                    task_type=TaskType.CODE_ANALYSIS,
-                ),
-                LLMConfig(max_tokens=400, temperature=0.2, response_format="json"),
-                session_id=self.session_id,
-            )
-
-            parsed = result.parsed
-            if not parsed:
-                try:
-                    parsed = json.loads(result.content)
-                except json.JSONDecodeError:
-                    return None
-
-            approach_data = parsed.get("approach", {})
-            detected_approach = None
-            if approach_data and approach_data.get("name"):
-                detected_approach = ApproachInfo(
-                    name=approach_data["name"],
-                    confidence=approach_data.get("confidence", 0.5),
-                    data_structures=approach_data.get("data_structures", []),
-                    expected_complexity=approach_data.get("complexity", {}),
-                )
-
-            return CodeAnalysisResult(
-                progress_state=ProgressState(parsed.get("progress_state", progress.value)),
-                detected_approach=detected_approach or approach,
-                bugs=parsed.get("bugs", []),
-                complexity_estimate=approach_data.get("complexity", {}),
-            )
-        except Exception as e:
-            logger.error(
-                "llm_code_analysis_failed",
-                session_id=self.session_id,
-                error=str(e),
-            )
-            return None
 
     def get_latest_result(self) -> CodeAnalysisResult | None:
         return self._last_analysis_result

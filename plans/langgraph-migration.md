@@ -217,7 +217,7 @@ load_session_data (DB: transcripts, analyses, hints, code snapshots, contradicti
 | 1 | **ReportGraph**, deterministic single-call mode, per-attempt threads, thread cleanup | Report tests pass. A report resumes after a killed process. **Done** — see §9 |
 | 2 | **PlanGraph** with `Send` fan-out | Plan tests pass. SSE shows per-phase progress. Latency improves. **Done except SSE progress** — see §10 |
 | 3 | **SessionGraph** utterances and question_change paths, **MemoryGraph**, `SessionIngress`, `EffectsSink`, behind `USE_LANGGRAPH_SESSION` | Replay parity, crash/resume, and latency tests pass. The factory switches to the new pipeline under the flag. **Done** — see §11 |
-| 4 | Move the code_snapshot path, `RuntimeHintGraph` and `CodeRatingGraph` in. `code_handler` switches over. `/state` adapter | Code-hint tests pass. The `code_handler` per-process dict and `SessionStateService` snapshot loop are gone |
+| 4 | Move the code_snapshot path, `RuntimeHintGraph` and `CodeRatingGraph` in. `code_handler` switches over. `/state` adapter | Code-hint tests pass. The `code_handler` per-process dict and `SessionStateService` snapshot loop are gone. **Done** (runtime-hint and code-rating graphs moved to Phase 5) — see §12 |
 | 5 | Add `invoke_with_tools` to the LLM layer. Agentic routing on the hot path. Agentic report scoring with `synthesize` | Agentic scenario assertions pass. Manually compare reports from both modes on real sessions |
 | 6 | Delete `AnalysisWorker`, service-level state and `SessionStateService`. Drop `session_snapshots`. Update `ARCHITECTURE.md` §4.7, §10, §11, §13.5 | No references to the old code remain. The full test suite is green |
 
@@ -334,3 +334,37 @@ Approved follow-ups, all done. Each was fixed in both pipelines, since `Analysis
   - The extension still retries refused connections with backoff; teaching it to stop on "Session ended" is an extension follow-up.
 
 Known gaps carried forward: the transcript of an utterance spoken within 2 s of a crash is lost because `PersistenceService` buffers in memory (same as before). Two gunicorn workers still give each process its own `dashboard_manager`, so a dashboard and an audio socket for one session that land on different workers do not see each other. That issue predates this migration.
+
+## 12. Phase 4 notes (code path, /state)
+
+**Decisions (made with you, 2026-10-05):**
+- Port the code path with parity first.
+- Then reset code tracking per question, and enable the code-analysis LLM step off the hot path.
+- Move the runtime-hint and code-rating graphs to Phase 5: each is a single LLM call answering a waiting request, so a one-node graph without a checkpointer adds nothing until they become multi-step.
+
+**Code path.** `SessionPipeline.on_code_snapshot`; the code WebSocket hands snapshots to the session's pipeline, and `_active_analyzers` is gone.
+- `AnalysisWorker` owns the `CodeAnalysisService`.
+- `LangGraphSessionPipeline` runs **CodeGraph on its own thread (`code:{session_id}`) and queue**. If code shared the session queue, an editor snapshot would wait behind an utterance analysis, which takes 1–3 s against a real provider; tested at < 300 ms with a 1 s analysis in flight.
+- Code-snapshot rows get a deterministic primary key, so a resumed run can't insert one twice. `code_snapshots` has no idempotency column, so this needed no migration.
+- Scenario 07 (live coding over two questions) was recorded from `AnalysisWorker`, and the graph matches it.
+
+**`/state`.** Under the flag, the snapshot is built from the session and code checkpoints, so any process can serve it and it is current. `SessionStateService` refreshed it only when an analysis ran, and the copy outside the running process was up to 30 s stale.
+- **Parity:** for every scenario, the graph's snapshot equals what `SessionStateService` would hold if refreshed at the end.
+- **Under the flag:** the pipeline stops writing `SessionStateService`, and the 30 s loop doesn't start.
+- **After a session ends:** end-session saves the final snapshot, which `/state` serves once the checkpoints are gone.
+
+**Bugs found and fixed:**
+- **Code snapshots broke persistence batches** (`63fb724`). The handler passed the detected-approach dict into a VARCHAR column. The flush writes a batch in one transaction, so transcripts, analyses and hints queued in the same 2 s window were lost whenever the candidate's code had a recognizable approach.
+- **Code tracking never reset between questions** (`a67a81b`). Question 2's first snapshot was reported as stuck because of question 1's history.
+- **The code-analysis LLM step never ran** (`49b2186`). It is now enabled in the background, one call at a time, with stale results dropped.
+- **Ending a session from a process that never held its pipeline** (this commit), e.g. after a restart or on the other worker. That left the checkpoints, saved no final snapshot, and gave the report no session memory. End-session now reads the checkpoints in that case and always deletes the session's threads.
+- **`code_snapshot_count` was never incremented.**
+
+**Verified on a running server** (flag on, mock LLM):
+- A code snapshot produced a local push and then a refined push.
+- `/state` returned the question index, both live and after a SIGKILL and restart, served by a process that never ran the pipeline.
+- Ending the session from that process saved the snapshot, deleted both threads and completed the report; the code socket was then refused.
+
+**Notes for later:**
+- The mock provider's canned `CODE_ANALYSIS` response has the wrong shape for live code analysis (it matches nothing that uses this task type), so in mock mode the refined push repeats the local result.
+- A test once reached the real Anthropic API through `audio_handler`'s import-time failover manager; it is now patched. The provider answered `404 not_found_error` for the configured model, which suggests a default model in `src/llm/config.py` is no longer available. Not verified which one.

@@ -346,8 +346,18 @@ async def end_session(
             "duration_minutes": duration_minutes,
             "target_level": db_session.level,
         }
+        stored = None
         if worker:
             snapshots.update(worker.report_snapshot())
+        elif settings.use_langgraph_session:
+            # This process never held the pipeline (restart, or another worker):
+            # the session's state is in its checkpoints.
+            from src.dependencies import failover_manager, get_checkpointer
+            from src.workers.langgraph_session import load_checkpointed_session
+
+            stored = await load_checkpointed_session(get_checkpointer(), failover_manager, session_id)
+            if stored is not None:
+                snapshots.update(stored.report_snapshot())
         if hint_service:
             snapshots["hint_events"] = [
                 {
@@ -385,7 +395,8 @@ async def end_session(
             if settings.use_langgraph_session:
                 # The pipeline's checkpoints are deleted when it closes below; this
                 # row is what GET /state serves for the ended session.
-                if worker is not None:
+                source = worker if worker is not None else stored
+                if source is not None:
                     hint_history = [
                         {
                             "hint_id": h.hint_id,
@@ -398,7 +409,7 @@ async def end_session(
                     db.add(
                         SessionSnapshot(
                             session_id=uuid.UUID(session_id),
-                            snapshot_data=jsonable_encoder(worker.state_snapshot(hint_history)),
+                            snapshot_data=jsonable_encoder(source.state_snapshot(hint_history)),
                             schema_version=SNAPSHOT_SCHEMA_VERSION,
                         )
                     )
@@ -416,6 +427,13 @@ async def end_session(
         from src.websocket.audio_handler import close_transcription_service
 
         await close_transcription_service(session_id)
+        if settings.use_langgraph_session:
+            # Whether or not this process held the pipeline, the session is over:
+            # its report inputs and final snapshot are saved, so drop its checkpoints.
+            from src.dependencies import get_checkpointer
+            from src.workers.langgraph_session import delete_session_threads
+
+            await delete_session_threads(get_checkpointer(), session_id)
 
         # Fire background task for report generation
         asyncio.create_task(

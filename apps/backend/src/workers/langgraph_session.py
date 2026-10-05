@@ -33,6 +33,7 @@ import contextlib
 import time
 from collections import deque
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -669,6 +670,40 @@ class LangGraphSessionPipeline:
         self._enqueue(SummaryCompressed(new_summary, len(buffer)))
 
 
+@dataclass
+class CheckpointedSession:
+    """A session's state as stored in its checkpoints, for code that does not hold its pipeline."""
+
+    values: dict[str, Any]
+    code_values: dict[str, Any]
+
+    def report_snapshot(self) -> dict:
+        return {**report_snapshot(self.values), **code_report_fields(self.code_values["last_result"])}
+
+    def state_snapshot(self, hint_history: list[dict] | None = None) -> dict:
+        return state_snapshot(self.values, self.code_values["snapshot_count"], hint_history or [])
+
+
+async def load_checkpointed_session(
+    checkpointer: Checkpointer, failover_manager: FailoverManager, session_id: str
+) -> CheckpointedSession | None:
+    """The session's checkpointed state (works from any process); None if it has none."""
+    session_app = build_session_graph(failover_manager, session_id).compile(checkpointer=checkpointer.saver)
+    session = await session_app.aget_state({"configurable": {"thread_id": thread_id_for(session_id)}})
+    if not session.values:
+        return None
+    code_app = build_code_graph(session_id).compile(checkpointer=checkpointer.saver)
+    code = await code_app.aget_state({"configurable": {"thread_id": code_thread_id(session_id)}})
+    return CheckpointedSession(
+        values={**initial_state(session_id), **session.values},
+        code_values={**initial_code_state(session_id), **(code.values or {})},
+    )
+
+
+async def delete_session_threads(checkpointer: Checkpointer, session_id: str) -> None:
+    await checkpointer.delete_threads(thread_id_for(session_id), code_thread_id(session_id))
+
+
 async def read_state_snapshot(
     checkpointer: Checkpointer, failover_manager: FailoverManager, session_id: str, hint_history: list[dict]
 ) -> dict | None:
@@ -677,11 +712,5 @@ async def read_state_snapshot(
     None when the session has no checkpointed state (never ran, or ended and
     torn down).
     """
-    session_app = build_session_graph(failover_manager, session_id).compile(checkpointer=checkpointer.saver)
-    session = await session_app.aget_state({"configurable": {"thread_id": thread_id_for(session_id)}})
-    if not session.values:
-        return None
-    code_app = build_code_graph(session_id).compile(checkpointer=checkpointer.saver)
-    code = await code_app.aget_state({"configurable": {"thread_id": code_thread_id(session_id)}})
-    values = {**initial_state(session_id), **session.values}
-    return state_snapshot(values, (code.values or {}).get("snapshot_count", 0), hint_history)
+    stored = await load_checkpointed_session(checkpointer, failover_manager, session_id)
+    return stored.state_snapshot(hint_history) if stored else None

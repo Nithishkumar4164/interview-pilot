@@ -377,7 +377,7 @@
         "code_length": 283,
         "complexity_estimate": {},
         "detected_approach": null,
-        "is_stuck": true,
+        "is_stuck": false,
         "language": "python",
         "progress_state": "near_complete",
         "source": "codemirror",

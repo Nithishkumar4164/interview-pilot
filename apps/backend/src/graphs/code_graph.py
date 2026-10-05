@@ -9,7 +9,7 @@ utterance analysis (an LLM call), and vice versa.
 - apply_code: for each editor snapshot in the batch, in order: normalize,
   add it to the bounded history, run the local heuristics (progress,
   approach keywords, stuck detection), push the result to the dashboard and
-  persist the snapshot. Question changes are delivered here too.
+  persist the snapshot. A question change starts the history over.
 
 Like SessionGraph, the node only emits effects; the pipeline performs them.
 The history keeps sizes only (not code), so checkpoints stay small.
@@ -76,7 +76,10 @@ def build_code_graph(session_id: str) -> StateGraph:
         count = state.get("snapshot_count", 0)
 
         for ev in state["events"]:
-            if not isinstance(ev, CodeSnapshotIn):
+            if isinstance(ev, QuestionChanged):
+                # Code tracking is per question: stuck detection must not compare
+                # the new question's code with the previous one's.
+                history = []
                 continue
             snapshot = make_snapshot(ev.code, ev.language)
             history = [*history, dataclasses.replace(snapshot, code="")][-MAX_SNAPSHOT_HISTORY:]

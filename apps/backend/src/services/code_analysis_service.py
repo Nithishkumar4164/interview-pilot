@@ -422,6 +422,12 @@ class CodeAnalysisService:
         self._current_approach = None
         self._snapshots.clear()
 
+    def reset_for_new_question(self) -> None:
+        """Start code tracking over for the next question (history, progress, approach)."""
+        self._snapshots.clear()
+        self._current_progress = ProgressState.EMPTY
+        self._current_approach = None
+
     async def analyze_snapshot(
         self,
         code: str,

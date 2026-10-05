@@ -286,3 +286,21 @@ def test_audio_socket_for_an_ended_session_is_refused(live_session: str) -> None
         pytest.fail(f"audio socket accepted for an ended session (replied {reply})")
     except WebSocketDisconnect as closed:
         assert closed.code == 1008 and closed.reason == "Session ended"
+
+
+# ── Code tracking per question ─────────────────────────────────────────────
+
+
+async def test_code_tracking_starts_fresh_on_a_new_question(replay) -> None:
+    """Scenario 07: the editor sits unchanged at the end of question 1 (stuck), then
+    question 2's first snapshot arrives. Stuck detection must judge question 2's
+    code on its own, not against question 1's history."""
+    report = await replay("07_live_coding.scenario.json")
+    pushes = [e.payload for e in report.events if e.method == "send_code_analysis"]
+    scenario = load_scenario(SCENARIOS_DIR / "07_live_coding.scenario.json")
+    kinds = [e.type for e in scenario.events if e.type in ("code_update", "question_change")]
+    first_q2 = [i for i, k in enumerate(kinds) if k == "question_change"][1]  # index among those events
+    q1_count = kinds[:first_q2].count("code_update")
+
+    assert pushes[q1_count - 1]["is_stuck"], "the scenario must leave question 1 stuck"
+    assert not pushes[q1_count]["is_stuck"], "question 2's first snapshot judged against question 1's history"

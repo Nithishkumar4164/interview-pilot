@@ -314,8 +314,10 @@ class AnalysisWorker:
         self.runtime_hints._recent_insights.clear()
         # 4. Reset rate limiter so first utterance on new question is analyzed immediately
         self._last_analysis_time = 0
+        # 5. Code tracking is per question
+        self.code_analysis.reset_for_new_question()
 
-        # 5. Update session state with new question context
+        # 6. Update session state with new question context
         try:
             from src.dependencies import get_session_state_service
 

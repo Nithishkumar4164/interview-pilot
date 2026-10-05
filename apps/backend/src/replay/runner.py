@@ -220,6 +220,7 @@ class ReplayRunner:
                 try:
                     error = await self._drive(worker, session_id, scenario_clock, hint_responses, code_ratings)
                     final_state = worker.to_dict()
+                    session_state = {k: v for k, v in worker.state_snapshot().items() if k != "captured_at"}
                 finally:
                     worker.stop()
                     await worker.wait_idle()
@@ -239,7 +240,7 @@ class ReplayRunner:
             llm_calls=recorder.to_list(),
             final_state=final_state,
             persisted=list(collector.persisted),
-            session_state=_session_state(collector, session_id),
+            session_state=session_state,
             error=error,
         )
 
@@ -309,15 +310,6 @@ class ReplayRunner:
         finally:
             await worker.drain()
         return error
-
-
-def _session_state(collector: EventCollector, session_id: str) -> dict:
-    state = collector.session_state.get_state_or_none(session_id)
-    if state is None:
-        return {}
-    snapshot = state.to_snapshot()
-    snapshot.pop("captured_at")
-    return snapshot
 
 
 def _summarize(events: list[CapturedEvent]) -> ReplaySummary:

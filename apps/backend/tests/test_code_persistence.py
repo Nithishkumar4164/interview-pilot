@@ -21,6 +21,7 @@ from src.main import app
 from src.models.analysis import CodeSnapshot
 from src.models.session import InterviewSession
 from src.models.transcript import Transcript
+from src.replay.runner import build_scripted_failover_manager
 from src.services.access_control import DEV_USER_ID
 from src.services.code_analysis_service import detect_progress
 from src.services.persistence_service import PersistenceService
@@ -74,6 +75,8 @@ def test_code_snapshot_and_transcript_in_one_batch_are_both_persisted(monkeypatc
     asyncio.run(_with_db(create))
     queued = PersistenceService(None)  # type: ignore[arg-type]  # only queues; flushed below with a fresh engine
     monkeypatch.setattr("src.dependencies.get_persistence_service", lambda: queued)
+    # Never reach a real LLM provider from tests.
+    monkeypatch.setattr("src.websocket.audio_handler.failover_manager", build_scripted_failover_manager())
 
     try:
         queued.enqueue_transcript(

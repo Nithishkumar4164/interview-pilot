@@ -381,6 +381,20 @@ class AnalysisWorker:
             approach=result.detected_approach.name if result.detected_approach else None,
             progress_state=result.progress_state.value,
         )
+        try:
+            from src.dependencies import get_session_state_service
+
+            state = get_session_state_service().get_state(self.session_id)
+            state.code_snapshot_count += 1
+            state.mark_dirty()
+        except Exception:
+            logger.warning("session_state_code_update_failed")
+
+    def state_snapshot(self, hint_history: list[dict] | None = None) -> dict:
+        """SessionStateService's snapshot for this session (it holds the hint history itself)."""
+        from src.dependencies import get_session_state_service
+
+        return get_session_state_service().get_state(self.session_id).to_snapshot()
 
     def get_recent_transcripts(self, limit: int = 50) -> list[dict]:
         """Return recent transcript events for catch-up replay."""

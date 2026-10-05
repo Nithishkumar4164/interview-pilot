@@ -23,6 +23,7 @@ from src.graphs.code_graph import code_thread_id
 from src.replay.golden import golden_path, normalize, read_golden, write_golden
 from src.replay.runner import PipelineFactory, ReplayRunner, analysis_worker_factory
 from src.replay.scenario import load_scenario
+from src.services.session_state_service import SessionState, SessionStateService
 from src.workers.langgraph_session import LangGraphSessionPipeline, thread_id_for
 
 SCENARIOS_DIR = Path(__file__).parent / "scenarios"
@@ -81,6 +82,17 @@ async def _run_graph(path: Path, checkpointer: Checkpointer) -> dict:
         await checkpointer.delete_threads(*threads)
 
 
+def _refreshed_session_state(golden: dict) -> dict:
+    """SessionStateService's snapshot as it would be if refreshed from the final worker state."""
+    service = SessionStateService()
+    sid = golden["scenario_id"]
+    service._states[sid] = SessionState.from_snapshot({**golden["session_state"], "session_id": sid})
+    service.update_from_worker(sid, golden["final_state"])
+    snapshot = service.get_state(sid).to_snapshot()
+    snapshot.pop("captured_at")
+    return snapshot
+
+
 def _assert_matches(actual: dict, expected: dict) -> None:
     # Compare section by section so a failure names what diverged.
     for section in expected:
@@ -92,7 +104,13 @@ def _assert_matches(actual: dict, expected: dict) -> None:
 async def test_langgraph_pipeline_matches_golden(scenario_path: Path, checkpointer: Checkpointer) -> None:
     path = golden_path(GOLDEN_DIR, load_scenario(scenario_path).meta.id)
     assert path.exists(), f"missing golden {path}; record with REPLAY_UPDATE_GOLDEN=1"
-    _assert_matches(await _run_graph(scenario_path, checkpointer), read_golden(path))
+    expected = read_golden(path)
+    actual = await _run_graph(scenario_path, checkpointer)
+    # The graph serves the session-state snapshot current; SessionStateService
+    # refreshed it only when an analysis ran. Compare with what it would hold
+    # refreshed at the end.
+    assert actual.pop("session_state") == _refreshed_session_state(expected)
+    _assert_matches(actual, {k: v for k, v in expected.items() if k != "session_state"})
 
 
 @pytest.mark.parametrize("scenario_path", _scenario_paths(), ids=lambda p: p.stem)

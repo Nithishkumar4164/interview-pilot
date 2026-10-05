@@ -1025,7 +1025,7 @@
   "session_state": {
     "active_question_id": "q-reverse",
     "analysis_count": 3,
-    "code_snapshot_count": 0,
+    "code_snapshot_count": 10,
     "coverage_tracker": {},
     "facts": {
       "behavioral_signals": [],

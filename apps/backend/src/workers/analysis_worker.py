@@ -71,6 +71,7 @@ class AnalysisWorker:
 
         # Background analysis task tracking
         self._bg_analysis_task: asyncio.Task | None = None
+        self._code_llm_task: asyncio.Task | None = None
 
         # Throttle interim transcript pushes (max once per 300ms)
         self._last_interim_push: float = 0
@@ -314,8 +315,8 @@ class AnalysisWorker:
         self.runtime_hints._recent_insights.clear()
         # 4. Reset rate limiter so first utterance on new question is analyzed immediately
         self._last_analysis_time = 0
-        # 5. Code tracking is per question
-        self.code_analysis.reset_for_new_question()
+        # 5. Code tracking is per question, and its LLM step needs the question
+        await self.code_analysis.set_question(question_text)
 
         # 6. Update session state with new question context
         try:
@@ -363,17 +364,14 @@ class AnalysisWorker:
         )
 
     async def on_code_snapshot(self, code: str, language: str, source: str) -> None:
-        """Analyze an editor snapshot, push it to the dashboard and persist it."""
-        result = await self.code_analysis.analyze_snapshot(code, language)
-        await dashboard_manager.send_code_analysis(
-            self.session_id,
-            {
-                "code_length": len(code),
-                "language": language,
-                "source": source,
-                **result.to_dict(),
-            },
-        )
+        """Analyze an editor snapshot, push it to the dashboard and persist it.
+
+        The local result goes out at once; when the snapshot warrants it, an
+        LLM analysis runs in the background (one at a time) and its result is
+        pushed when it lands, unless newer code has arrived meanwhile.
+        """
+        snapshot, result, needs_llm = self.code_analysis.observe(code, language)
+        await self._push_code_analysis(code, language, source, result)
         safe_enqueue(
             "code_snapshot",
             self.session_id,
@@ -391,6 +389,24 @@ class AnalysisWorker:
             state.mark_dirty()
         except Exception:
             logger.warning("session_state_code_update_failed")
+        if needs_llm and (self._code_llm_task is None or self._code_llm_task.done()):
+            self._code_llm_task = asyncio.create_task(self._refine_code(snapshot, result, code, language, source))
+
+    async def _refine_code(self, snapshot, local, code: str, language: str, source: str) -> None:
+        refined = await self.code_analysis.refine(snapshot, local)
+        if refined is not None:
+            await self._push_code_analysis(code, language, source, refined)
+
+    async def _push_code_analysis(self, code: str, language: str, source: str, result) -> None:
+        await dashboard_manager.send_code_analysis(
+            self.session_id,
+            {
+                "code_length": len(code),
+                "language": language,
+                "source": source,
+                **result.to_dict(),
+            },
+        )
 
     def state_snapshot(self, hint_history: list[dict] | None = None) -> dict:
         """SessionStateService's snapshot for this session (it holds the hint history itself)."""
@@ -443,7 +459,12 @@ class AnalysisWorker:
         while True:
             pending = [
                 t
-                for t in (self._bg_analysis_task, self.memory._bg_compress_task, *self.memory._bg_extract_tasks)
+                for t in (
+                    self._bg_analysis_task,
+                    self._code_llm_task,
+                    self.memory._bg_compress_task,
+                    *self.memory._bg_extract_tasks,
+                )
                 if t is not None and not t.done()
             ]
             if pending:

@@ -6,6 +6,7 @@ what reaches the dashboard and what the pipeline remembers.
 """
 
 import asyncio
+import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -291,12 +292,17 @@ def test_audio_socket_for_an_ended_session_is_refused(live_session: str) -> None
 # ── Code tracking per question ─────────────────────────────────────────────
 
 
+def _refined(push: dict) -> bool:
+    """A code-analysis push carrying the (scripted) LLM's result rather than the local heuristics."""
+    return (push["detected_approach"] or {}).get("name", "").startswith("scripted-approach-")
+
+
 async def test_code_tracking_starts_fresh_on_a_new_question(replay) -> None:
     """Scenario 07: the editor sits unchanged at the end of question 1 (stuck), then
     question 2's first snapshot arrives. Stuck detection must judge question 2's
     code on its own, not against question 1's history."""
     report = await replay("07_live_coding.scenario.json")
-    pushes = [e.payload for e in report.events if e.method == "send_code_analysis"]
+    pushes = [e.payload for e in report.events if e.method == "send_code_analysis" and not _refined(e.payload)]
     scenario = load_scenario(SCENARIOS_DIR / "07_live_coding.scenario.json")
     kinds = [e.type for e in scenario.events if e.type in ("code_update", "question_change")]
     first_q2 = [i for i, k in enumerate(kinds) if k == "question_change"][1]  # index among those events
@@ -304,3 +310,67 @@ async def test_code_tracking_starts_fresh_on_a_new_question(replay) -> None:
 
     assert pushes[q1_count - 1]["is_stuck"], "the scenario must leave question 1 stuck"
     assert not pushes[q1_count]["is_stuck"], "question 2's first snapshot judged against question 1's history"
+
+
+async def test_code_llm_analysis_runs_with_the_current_question(replay) -> None:
+    """The LLM step of code analysis gated on a question that code tracking was never
+    given, so it never ran. Its refined result follows the instant local one."""
+    report = await replay("07_live_coding.scenario.json")
+    calls = [c["user_content"] for c in report.llm_calls if c["kind"] == "code_analysis"]
+    assert calls, "code analysis LLM never ran"
+    q1, q2 = "Question: Given an array of integers", "Question: Reverse a singly linked list"
+    assert any(q1 in c for c in calls) and any(q2 in c for c in calls)
+    assert all((q1 in c) != (q2 in c) for c in calls)
+
+    pushes = [e.payload for e in report.events if e.method == "send_code_analysis"]
+    refined = [p for p in pushes if _refined(p)]
+    assert len(refined) == len(calls)
+    # Every refined push follows a local push for the same code, with the local stuck flag.
+    for p in refined:
+        local = pushes[pushes.index(p) - 1]
+        assert local["code_length"] == p["code_length"] and local["is_stuck"] == p["is_stuck"]
+
+
+@pytest.mark.parametrize("impl", ["worker", "graph"])
+async def test_a_refinement_for_superseded_code_is_dropped(impl: str) -> None:
+    """The LLM analysis takes 300 ms; the candidate keeps typing. Its result is about
+    code that is no longer on screen, so it must not replace the newer local result."""
+    from src.replay.runner import REPLAY_LATENCY_MS, PipelineTiming
+    from src.replay.scenario import CodeUpdateEvent, QuestionChangeEvent, Scenario, ScenarioMeta
+
+    first = "def f(nums):\n" + "".join(f"    a{i} = {i}\n" for i in range(8))  # > 5 lines: qualifies
+    events = [
+        QuestionChangeEvent(question_text="Sum the array.", question_index=0),
+        CodeUpdateEvent(code=first),
+        CodeUpdateEvent(code=first + "    return sum(nums)\n", delay_ms=50),  # small change: does not qualify
+        QuestionChangeEvent(question_text="Done.", question_index=1, delay_ms=600),
+    ]
+    session_id = f"supersede-{impl}-{uuid.uuid4()}"
+    scenario = Scenario(meta=ScenarioMeta(id=session_id), events=events)
+    cp = None
+    factory = analysis_worker_factory
+    if impl == "graph":
+        if not _postgres_available():
+            pytest.skip("Postgres not reachable")
+        cp = Checkpointer()
+        await cp.open(settings.database_url_sync)
+
+        def factory(sid, fm, timing: PipelineTiming):
+            return LangGraphSessionPipeline(sid, fm, cp, min_analysis_interval_s=timing.min_analysis_interval_s)
+
+    try:
+        report = await ReplayRunner(
+            scenario,
+            llm_mode="scripted",
+            real_time=True,
+            pipeline_factory=factory,
+            latency_ms={**REPLAY_LATENCY_MS, "code_analysis": 300},
+        ).run()
+    finally:
+        if cp is not None:
+            await cp.delete_threads(thread_id_for(session_id), code_thread_id(session_id))
+            await cp.close()
+
+    assert [c["kind"] for c in report.llm_calls].count("code_analysis") == 1  # it did run
+    pushes = [e.payload for e in report.events if e.method == "send_code_analysis"]
+    assert len(pushes) == 2 and not any(_refined(p) for p in pushes)

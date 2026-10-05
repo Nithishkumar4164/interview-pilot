@@ -104,7 +104,9 @@ async def code_websocket(websocket: WebSocket, session_id: str) -> None:
                             code=code,
                             language=language,
                             timestamp=datetime.now(UTC).isoformat(),
-                            approach=result_dict.get("detected_approach"),
+                            # The column holds the approach name; the dict made the whole
+                            # persistence batch (transcripts included) fail to insert.
+                            approach=result.detected_approach.name if result.detected_approach else None,
                             progress_state=result_dict.get("progress_state", "unknown"),
                         )
                     else:

@@ -52,6 +52,7 @@ REPLAY_LATENCY_MS: dict[str, float] = {
     "contradiction": 10,
     "hint": 20,
     "code_rating": 20,
+    "code_analysis": 40,
     "utterance_analysis": 30,
     "summary": 60,
 }

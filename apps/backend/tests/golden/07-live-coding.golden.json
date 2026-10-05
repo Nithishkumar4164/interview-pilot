@@ -227,6 +227,35 @@
     {
       "method": "send_code_analysis",
       "payload": {
+        "bugs": [
+          "scripted-bug-21"
+        ],
+        "code_length": 276,
+        "complexity_estimate": {
+          "space": "O(n)",
+          "time": "O(n)"
+        },
+        "detected_approach": {
+          "confidence": 0.8,
+          "data_structures": [
+            "array/list"
+          ],
+          "expected_complexity": {
+            "space": "O(n)",
+            "time": "O(n)"
+          },
+          "name": "scripted-approach-80"
+        },
+        "is_stuck": false,
+        "language": "python",
+        "progress_state": "skeleton",
+        "source": "codemirror",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_code_analysis",
+      "payload": {
         "bugs": [],
         "code_length": 277,
         "complexity_estimate": {},
@@ -377,6 +406,33 @@
         "code_length": 283,
         "complexity_estimate": {},
         "detected_approach": null,
+        "is_stuck": false,
+        "language": "python",
+        "progress_state": "near_complete",
+        "source": "codemirror",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_code_analysis",
+      "payload": {
+        "bugs": [],
+        "code_length": 283,
+        "complexity_estimate": {
+          "space": "O(1)",
+          "time": "O(n)"
+        },
+        "detected_approach": {
+          "confidence": 0.58,
+          "data_structures": [
+            "array/list"
+          ],
+          "expected_complexity": {
+            "space": "O(1)",
+            "time": "O(n)"
+          },
+          "name": "scripted-approach-58"
+        },
         "is_stuck": false,
         "language": "python",
         "progress_state": "near_complete",
@@ -677,6 +733,24 @@
   "golden_version": 2,
   "hint_responses": [],
   "llm_calls_by_kind": {
+    "code_analysis": [
+      {
+        "max_tokens": 400,
+        "response_format": "json",
+        "system_prompt_sha": "e1069afb7f0f",
+        "task_type": "code_analysis",
+        "temperature": 0.2,
+        "user_content": "Analyze this code written during a coding interview.\n\nQuestion: Given an array of integers and a target, return the indices of the two numbers that add up to the target.\n\nCode (python):\n```python\ndef two_sum(nums, target):\n    # map value to index\n    if nums is None or len(nums) == 0:\n        return []\n    seen = {}\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i\n    return []\n```\n\nPrevious approach detection: hash_map\nPrevious progress: near_complete\n\nRespond in JSON:\n{\n  \"progress_state\": \"empty|skeleton|partial|near_complete|complete\",\n  \"approach\": {\n    \"name\": \"approach name\",\n    \"confidence\": 0.0-1.0,\n    \"data_structures\": [\"list of data structures used\"],\n    \"complexity\": {\"time\": \"O(?)\", \"space\": \"O(?)\"}\n  },\n  \"bugs\": [\"list of bugs or potential issues found\"],\n  \"suggestions\": [\"list of improvement suggestions\"]\n}"
+      },
+      {
+        "max_tokens": 400,
+        "response_format": "json",
+        "system_prompt_sha": "e1069afb7f0f",
+        "task_type": "code_analysis",
+        "temperature": 0.2,
+        "user_content": "Analyze this code written during a coding interview.\n\nQuestion: Reverse a singly linked list in place.\n\nCode (python):\n```python\nclass ListNode:\n    def __init__(self, val=0, next=None):\n        self.val = val\n        self.next = next\n\n# iterate once, keep the previous node\ndef reverse(head):\n    # flip pointers in place\n    prev = None\n    curr = head\n    while curr:\n        curr = curr.next\n    return prev\n```\n\nPrevious approach detection: none detected\nPrevious progress: near_complete\n\nRespond in JSON:\n{\n  \"progress_state\": \"empty|skeleton|partial|near_complete|complete\",\n  \"approach\": {\n    \"name\": \"approach name\",\n    \"confidence\": 0.0-1.0,\n    \"data_structures\": [\"list of data structures used\"],\n    \"complexity\": {\"time\": \"O(?)\", \"space\": \"O(?)\"}\n  },\n  \"bugs\": [\"list of bugs or potential issues found\"],\n  \"suggestions\": [\"list of improvement suggestions\"]\n}"
+      }
+    ],
     "code_rating": [
       {
         "max_tokens": 800,

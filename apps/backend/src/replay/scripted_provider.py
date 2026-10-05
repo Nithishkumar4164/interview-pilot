@@ -133,6 +133,8 @@ def classify(context: AnalysisContext) -> str:
         return "contradiction"
     if sp.startswith("Extract factual claims"):
         return "fact_extraction"
+    if sp.startswith("Analyze interview code"):
+        return "code_analysis"
     if context.task_type == TaskType.REAL_TIME_ANALYSIS:
         return "utterance_analysis"
     if context.task_type == TaskType.CODE_RATING:
@@ -244,6 +246,20 @@ def _code_rating(h: int) -> dict:
     }
 
 
+def _code_analysis(h: int) -> dict:
+    return {
+        "progress_state": _pick(("skeleton", "partial", "near_complete", "complete"), h),
+        "approach": {
+            "name": f"scripted-approach-{h % 100:02d}",
+            "confidence": round(0.5 + (h % 50) / 100, 2),
+            "data_structures": ["hash_map"] if h % 2 else ["array/list"],
+            "complexity": {"time": "O(n)", "space": "O(n)" if h % 3 else "O(1)"},
+        },
+        "bugs": [f"scripted-bug-{h % 97}"] if h % 4 == 0 else [],
+        "suggestions": [],
+    }
+
+
 def _hint(h: int) -> dict:
     # Union of the runtime-hint shape and the plan-service hint-set shape.
     return {
@@ -267,6 +283,8 @@ def respond(kind: str, context: AnalysisContext) -> str:
         return json.dumps(_code_rating(h))
     if kind == "hint":
         return json.dumps(_hint(h))
+    if kind == "code_analysis":
+        return json.dumps(_code_analysis(h))
     return MOCK_RESPONSES.get(context.task_type, '{"result": "scripted"}')
 
 

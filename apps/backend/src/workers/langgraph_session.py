@@ -42,7 +42,9 @@ from langgraph.types import Durability
 
 from src.graphs.checkpointer import Checkpointer
 from src.graphs.code_graph import (
+    EFFECT_CODE_LLM,
     CodeEvent,
+    CodeRefined,
     CodeSnapshotIn,
     build_code_graph,
     code_thread_id,
@@ -72,7 +74,7 @@ from src.llm.failover import FailoverManager
 from src.schemas.hint import RuntimeHintRequest
 from src.schemas.transcript import TranscriptEventSchema
 from src.services.analysis_service import rate_code
-from src.services.code_analysis_service import code_report_fields
+from src.services.code_analysis_service import code_report_fields, llm_analyze_code
 from src.services.memory_service import compress_summary, format_utterances
 from src.services.persistence_service import safe_enqueue
 from src.services.runtime_hint_service import assemble_hint_context, generate_runtime_hint, resolve_directness
@@ -106,6 +108,7 @@ class _CodeLane:
         self._consumer: asyncio.Task | None = None
         self._loaded = asyncio.Event()
         self._running_graph = False
+        self._refine_task: asyncio.Task | None = None
         self.values: dict[str, Any] = initial_code_state(owner.session_id)
 
     def enqueue(self, event: CodeEvent) -> None:
@@ -118,7 +121,8 @@ class _CodeLane:
             self._consumer = asyncio.create_task(self._consume(), name=f"code-graph:{self._owner.session_id}")
 
     def busy(self) -> bool:
-        return bool(not self._loaded.is_set() or self._queue or self._running_graph)
+        refining = self._refine_task is not None and not self._refine_task.done()
+        return bool(not self._loaded.is_set() or self._queue or self._running_graph or refining)
 
     def compiled(self) -> CompiledStateGraph:
         if self._app is None:
@@ -163,14 +167,44 @@ class _CodeLane:
             data = cast(dict, chunk)
             if mode == "values":
                 self.values = {**initial_code_state(self._owner.session_id), **data}
+            elif data["effect"] == EFFECT_CODE_LLM:
+                self._start_refine(data)
             else:
                 await self._owner._perform(data)
 
+    def _start_refine(self, request: dict) -> None:
+        if self._refine_task is not None and not self._refine_task.done():
+            return  # one LLM analysis at a time; a later snapshot will qualify again
+        self._refine_task = asyncio.create_task(self._refine(request))
+
+    async def _refine(self, request: dict) -> None:
+        local = request["local"]
+        refined = await llm_analyze_code(
+            self._owner._failover,
+            self._owner.session_id,
+            request["question"],
+            request["code"],
+            request["language"],
+            local.progress_state,
+            local.detected_approach,
+        )
+        if refined is not None:
+            self.enqueue(
+                CodeRefined(
+                    snapshot_id=request["snapshot_id"],
+                    result=refined,
+                    code_length=request["code_length"],
+                    language=request["language"],
+                    source=request["source"],
+                )
+            )
+
     async def close(self) -> None:
-        if self._consumer is not None and not self._consumer.done():
-            self._consumer.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await self._consumer
+        for task in (self._consumer, self._refine_task):
+            if task is not None and not task.done():
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await task
         await self._owner._checkpointer.delete_threads(code_thread_id(self._owner.session_id))
 
 

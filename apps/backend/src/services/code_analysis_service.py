@@ -406,6 +406,7 @@ class CodeAnalysisService:
         self._max_snapshot_history = MAX_SNAPSHOT_HISTORY
 
         # Analysis state
+        self._observed = 0  # snapshots seen; a refinement for an older one is dropped
         self._current_progress = ProgressState.EMPTY
         self._current_approach: ApproachInfo | None = None
         self._last_analysis_result: CodeAnalysisResult | None = None
@@ -421,6 +422,45 @@ class CodeAnalysisService:
         self._current_progress = ProgressState.EMPTY
         self._current_approach = None
         self._snapshots.clear()
+
+    def observe(self, code: str, language: str = "unknown") -> tuple[CodeSnapshot, CodeAnalysisResult, bool]:
+        """Record a snapshot and analyze it locally (no I/O).
+
+        Returns the snapshot, the local result, and whether it warrants the LLM
+        analysis (``refine``), which callers run off their hot path.
+        """
+        snapshot = make_snapshot(code, language)
+        self._snapshots.append(snapshot)
+        if len(self._snapshots) > self._max_snapshot_history:
+            self._snapshots.pop(0)
+        self._observed += 1
+        result = analyze_locally(snapshot, self._snapshots)
+        self._record(result)
+        return snapshot, result, should_run_llm_analysis(self._current_question, self._snapshots)
+
+    async def refine(self, snapshot: CodeSnapshot, local: CodeAnalysisResult) -> CodeAnalysisResult | None:
+        """LLM analysis of ``snapshot``. None if it failed, or if a newer snapshot arrived meanwhile."""
+        observed = self._observed
+        refined = await llm_analyze_code(
+            self._failover,
+            self.session_id,
+            self._current_question,
+            snapshot.code,
+            snapshot.language,
+            local.progress_state,
+            local.detected_approach,
+        )
+        if refined is None or observed != self._observed:
+            return None
+        refined.is_stuck = local.is_stuck
+        self._record(refined)
+        return refined
+
+    def _record(self, result: CodeAnalysisResult) -> None:
+        self._current_progress = result.progress_state
+        if result.detected_approach:
+            self._current_approach = result.detected_approach
+        self._last_analysis_result = result
 
     def reset_for_new_question(self) -> None:
         """Start code tracking over for the next question (history, progress, approach)."""

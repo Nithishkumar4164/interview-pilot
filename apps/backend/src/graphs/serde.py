@@ -12,7 +12,7 @@ When a new type is added to any graph's state, add it to CHECKPOINT_TYPES.
 
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
-from src.graphs.code_graph import CodeSnapshotIn
+from src.graphs.code_graph import CodeRefined, CodeSnapshotIn
 from src.graphs.session_graph import (
     HintAcknowledged,
     HintRevealed,
@@ -64,6 +64,7 @@ CHECKPOINT_TYPES: tuple[type, ...] = (
     SummaryCompressed,
     # code graph
     CodeSnapshotIn,
+    CodeRefined,
     CodeSnapshot,
     CodeAnalysisResult,
     ApproachInfo,

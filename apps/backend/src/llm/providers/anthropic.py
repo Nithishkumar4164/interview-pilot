@@ -34,7 +34,7 @@ def _strip_code_fences(text: str) -> str:
 class AnthropicProvider(ILLMProvider):
     """Claude implementation of ILLMProvider."""
 
-    def __init__(self, model: str = "claude-sonnet-4-20250514") -> None:
+    def __init__(self, model: str = "claude-sonnet-5") -> None:
         self.model = model
         self.client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 

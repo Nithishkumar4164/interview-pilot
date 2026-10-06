@@ -72,4 +72,13 @@ DEFAULT_TASK_MAPPINGS: dict[TaskType, TaskProviderMapping] = {
         fallback_provider="openai",
         fallback_model="gpt-4o",
     ),
+    # Agentic report: one evidence-gathering tool loop per criterion (Sonnet);
+    # the synthesis across criteria stays on REPORT_GENERATION (Opus).
+    TaskType.REPORT_CRITERION: TaskProviderMapping(
+        task_type=TaskType.REPORT_CRITERION,
+        primary_provider="anthropic",
+        primary_model="claude-sonnet-5",
+        fallback_provider="openai",
+        fallback_model="gpt-4o",
+    ),
 }

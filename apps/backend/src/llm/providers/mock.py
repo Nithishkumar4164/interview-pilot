@@ -8,12 +8,15 @@ from datetime import UTC, datetime
 from src.config import settings
 from src.llm.interface import (
     AnalysisContext,
+    ChatMessage,
     ILLMProvider,
     LLMConfig,
     ProviderHealthStatus,
     ProviderStatus,
     StructuredOutput,
     TaskType,
+    ToolSpec,
+    ToolTurn,
 )
 
 # Canned responses for each task type
@@ -161,6 +164,30 @@ class MockProvider(ILLMProvider):
             input_tokens=len(context.user_content) // 4,
             output_tokens=len(content) // 4,
             latency_ms=latency,
+        )
+
+    async def invoke_with_tools(
+        self,
+        system: str,
+        messages: list[ChatMessage],
+        tools: list[ToolSpec],
+        config: LLMConfig,
+        tool_choice: str = "auto",
+    ) -> ToolTurn:
+        """Answers at once, without calling tools (canned like ``analyze``)."""
+        if not self._healthy:
+            raise ConnectionError("Mock provider is unhealthy")
+        if settings.mock_llm_latency_ms > 0:
+            await asyncio.sleep(settings.mock_llm_latency_ms / 1000)
+        text = '{"result": "mock"}'
+        return ToolTurn(
+            text=text,
+            tool_calls=[],
+            stop_reason="end",
+            model=self.model,
+            provider="mock",
+            input_tokens=sum(len(m.content) for m in messages) // 4,
+            output_tokens=len(text) // 4,
         )
 
     async def health_check(self) -> ProviderStatus:

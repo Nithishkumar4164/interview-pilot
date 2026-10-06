@@ -15,6 +15,7 @@ class TaskType(str, Enum):
     SUMMARY_COMPRESSION = "summary_compression"
     RESUME_EXTRACTION = "resume_extraction"
     QUESTION_GENERATION = "question_generation"
+    REPORT_CRITERION = "report_criterion"
 
 
 class ProviderHealthStatus(str, Enum):
@@ -57,6 +58,51 @@ class StructuredOutput:
 
 
 @dataclass
+class ToolSpec:
+    """A tool the model may call. ``input_schema`` is a JSON Schema object."""
+
+    name: str
+    description: str
+    input_schema: dict[str, Any]
+
+
+@dataclass
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict[str, Any]
+
+
+@dataclass
+class ChatMessage:
+    """One message of a provider-neutral tool conversation.
+
+    - ``user``: ``content``
+    - ``assistant``: ``content`` (may be empty) and the ``tool_calls`` it made
+    - ``tool``: the result (``content``) of the call ``tool_call_id``
+    """
+
+    role: str
+    content: str = ""
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    tool_call_id: str = ""
+
+
+@dataclass
+class ToolTurn:
+    """One model turn of a tool conversation."""
+
+    text: str
+    tool_calls: list[ToolCall]
+    stop_reason: str  # "tool_use" | "end" | "max_tokens"
+    model: str = ""
+    provider: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    latency_ms: float = 0
+
+
+@dataclass
 class ProviderStatus:
     """Health status of an LLM provider."""
 
@@ -79,6 +125,21 @@ class ILLMProvider(ABC):
     async def analyze(self, context: AnalysisContext, config: LLMConfig) -> StructuredOutput:
         """Run a structured analysis and return parsed output."""
         ...
+
+    async def invoke_with_tools(
+        self,
+        system: str,
+        messages: list[ChatMessage],
+        tools: list[ToolSpec],
+        config: LLMConfig,
+        tool_choice: str = "auto",
+    ) -> ToolTurn:
+        """Run one model turn of a tool conversation (native tool use).
+
+        ``tool_choice="none"`` keeps the tools defined (the conversation may
+        contain earlier calls) but makes the model answer in text.
+        """
+        raise NotImplementedError(f"{self.provider_name} does not support tool calling")
 
     @abstractmethod
     async def health_check(self) -> ProviderStatus:

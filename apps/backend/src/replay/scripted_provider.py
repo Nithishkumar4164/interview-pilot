@@ -28,19 +28,23 @@ import contextlib
 import hashlib
 import json
 import re
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 
 from src.llm.interface import (
     AnalysisContext,
+    ChatMessage,
     ILLMProvider,
     LLMConfig,
     ProviderHealthStatus,
     ProviderStatus,
     StructuredOutput,
     TaskType,
+    ToolCall,
+    ToolSpec,
+    ToolTurn,
 )
 from src.llm.providers.mock import MOCK_RESPONSES
 
@@ -80,6 +84,21 @@ class LLMCallRecorder:
             )
         )
 
+    def record_turn(self, kind: str, system: str, messages: list[ChatMessage], tools: list[ToolSpec]) -> None:
+        """A tool-conversation turn: the conversation so far, flattened, is its user content."""
+        self.calls.append(
+            RecordedCall(
+                seq=len(self.calls),
+                kind=kind,
+                task_type="tools",
+                system_prompt_sha=_sha(system)[:12],
+                user_content=_flatten(messages) + "\n[tools] " + ",".join(t.name for t in tools),
+                max_tokens=0,
+                temperature=0.0,
+                response_format=None,
+            )
+        )
+
     def to_list(self) -> list[dict]:
         return [asdict(c) for c in self.calls]
 
@@ -110,6 +129,57 @@ def behavior(latency_ms: dict[str, float]) -> Iterator[None]:
         yield
     finally:
         _active_latency.reset(token)
+
+
+def _flatten(messages: list[ChatMessage]) -> str:
+    parts = []
+    for m in messages:
+        if m.role == "tool":
+            parts.append(f"[tool {m.tool_call_id}] {m.content}")
+        else:
+            calls = "".join(f" <call {c.name} {json.dumps(c.arguments, sort_keys=True)}>" for c in m.tool_calls)
+            parts.append(f"[{m.role}] {m.content}{calls}")
+    return "\n".join(parts)
+
+
+def _default_arguments(schema: dict, h: int) -> dict:
+    """Fill a tool's required arguments deterministically from its JSON schema."""
+    out: dict = {}
+    for name in schema.get("required", []):
+        spec = schema.get("properties", {}).get(name, {})
+        if "enum" in spec:
+            out[name] = spec["enum"][h % len(spec["enum"])]
+        elif spec.get("type") == "integer":
+            out[name] = h % 5
+        else:
+            out[name] = f"scripted-{name}"
+    return out
+
+
+# kind -> policy(messages, tools, h) -> tool calls for this turn ([] = answer now)
+ToolPolicy = Callable[[list[ChatMessage], list[ToolSpec], int], list[ToolCall]]
+TOOL_POLICIES: dict[str, ToolPolicy] = {}
+
+
+def _call_each_tool_once(messages: list[ChatMessage], tools: list[ToolSpec], h: int) -> list[ToolCall]:
+    if any(m.role == "tool" for m in messages):
+        return []
+    return [
+        ToolCall(id=f"call-{i}-{h % 10_000:04d}", name=t.name, arguments=_default_arguments(t.input_schema, h))
+        for i, t in enumerate(tools)
+    ]
+
+
+def classify_tool_system(system: str) -> str:
+    """Name the call site of a tool conversation, from its system prompt's first line."""
+    for prefix, kind in TOOL_KINDS:
+        if system.startswith(prefix):
+            return kind
+    return "tools"
+
+
+# (system prompt prefix, kind); extended by call sites that run tool loops.
+TOOL_KINDS: list[tuple[str, str]] = []
 
 
 def fail_marker(kind: str) -> str:
@@ -288,6 +358,15 @@ def respond(kind: str, context: AnalysisContext) -> str:
     return MOCK_RESPONSES.get(context.task_type, '{"result": "scripted"}')
 
 
+# kind -> final answer of a tool conversation; extended by call sites.
+TOOL_ANSWERS: dict[str, Callable[[str, list[ChatMessage], int], str]] = {}
+
+
+def respond_tools(kind: str, system: str, messages: list[ChatMessage], h: int) -> str:
+    answer = TOOL_ANSWERS.get(kind)
+    return answer(system, messages, h) if answer else json.dumps({"result": f"scripted-{kind}-{h % 10_000:04d}"})
+
+
 class ScriptedProvider(ILLMProvider):
     def __init__(self, model: str = "scripted-v1") -> None:
         self.model = model
@@ -325,6 +404,39 @@ class ScriptedProvider(ILLMProvider):
             input_tokens=len(context.user_content) // 4,
             output_tokens=len(content) // 4,
             latency_ms=0.0,
+        )
+
+    async def invoke_with_tools(
+        self,
+        system: str,
+        messages: list[ChatMessage],
+        tools: list[ToolSpec],
+        config: LLMConfig,
+        tool_choice: str = "auto",
+    ) -> ToolTurn:
+        kind = classify_tool_system(system)
+        recorder = _active_recorder.get()
+        if recorder is not None:
+            recorder.record_turn(kind, system, messages, tools)
+        latency = (_active_latency.get() or {}).get(kind, 0.0)
+        if latency:
+            await asyncio.sleep(latency / 1000)
+        if fail_marker(kind) in _flatten(messages[-1:]):
+            raise ScriptedFailureError(f"scripted failure for {kind}")
+
+        flat = _flatten(messages)
+        h = int(_sha(system + "\x00" + flat)[:16], 16)
+        policy = TOOL_POLICIES.get(kind, _call_each_tool_once)
+        calls = policy(messages, tools, h) if tools and tool_choice != "none" else []
+        text = "" if calls else respond_tools(kind, system, messages, h)
+        return ToolTurn(
+            text=text,
+            tool_calls=calls,
+            stop_reason="tool_use" if calls else "end",
+            model=self.model,
+            provider="scripted",
+            input_tokens=len(system + flat) // 4,
+            output_tokens=len(text) // 4 + 20 * len(calls),
         )
 
     async def health_check(self) -> ProviderStatus:

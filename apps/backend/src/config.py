@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     # Mock LLM (used when no provider keys are set): simulated per-call latency,
     # so local runs can exercise slow calls (e.g. crash during report generation).
     mock_llm_latency_ms: int = 0
+    # Provider used when no LLM keys are configured (development): "mock" or "scripted".
+    dev_llm_provider: str = "mock"
 
     # Upper bound on parallel LLM calls while generating one interview plan.
     plan_generation_max_concurrency: int = 4

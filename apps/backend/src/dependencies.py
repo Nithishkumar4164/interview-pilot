@@ -30,14 +30,22 @@ checkpointer = Checkpointer()  # opened in main.lifespan
 # Override mappings so only providers with valid keys are used.
 # If no keys at all, use mock provider. If only one key, use that provider for both.
 if not _has_anthropic and not _has_openai:
+    _dev_provider, _dev_model = "mock", "mock-v1"
+    if settings.dev_llm_provider == "scripted":
+        # Deterministic, input-sensitive answers (red flags, contradictions, tool use) for local e2e runs.
+        from src.llm.factory import ProviderFactory
+        from src.replay.scripted_provider import ScriptedProvider
+
+        ProviderFactory.register("scripted", ScriptedProvider)
+        _dev_provider, _dev_model = "scripted", "scripted-v1"
     for task_type in DEFAULT_TASK_MAPPINGS:
         failover_manager.update_mapping(
             TaskProviderMapping(
                 task_type=task_type,
-                primary_provider="mock",
-                primary_model="mock-v1",
-                fallback_provider="mock",
-                fallback_model="mock-v1",
+                primary_provider=_dev_provider,
+                primary_model=_dev_model,
+                fallback_provider=_dev_provider,
+                fallback_model=_dev_model,
             )
         )
 elif not _has_anthropic or not _has_openai:

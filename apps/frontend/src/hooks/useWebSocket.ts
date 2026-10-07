@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { DashboardWSClient, type WSMessage } from '@/api/websocket';
 import { useTranscriptStore } from '@/stores/transcript-store';
 import { useSpeakerStore } from '@/stores/speaker-store';
+import { flagsFromPayload } from '@/lib/flags';
 import { useAnalysisStore, mapDimensions, type CodeRatingResult } from '@/stores/analysis-store';
 import { useHintStore, type RuntimeHintEntry } from '@/stores/hint-store';
 import { useOfflineStore } from '@/stores/offline-store';
@@ -26,7 +27,7 @@ export function useWebSocket(sessionId: string | null) {
   const applySnapshot = useSpeakerStore((s) => s.applySnapshot);
   const setSvTranscripts = useSpeakerStore((s) => s.setSvTranscripts);
   const addAnalysis = useAnalysisStore((s) => s.addAnalysis);
-  const addRedFlag = useAnalysisStore((s) => s.addRedFlag);
+  const addRedFlags = useAnalysisStore((s) => s.addRedFlags);
   const updateScores = useAnalysisStore((s) => s.updateScores);
   const setActiveHint = useHintStore((s) => s.setActiveHint);
   const setHintSignal = useHintStore((s) => s.setHintSignal);
@@ -94,13 +95,7 @@ export function useWebSocket(sessionId: string | null) {
             setHintSignal(p.hint_signal as string);
           }
 
-          // Red flags
-          const flags = p.red_flags as string[] | undefined;
-          if (flags?.length) {
-            for (const flag of flags) {
-              addRedFlag({ text: flag, timestamp: message.timestamp });
-            }
-          }
+          // The analysis's red flags also arrive as their own red_flag message (below).
 
           // Score updates
           if (p.scores) {
@@ -150,12 +145,7 @@ export function useWebSocket(sessionId: string | null) {
         }
 
         case 'red_flag': {
-          const p = message.payload as Record<string, unknown>;
-          addRedFlag({
-            text: (p.text as string) || 'Unknown issue',
-            timestamp: message.timestamp,
-            type: (p.flag_type as string) || undefined,
-          });
+          addRedFlags(flagsFromPayload(message.payload as Record<string, unknown>, message.timestamp));
           break;
         }
 
@@ -284,7 +274,7 @@ export function useWebSocket(sessionId: string | null) {
     },
     [
       addEntry, addCatchupEntries, updateEntrySpeaker, applySnapshot, setSvTranscripts,
-      addAnalysis, addRedFlag, updateScores,
+      addAnalysis, addRedFlags, updateScores,
       setActiveHint, setHintSignal, setActiveRuntimeHint, setRuntimeHintLoading,
       setCodeRating, setCodeRatingLoading,
       setProviderStatus, setSessionStatus, setCurrentQuestion,

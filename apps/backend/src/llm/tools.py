@@ -39,13 +39,22 @@ async def run_tool_loop(
     config: LLMConfig,
     session_id: str | None = None,
     max_steps: int = 6,
+    final_instruction: str = "Stop using tools. Reply now with your final answer, in the format you were asked for.",
 ) -> ToolLoopResult:
-    """Run a tool conversation to completion. LLM errors propagate (the caller decides on retries)."""
+    """Run a tool conversation to completion. LLM errors propagate (the caller decides on retries).
+
+    On the last allowed step tools are switched off (``tool_choice="none"``)
+    and, if the model was still exploring, ``final_instruction`` is added as a
+    user turn: without it the model tends to answer in prose ("I would next
+    look at...") instead of the requested format.
+    """
     messages = [ChatMessage(role="user", content=user)]
     result = ToolLoopResult(text="", stop_reason="max_steps", messages=messages)
     for step in range(max_steps):
         # On the last allowed step the model must answer instead of calling tools.
         choice = "auto" if step < max_steps - 1 else "none"
+        if choice == "none" and messages[-1].role == "tool":
+            messages.append(ChatMessage(role="user", content=final_instruction))
         turn: ToolTurn = await failover.invoke_with_tools(
             task_type, system, messages, tools, config, session_id=session_id, tool_choice=choice
         )

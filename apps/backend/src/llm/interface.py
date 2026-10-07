@@ -97,9 +97,11 @@ class ToolTurn:
     stop_reason: str  # "tool_use" | "end" | "max_tokens"
     model: str = ""
     provider: str = ""
-    input_tokens: int = 0
+    input_tokens: int = 0  # all input, cached or not
     output_tokens: int = 0
     latency_ms: float = 0
+    cache_read_tokens: int = 0  # part of input_tokens served from the prompt cache
+    cache_write_tokens: int = 0  # part of input_tokens written to it
 
 
 @dataclass

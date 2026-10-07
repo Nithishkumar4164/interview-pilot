@@ -41,7 +41,11 @@ def to_anthropic_messages(messages: list[ChatMessage]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for m in messages:
         if m.role == "user":
-            out.append({"role": "user", "content": m.content})
+            if out and out[-1]["role"] == "user" and isinstance(out[-1]["content"], list):
+                # A user turn right after tool results joins them (turns must alternate).
+                out[-1]["content"].append({"type": "text", "text": m.content})
+            else:
+                out.append({"role": "user", "content": m.content})
         elif m.role == "assistant":
             blocks: list[dict[str, Any]] = [{"type": "text", "text": m.content}] if m.content else []
             blocks += [{"type": "tool_use", "id": c.id, "name": c.name, "input": c.arguments} for c in m.tool_calls]
@@ -80,13 +84,17 @@ class AnthropicProvider(ILLMProvider):
         this model"); on that error the call is retried once without it, and
         this provider stops sending it.
         """
+        sampling = self._sampling(config)
         try:
-            return await self.client.messages.create(**kwargs, **self._sampling(config))
+            return await self.client.messages.create(**kwargs, **sampling)
         except anthropic.BadRequestError as e:
-            if not (self._accepts_temperature and "temperature" in str(e)):
+            # Decide from what *this* request sent: concurrent calls may have
+            # flipped the flag while it was in flight.
+            if not ("temperature" in sampling and "temperature" in str(e)):
                 raise
-            logger.info("anthropic_temperature_unsupported", model=self.model)
-            self._accepts_temperature = False
+            if self._accepts_temperature:
+                logger.info("anthropic_temperature_unsupported", model=self.model)
+                self._accepts_temperature = False
             return await self.client.messages.create(**kwargs)
 
     async def complete(self, prompt: str, config: LLMConfig) -> AsyncIterator[str]:
@@ -123,7 +131,12 @@ class AnthropicProvider(ILLMProvider):
                 messages=[{"role": "user", "content": context.user_content}],
             )
             latency = (time.monotonic() - start) * 1000
-            content = response.content[0].text if response.content else ""
+            # Current models may put thinking blocks before the answer; keep text blocks only.
+            content = "".join(b.text for b in response.content if b.type == "text")
+            if response.stop_reason == "max_tokens":
+                logger.warning(
+                    "llm_output_truncated", provider="anthropic", model=self.model, max_tokens=config.max_tokens
+                )
 
             parsed = None
             if config.response_format == "json":
@@ -169,13 +182,15 @@ class AnthropicProvider(ILLMProvider):
             kwargs["tools"] = [
                 {"name": t.name, "description": t.description, "input_schema": t.input_schema} for t in tools
             ]
+            # Every turn of a loop re-sends the same system prompt and tools: cache them.
+            kwargs["tools"][-1]["cache_control"] = {"type": "ephemeral"}
             kwargs["tool_choice"] = {"type": tool_choice}
         try:
             response = await self._create(
                 config,
                 model=self.model,
                 max_tokens=config.max_tokens,
-                system=system,
+                system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
                 messages=cast(Any, to_anthropic_messages(messages)),
                 **kwargs,
             )
@@ -190,6 +205,8 @@ class AnthropicProvider(ILLMProvider):
             if b.type == "tool_use"
         ]
         stop = {"tool_use": "tool_use", "max_tokens": "max_tokens"}.get(response.stop_reason or "", "end")
+        if stop == "max_tokens":
+            logger.warning("llm_output_truncated", provider="anthropic", model=self.model, max_tokens=config.max_tokens)
         logger.info(
             "llm_invoke_with_tools",
             provider="anthropic",
@@ -199,15 +216,21 @@ class AnthropicProvider(ILLMProvider):
             output_tokens=response.usage.output_tokens,
             latency_ms=round(latency, 1),
         )
+        usage = response.usage
+        cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+        cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
         return ToolTurn(
             text=text,
             tool_calls=calls,
             stop_reason=stop,
             model=self.model,
             provider="anthropic",
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
+            # The API reports uncached input separately from cache reads/writes.
+            input_tokens=usage.input_tokens + cache_read + cache_write,
+            output_tokens=usage.output_tokens,
             latency_ms=latency,
+            cache_read_tokens=cache_read,
+            cache_write_tokens=cache_write,
         )
 
     async def health_check(self) -> ProviderStatus:

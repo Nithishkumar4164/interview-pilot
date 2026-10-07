@@ -172,9 +172,8 @@ async def live_session(monkeypatch) -> AsyncIterator[str]:
     audio_handler._active_workers.pop(str(sid), None)
     async with factory() as db:
         from src.models.report import Report
-        from src.models.resilience import SessionSnapshot
 
-        for model in (Report, SessionSnapshot):
+        for model in (Report,):
             await db.execute(delete(model).where(model.session_id == sid))
         await db.execute(delete(InterviewSession).where(InterviewSession.id == sid))
         await db.commit()

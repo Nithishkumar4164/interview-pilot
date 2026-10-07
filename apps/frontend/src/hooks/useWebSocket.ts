@@ -144,6 +144,20 @@ export function useWebSocket(sessionId: string | null) {
           break;
         }
 
+        case 'hint_suggestion': {
+          const p = message.payload as Record<string, unknown>;
+          if (typeof p.text === 'string' && p.text.trim()) {
+            useHintStore.getState().addSuggestion({
+              id: (p.id as string) || crypto.randomUUID(),
+              questionId: (p.question_id as string) || '',
+              text: p.text,
+              directness: (p.directness as string) || 'moderate',
+              receivedAt: message.timestamp,
+            });
+          }
+          break;
+        }
+
         case 'red_flag': {
           addRedFlags(flagsFromPayload(message.payload as Record<string, unknown>, message.timestamp));
           break;

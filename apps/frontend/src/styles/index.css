@@ -659,6 +659,38 @@ ul, ol {
   color: var(--color-text-muted);
 }
 
+.hint-panel__suggestion {
+  border: 1px solid var(--color-primary, #6366f1);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.hint-panel__suggestion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hint-panel__suggestion-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+}
+
+.hint-panel__suggestion-text {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.hint-panel__suggestion-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
 .hint-panel {
   background: var(--color-surface);
   border-radius: var(--radius-lg);

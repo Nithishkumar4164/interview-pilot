@@ -205,6 +205,8 @@ def classify(context: AnalysisContext) -> str:
         return "fact_extraction"
     if sp.startswith("Analyze interview code"):
         return "code_analysis"
+    if sp.startswith("Compare a candidate's spoken explanation"):
+        return "code_inspection"
     if context.task_type == TaskType.REAL_TIME_ANALYSIS:
         return "utterance_analysis"
     if context.task_type == TaskType.CODE_RATING:
@@ -330,6 +332,24 @@ def _code_analysis(h: int) -> dict:
     }
 
 
+_AGENT_ACTIONS = ("check_contradiction", "draft_hint", "inspect_code")
+
+
+def _next_actions(h: int) -> list[str]:
+    """Hash-chosen follow-ups: each action independently, about half the time."""
+    return [a for i, a in enumerate(_AGENT_ACTIONS) if (h >> (13 + i)) & 1]
+
+
+def _code_inspection(h: int) -> dict:
+    mismatch = h % 2 == 0
+    return {
+        "mismatch": mismatch,
+        "confidence": 0.85 if mismatch else 0.2,
+        "explanation": f"scripted-code-mismatch-{h % 1_000:03d}",
+        "suggested_probe": f"scripted-code-probe-{h % 1_000:03d}",
+    }
+
+
 def _hint(h: int) -> dict:
     # Union of the runtime-hint shape and the plan-service hint-set shape.
     return {
@@ -344,7 +364,12 @@ def respond(kind: str, context: AnalysisContext) -> str:
     if kind == "summary":
         return f"scripted-summary-{h % 1_000_000:06d}"
     if kind == "utterance_analysis":
-        return json.dumps(_utterance_analysis(h))
+        data = _utterance_analysis(h)
+        if '"next_actions"' in context.system_prompt:
+            data["next_actions"] = _next_actions(h)
+        return json.dumps(data)
+    if kind == "code_inspection":
+        return json.dumps(_code_inspection(h))
     if kind == "fact_extraction":
         return json.dumps(_fact_extraction(context.user_content))
     if kind == "contradiction":

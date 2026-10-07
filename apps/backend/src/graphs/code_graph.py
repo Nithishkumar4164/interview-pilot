@@ -73,6 +73,8 @@ class CodeState(TypedDict, total=False):
     events: list[CodeEvent]  # run input (replaced every run)
     history: list[CodeSnapshot]  # newest last, code stripped
     question: str  # the current question's text (the LLM step needs it)
+    latest_code: str  # normalized; what the session graph's inspect_code compares against
+    latest_language: str
     latest_snapshot_id: str | None
     last_result: CodeAnalysisResult | None
     snapshot_count: int
@@ -88,6 +90,8 @@ def initial_code_state(session_id: str) -> dict[str, Any]:
         "history": [],
         "question": "",
         "latest_snapshot_id": None,
+        "latest_code": "",
+        "latest_language": "",
         "last_result": None,
         "snapshot_count": 0,
     }
@@ -104,6 +108,8 @@ def build_code_graph(session_id: str) -> StateGraph:
         history = list(state.get("history", []))
         question = state.get("question", "")
         latest = state.get("latest_snapshot_id")
+        latest_code = state.get("latest_code", "")
+        latest_language = state.get("latest_language", "")
         last_result = state.get("last_result")
         count = state.get("snapshot_count", 0)
 
@@ -113,6 +119,7 @@ def build_code_graph(session_id: str) -> StateGraph:
                 # the new question's code with the previous one's.
                 history = []
                 question = ev.question_text
+                latest_code, latest_language = "", ""
                 continue
             if isinstance(ev, CodeRefined):
                 if ev.snapshot_id != latest:
@@ -176,12 +183,15 @@ def build_code_graph(session_id: str) -> StateGraph:
                 )
             last_result = result
             latest = ev.id
+            latest_code, latest_language = snapshot.code, ev.language
             count += 1
 
         return {
             "history": history,
             "question": question,
             "latest_snapshot_id": latest,
+            "latest_code": latest_code,
+            "latest_language": latest_language,
             "last_result": last_result,
             "snapshot_count": count,
         }

@@ -111,13 +111,16 @@ async def check_contradictions(
     fact_store: FactStore,
     checked_pairs: Set[str],
     exclude_claims: Set[str] = frozenset(),
+    use_llm: bool = True,
 ) -> tuple[list[Contradiction], set[str]]:
     """Check a new statement against known facts for contradictions.
 
     ``exclude_claims`` are facts extracted from the statement itself; a
     statement is never checked against its own claims. Pairs whose
     ``pair_key`` is in ``checked_pairs`` are skipped. Returns the newly
-    detected contradictions and the keys of the pairs checked now.
+    detected contradictions and the keys of the pairs checked now. With
+    ``use_llm=False`` only the rule-based pass runs (pairs it cannot decide
+    stay unchecked, so a later LLM-enabled check can still examine them).
     """
     new_contradictions: list[Contradiction] = []
     newly_checked: set[str] = set()
@@ -132,13 +135,16 @@ async def check_contradictions(
         key = pair_key(claim, new_statement)
         if key in checked_pairs or key in newly_checked:
             continue
-        newly_checked.add(key)
 
         # Pass 1: Rule-based detection
         rule_result = rule_based_check(claim, new_statement)
         if rule_result:
+            newly_checked.add(key)
             new_contradictions.append(rule_result)
             continue
+        if not use_llm:
+            continue
+        newly_checked.add(key)
 
         # Pass 2: LLM check for technology-related statements
         if has_tech_overlap(claim, new_statement):

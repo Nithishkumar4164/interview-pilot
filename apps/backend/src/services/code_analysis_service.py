@@ -380,6 +380,68 @@ async def llm_analyze_code(
         return None
 
 
+CODE_INSPECTION_SYSTEM_PROMPT = "Compare a candidate's spoken explanation with their code. Return JSON."
+
+CODE_INSPECTION_PROMPT = """During a live coding interview the candidate just said something about their code.
+
+Question: {question}
+
+What the candidate said:
+"{statement}"
+
+Their current code ({language}):
+```{language}
+{code}
+```
+
+Does what they said contradict the code (wrong complexity, a step the code does not do, a data structure it does not use, a bug they say is handled)? Ignore plans for code not written yet.
+
+Respond in JSON:
+{{
+  "mismatch": true/false,
+  "confidence": 0.0-1.0,
+  "explanation": "What does not match, in one sentence",
+  "suggested_probe": "A question the interviewer could ask"
+}}"""
+
+
+async def inspect_code_against_statement(
+    failover: FailoverManager,
+    session_id: str,
+    question: str,
+    statement: str,
+    code: str,
+    language: str,
+) -> dict | None:
+    """A mismatch between what the candidate said and their code, or None. LLM errors propagate."""
+    result = await failover.analyze(
+        AnalysisContext(
+            system_prompt=CODE_INSPECTION_SYSTEM_PROMPT,
+            user_content=CODE_INSPECTION_PROMPT.format(
+                question=question or "(not given)", statement=statement, language=language, code=code
+            ),
+            task_type=TaskType.CODE_ANALYSIS,
+        ),
+        LLMConfig(max_tokens=300, temperature=0.2, response_format="json"),
+        session_id=session_id,
+    )
+    data = result.parsed
+    if not data:
+        try:
+            data = json.loads(result.content)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(data, dict) or not data.get("mismatch"):
+        return None
+    if float(data.get("confidence", 0) or 0) <= 0.6:
+        return None
+    return {
+        "explanation": str(data.get("explanation", "")) or "Explanation does not match the code",
+        "suggested_probe": str(data.get("suggested_probe", "")),
+        "confidence": float(data.get("confidence", 0.7)),
+    }
+
+
 class CodeAnalysisService:
     """Analyzes candidate code snapshots in real-time.
 

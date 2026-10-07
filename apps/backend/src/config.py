@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     plan_generation_max_concurrency: int = 4
     # Real-time pipeline: the LangGraph session graph instead of AnalysisWorker.
     use_langgraph_session: bool = False
+    # Session graph only: the analysis chooses follow-ups (contradiction check, hint draft, code check).
+    agentic_routing_enabled: bool = False
 
     # Storage
     s3_endpoint: str = "http://localhost:9000"

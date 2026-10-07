@@ -39,6 +39,15 @@ export interface RuntimeHintEntry {
   feedback: 'well_received' | 'partially_received' | 'not_understood' | null;
 }
 
+/** A hint the agentic pipeline drafted on its own, for the interviewer to use or dismiss. */
+export interface HintSuggestion {
+  id: string;
+  questionId: string;
+  text: string;
+  directness: string;
+  receivedAt: string;
+}
+
 interface HintState {
   currentLevel: number;
   activeHint: HintEntry | null;
@@ -52,6 +61,9 @@ interface HintState {
   runtimeHintHistory: RuntimeHintEntry[];
   runtimeHintLoading: boolean;
 
+  // Drafted by the pipeline (agentic routing)
+  suggestions: HintSuggestion[];
+
   // Actions
   setActiveHint: (hint: HintEntry) => void;
   acknowledgeHint: (id: string, quality: HintResponseQuality) => void;
@@ -61,6 +73,8 @@ interface HintState {
   setActiveRuntimeHint: (hint: RuntimeHintEntry) => void;
   acknowledgeRuntimeHint: (hintId: string, feedback: RuntimeHintEntry['feedback']) => void;
   restoreHints: (hints: HintEntry[]) => void;
+  addSuggestion: (suggestion: HintSuggestion) => void;
+  removeSuggestion: (id: string) => void;
   clear: () => void;
 }
 
@@ -76,6 +90,15 @@ export const useHintStore = create<HintState>((set) => ({
   activeRuntimeHint: null,
   runtimeHintHistory: [],
   runtimeHintLoading: false,
+  suggestions: [],
+
+  addSuggestion: (suggestion) =>
+    set((s) => ({
+      // Newest first; one per id (a resumed run can re-send the same draft).
+      suggestions: [suggestion, ...s.suggestions.filter((x) => x.id !== suggestion.id)].slice(0, 5),
+    })),
+
+  removeSuggestion: (id) => set((s) => ({ suggestions: s.suggestions.filter((x) => x.id !== id) })),
 
   setActiveHint: (hint) =>
     set((s) => {
@@ -152,5 +175,6 @@ export const useHintStore = create<HintState>((set) => ({
       activeRuntimeHint: null,
       runtimeHintHistory: [],
       runtimeHintLoading: false,
+      suggestions: [],
     }),
 }));

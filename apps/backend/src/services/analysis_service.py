@@ -192,15 +192,30 @@ async def analyze_utterance(
     text: str,
 ) -> EnhancedAnalysisResult:
     """Analyze a candidate utterance given the assembled memory context. Never raises."""
+    result, _ = await _analyze(failover, session_id, context_text, question_plan, active_hint, speaker, text, "")
+    return result
+
+
+async def _analyze(
+    failover: FailoverManager,
+    session_id: str,
+    context_text: str,
+    question_plan: dict | None,
+    active_hint: str,
+    speaker: str,
+    text: str,
+    extra_instructions: str,
+) -> tuple[EnhancedAnalysisResult, dict | None]:
     # Append question plan context if available
     plan_context = build_question_plan_context(question_plan)
 
     user_content = f"{context_text}{plan_context}\n\n## Latest Utterance\n[{speaker}]: {text}"
+    data: dict | None = None
 
     try:
         result = await failover.analyze(
             AnalysisContext(
-                system_prompt=build_system_prompt(active_hint),
+                system_prompt=build_system_prompt(active_hint) + extra_instructions,
                 user_content=user_content,
                 task_type=TaskType.REAL_TIME_ANALYSIS,
             ),
@@ -215,6 +230,13 @@ async def analyze_utterance(
         analysis = parse_analysis(result.content, result.parsed, session_id)
         analysis.latency_ms = result.latency_ms
         analysis.provider = result.provider
+        data = result.parsed
+        if data is None:
+            try:
+                loaded = json.loads(result.content)
+                data = loaded if isinstance(loaded, dict) else None
+            except json.JSONDecodeError:
+                data = None
 
     except Exception as e:
         logger.error(
@@ -231,7 +253,7 @@ async def analyze_utterance(
     if not analysis.timestamp:
         analysis.timestamp = datetime.now(UTC).isoformat()
 
-    return analysis
+    return analysis, data
 
 
 def parse_analysis(content: str, parsed: dict | None, session_id: str = "") -> EnhancedAnalysisResult:
@@ -486,6 +508,42 @@ def average_quality(qualities: Iterable[tuple[int, bool]]) -> float:
     if not scored:
         return 0.0
     return sum(scored) / len(scored)
+
+
+# ── Agentic routing (session graph, AGENTIC_ROUTING_ENABLED) ──
+
+AGENT_ACTIONS = ("check_contradiction", "draft_hint", "inspect_code")
+
+AGENT_ACTIONS_INSTRUCTION = """
+
+Also include "next_actions": a list (often empty) of follow-ups worth running now, chosen only from:
+  "check_contradiction" - the response makes a claim about experience, skills, numbers or past work that may conflict with something the candidate said earlier;
+  "draft_hint" - the candidate is stuck or heading the wrong way, and a concrete hint the interviewer could give would help now;
+  "inspect_code" - the candidate is describing code they have written, which should be checked against their actual code.
+Return "next_actions": [] when none apply."""
+
+
+def parse_next_actions(data: dict | None) -> list[str]:
+    """The follow-ups an agentic analysis chose, in canonical order, unknown ones dropped."""
+    raw = (data or {}).get("next_actions") or []
+    chosen = {a for a in raw if isinstance(a, str)}
+    return [a for a in AGENT_ACTIONS if a in chosen]
+
+
+async def analyze_utterance_with_actions(
+    failover: FailoverManager,
+    session_id: str,
+    context_text: str,
+    question_plan: dict | None,
+    active_hint: str,
+    speaker: str,
+    text: str,
+) -> tuple[EnhancedAnalysisResult, list[str]]:
+    """``analyze_utterance`` whose prompt also asks the model to choose follow-up actions."""
+    result, data = await _analyze(
+        failover, session_id, context_text, question_plan, active_hint, speaker, text, AGENT_ACTIONS_INSTRUCTION
+    )
+    return result, parse_next_actions(data)
 
 
 class AnalysisService:

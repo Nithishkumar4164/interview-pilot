@@ -106,6 +106,17 @@ class ConnectionManager:
             },
         )
 
+    async def send_hint_suggestion(self, session_id: str, suggestion: dict) -> None:
+        """A hint the agentic pipeline drafted for the interviewer to use or dismiss."""
+        await self.broadcast(
+            session_id,
+            {
+                "type": "hint_suggestion",
+                "session_id": session_id,
+                "payload": suggestion,
+            },
+        )
+
     async def send_analysis(self, session_id: str, analysis: dict) -> None:
         """Send an analysis event to all dashboard connections."""
         await self.broadcast(

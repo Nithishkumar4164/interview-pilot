@@ -227,6 +227,13 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                                 error=str(e),
                             )
 
+                elif msg_type == "use_hint_suggestion":
+                    # The interviewer is giving the drafted hint: analyses score hint_reception against it.
+                    worker = _active_workers.get(session_id)
+                    text = str(message.get("text", "")).strip()
+                    if worker and text:
+                        worker.set_active_hint(text)
+
                 elif msg_type == "change_question":
                     worker = _active_workers.get(session_id)
                     if worker:

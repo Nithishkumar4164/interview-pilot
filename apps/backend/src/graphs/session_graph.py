@@ -29,6 +29,7 @@ report digest (50). The transcript and the full analysis history live in
 the DB.
 """
 
+import asyncio
 import copy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -39,8 +40,11 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
 from src.llm.failover import FailoverManager
+from src.llm.retry import retry_transient
 from src.schemas.analysis import EnhancedAnalysisResult
-from src.services.analysis_service import analyze_utterance
+from src.schemas.hint import RuntimeHintRequest
+from src.services.analysis_service import analyze_utterance, analyze_utterance_with_actions
+from src.services.code_analysis_service import inspect_code_against_statement
 from src.services.contradiction_service import Contradiction, check_contradictions
 from src.services.memory_service import (
     CLAIM_PROVENANCE_SIZE,
@@ -50,8 +54,13 @@ from src.services.memory_service import (
     Utterance,
     assemble_context,
     extract_facts,
+    format_utterances,
     should_extract_facts,
 )
+from src.services.runtime_hint_service import assemble_hint_context, generate_runtime_hint, resolve_directness
+from src.utils.logging import get_logger
+
+logger = get_logger("graphs.session")
 
 RECENT_ANALYSES = 5  # AnalysisService.to_dict / RuntimeHintService insight window
 REPORT_DIGEST_SIZE = 50  # report_snapshot's analysis_results window
@@ -133,6 +142,7 @@ class SessionState(TypedDict, total=False):
     analyze: UtteranceIn | None  # the utterance the ingress chose to analyze in this run
     transport_events: int  # transcript events the transport saw since the previous run
     memory_in_flight: int  # utterances a running compression covers (process-local)
+    code_context: dict | None  # latest code from CodeGraph (agentic inspect_code)
 
     # ── memory ──
     working_memory: list[Utterance]
@@ -170,6 +180,9 @@ class SessionState(TypedDict, total=False):
     # ── per-run scratch ──
     extracted: Annotated[dict[int, dict], _reset_or_merge]
     analysis: EnhancedAnalysisResult | None
+    planned_actions: list[str]  # follow-ups the agentic analysis chose this run
+    found_contradictions: list[Contradiction] | None  # agentic check -> finish
+    checked_now: set[str] | None
 
 
 def initial_state(session_id: str) -> dict[str, Any]:
@@ -233,6 +246,33 @@ def quality_counts(a: EnhancedAnalysisResult) -> bool:
     return a.answer_quality > 0 and a.on_track
 
 
+class ContradictionTask(TypedDict):
+    statement: str
+    fact_store: FactStore
+    checked_pairs: set[str]
+    exclude_claims: list[str]
+    use_llm: bool
+
+
+class HintTask(TypedDict):
+    utterance_id: str
+    question_id: str
+    question_plan: dict
+    working_memory_text: str
+    rolling_summary: str
+    recent_insights: list[EnhancedAnalysisResult]
+
+
+class InspectTask(TypedDict):
+    question: str
+    statement: str
+    code: str
+    language: str
+
+
+ACTION_TIMEOUT_S = 20.0
+
+
 class ExtractTask(TypedDict):
     index: int
     speaker: str
@@ -246,8 +286,13 @@ class AnalyzeTask(TypedDict):
     active_hint: str
 
 
-def build_session_graph(failover: FailoverManager, session_id: str) -> StateGraph:
-    """The graph for one session (``session_id`` scopes LLM calls and effect keys)."""
+def build_session_graph(failover: FailoverManager, session_id: str, agentic: bool = False) -> StateGraph:
+    """The graph for one session (``session_id`` scopes LLM calls and effect keys).
+
+    ``agentic`` (AGENTIC_ROUTING_ENABLED): the analysis also chooses follow-ups,
+    run in parallel after it (see ``plan_actions``). Off, the follow-up is the
+    fixed contradiction check of today.
+    """
 
     def emit(kind: str, **data: Any) -> None:
         get_stream_writer()({"effect": kind, **data})
@@ -327,6 +372,7 @@ def build_session_graph(failover: FailoverManager, session_id: str) -> StateGrap
             "events_processed": state.get("events_processed", 0) + state.get("transport_events", 0),
             "extracted": None,
             "analysis": None,
+            "planned_actions": [],
         }
 
     def dispatch(state: SessionState) -> list[Send] | str:
@@ -365,15 +411,27 @@ def build_session_graph(failover: FailoverManager, session_id: str) -> StateGrap
 
     async def analyze(state: AnalyzeTask) -> dict:
         target = state["target"]
-        result = await analyze_utterance(
-            failover,
-            session_id,
-            state["context_text"],
-            state["question_plan"] or None,
-            state["active_hint"],
-            target.speaker,
-            target.text,
-        )
+        actions: list[str] = []
+        if agentic:
+            result, actions = await analyze_utterance_with_actions(
+                failover,
+                session_id,
+                state["context_text"],
+                state["question_plan"] or None,
+                state["active_hint"],
+                target.speaker,
+                target.text,
+            )
+        else:
+            result = await analyze_utterance(
+                failover,
+                session_id,
+                state["context_text"],
+                state["question_plan"] or None,
+                state["active_hint"],
+                target.speaker,
+                target.text,
+            )
         emit(EFFECT_DASHBOARD, method="send_analysis", payload=result.model_dump())
         emit(
             EFFECT_PERSIST,
@@ -395,7 +453,7 @@ def build_session_graph(failover: FailoverManager, session_id: str) -> StateGrap
                 method="send_red_flag",
                 payload={"flags": result.red_flags, "timestamp": result.timestamp},
             )
-        return {"analysis": result}
+        return {"analysis": result, "planned_actions": actions}
 
     def merge_results(state: SessionState) -> dict:
         update: dict[str, Any] = {}
@@ -465,18 +523,204 @@ def build_session_graph(failover: FailoverManager, session_id: str) -> StateGrap
             "checked_pairs": set(state.get("checked_pairs", set())) | checked,
         }
 
+    # ── Agentic follow-ups ─────────────────────────────────────────────
+
+    def emit_contradiction(c: Contradiction) -> None:
+        emit(
+            EFFECT_DASHBOARD,
+            method="send_red_flag",
+            payload={
+                "type": "contradiction",
+                "claim": c.claim,
+                "new_statement": c.new_statement,
+                "explanation": c.explanation,
+                "suggested_probe": c.suggested_probe,
+                "confidence": c.confidence,
+                "timestamp": c.detected_at,
+            },
+        )
+
+    def plan_actions(state: SessionState) -> list[Send] | str:
+        target, result = state.get("analyze"), state.get("analysis")
+        if target is None or result is None:
+            return END
+        chosen = set(state.get("planned_actions", []))
+        # The rule-based contradiction pass always runs (cheap, deterministic);
+        # the LLM pass only when the agent chose to check.
+        sends = [
+            Send(
+                "check_contradiction",
+                ContradictionTask(
+                    statement=target.text,
+                    fact_store=state["fact_store"],
+                    checked_pairs=state.get("checked_pairs", set()),
+                    exclude_claims=state.get("claims_by_utterance", {}).get(target.id, []),
+                    use_llm="check_contradiction" in chosen,
+                ),
+            )
+        ]
+        if "draft_hint" in chosen:
+            sends.append(
+                Send(
+                    "draft_hint",
+                    HintTask(
+                        utterance_id=target.id,
+                        question_id=state.get("active_question_id") or "",
+                        question_plan=state.get("question_plan", {}),
+                        working_memory_text=format_utterances(state.get("working_memory", [])),
+                        rolling_summary=state.get("rolling_summary", ""),
+                        recent_insights=list(state.get("recent_insights", [])),
+                    ),
+                )
+            )
+        code = (state.get("code_context") or {}).get("code", "")
+        if "inspect_code" in chosen and code.strip():
+            sends.append(
+                Send(
+                    "inspect_code",
+                    InspectTask(
+                        question=state.get("current_question", ""),
+                        statement=target.text,
+                        code=code,
+                        language=(state.get("code_context") or {}).get("language", "unknown"),
+                    ),
+                )
+            )
+        return sends
+
+    async def check_contradiction(state: ContradictionTask) -> dict:
+        try:
+            found, checked = await asyncio.wait_for(
+                retry_transient(
+                    lambda: check_contradictions(
+                        failover,
+                        session_id,
+                        state["statement"],
+                        state["fact_store"],
+                        state["checked_pairs"],
+                        exclude_claims=set(state["exclude_claims"]),
+                        use_llm=state["use_llm"],
+                    )
+                ),
+                ACTION_TIMEOUT_S,
+            )
+        except Exception as e:
+            logger.warning("agent_action_failed", action="check_contradiction", session_id=session_id, error=str(e))
+            return {}
+        for c in found:
+            emit_contradiction(c)
+        return {"found_contradictions": found, "checked_now": checked}
+
+    async def draft_hint(state: HintTask) -> dict:
+        insights = state["recent_insights"]
+        request = RuntimeHintRequest(question_id=state["question_id"])
+        directness = resolve_directness(request, insights)
+        user_content = assemble_hint_context(
+            request,
+            directness,
+            state["question_plan"] or None,
+            state["working_memory_text"],
+            state["rolling_summary"],
+            insights,
+            None,
+        )
+        try:
+            response = await asyncio.wait_for(
+                retry_transient(
+                    lambda: generate_runtime_hint(failover, session_id, request, directness, user_content, 0)
+                ),
+                ACTION_TIMEOUT_S,
+            )
+        except Exception as e:
+            logger.warning("agent_action_failed", action="draft_hint", session_id=session_id, error=str(e))
+            return {}
+        if response.text.startswith("Hint generation failed"):
+            return {}
+        emit(
+            EFFECT_DASHBOARD,
+            method="send_hint_suggestion",
+            payload={
+                "id": f"{session_id}:{state['utterance_id']}:hint",
+                "question_id": state["question_id"],
+                "text": response.text,
+                "directness": response.directness.value,
+            },
+        )
+        return {}
+
+    async def inspect_code(state: InspectTask) -> dict:
+        try:
+            mismatch = await asyncio.wait_for(
+                retry_transient(
+                    lambda: inspect_code_against_statement(
+                        failover,
+                        session_id,
+                        state["question"],
+                        state["statement"],
+                        state["code"],
+                        state["language"],
+                    )
+                ),
+                ACTION_TIMEOUT_S,
+            )
+        except Exception as e:
+            logger.warning("agent_action_failed", action="inspect_code", session_id=session_id, error=str(e))
+            return {}
+        if mismatch:
+            emit(
+                EFFECT_DASHBOARD,
+                method="send_red_flag",
+                payload={
+                    "type": "code_mismatch",
+                    "statement": state["statement"],
+                    "explanation": mismatch["explanation"],
+                    "suggested_probe": mismatch["suggested_probe"],
+                    "confidence": mismatch["confidence"],
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+        return {}
+
+    def finish(state: SessionState) -> dict:
+        result = state["analysis"]
+        assert result is not None
+        if result.hint_signal != "none":
+            emit(
+                EFFECT_DASHBOARD,
+                method="send_hint",
+                payload={"signal": result.hint_signal, "timestamp": result.timestamp},
+            )
+        return {
+            "contradictions": [*state.get("contradictions", []), *(state.get("found_contradictions") or [])],
+            "checked_pairs": set(state.get("checked_pairs", set())) | set(state.get("checked_now") or set()),
+            "found_contradictions": None,
+            "checked_now": None,
+        }
+
     graph = StateGraph(SessionState)
     graph.add_node("apply_events", apply_events)
     graph.add_node("extract_facts", extract_facts_node, input_schema=ExtractTask)
     graph.add_node("analyze", analyze, input_schema=AnalyzeTask)
     graph.add_node("merge_results", merge_results)
-    graph.add_node("follow_up", follow_up)
     graph.add_edge(START, "apply_events")
     graph.add_conditional_edges("apply_events", dispatch, ["extract_facts", "analyze", END])
     graph.add_edge("extract_facts", "merge_results")
     graph.add_edge("analyze", "merge_results")
-    graph.add_conditional_edges("merge_results", after_merge, ["follow_up", END])
-    graph.add_edge("follow_up", END)
+    if agentic:
+        graph.add_node("check_contradiction", check_contradiction, input_schema=ContradictionTask)
+        graph.add_node("draft_hint", draft_hint, input_schema=HintTask)
+        graph.add_node("inspect_code", inspect_code, input_schema=InspectTask)
+        graph.add_node("finish", finish)
+        graph.add_conditional_edges(
+            "merge_results", plan_actions, ["check_contradiction", "draft_hint", "inspect_code", END]
+        )
+        for action in ("check_contradiction", "draft_hint", "inspect_code"):
+            graph.add_edge(action, "finish")
+        graph.add_edge("finish", END)
+    else:
+        graph.add_node("follow_up", follow_up)
+        graph.add_conditional_edges("merge_results", after_merge, ["follow_up", END])
+        graph.add_edge("follow_up", END)
     return graph
 
 

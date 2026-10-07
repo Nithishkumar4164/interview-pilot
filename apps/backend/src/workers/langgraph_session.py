@@ -220,6 +220,7 @@ class LangGraphSessionPipeline:
         clock: Callable[[], float] = time.monotonic,
         durability: Durability = "async",
         interim_throttle_s: float = INTERIM_THROTTLE_S,
+        agentic: bool | None = None,
     ) -> None:
         self.session_id = session_id
         self._failover = failover_manager
@@ -229,7 +230,11 @@ class LangGraphSessionPipeline:
         self._clock = clock
         self._durability: Durability = durability
         self._interim_throttle_s = interim_throttle_s
-        self._graph = build_session_graph(failover_manager, session_id)
+        if agentic is None:
+            from src.config import settings
+
+            agentic = settings.agentic_routing_enabled
+        self._graph = build_session_graph(failover_manager, session_id, agentic=agentic)
         self._app: CompiledStateGraph | None = None
         self._config: RunnableConfig = {"configurable": {"thread_id": thread_id_for(session_id)}}
 
@@ -597,6 +602,10 @@ class LangGraphSessionPipeline:
             "analyze": target,
             "transport_events": self._transport_events,
             "memory_in_flight": self._compress_in_flight,
+            "code_context": {
+                "code": self._code.values.get("latest_code", ""),
+                "language": self._code.values.get("latest_language", ""),
+            },
         }
         self._transport_events = 0
         self._running_graph = True

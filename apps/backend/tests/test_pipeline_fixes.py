@@ -269,6 +269,82 @@ def test_audio_socket_for_an_ended_session_is_refused(live_session: str) -> None
         assert closed.code == 1008 and closed.reason == "Session ended"
 
 
+def test_a_used_suggested_hint_counts_in_the_report(live_session: str, monkeypatch) -> None:
+    """Before the fix, clicking Use on a suggested hint only set the hint analyses
+    score against: the report said no hints were given."""
+    from fastapi.testclient import TestClient
+    from sqlalchemy import delete, select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from src.api import sessions as sessions_api
+    from src.graphs.report_graph import ReportRunner
+    from src.graphs.report_graph import thread_id_for as report_thread_id
+    from src.main import app
+    from src.models.hint import HintEvent
+    from src.models.report import Report
+    from src.replay.runner import build_scripted_failover_manager
+    from src.services.persistence_service import PersistenceService
+
+    sid = live_session
+    engine = create_async_engine(settings.database_url, poolclass=NullPool)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    persistence = PersistenceService(factory)
+    monkeypatch.setattr("src.main.persistence_service", persistence)
+    ended: dict = {}
+
+    async def capture_report(**kwargs) -> None:
+        ended.update(kwargs)
+
+    monkeypatch.setattr(sessions_api, "_generate_report_background", capture_report)
+
+    class _NoResume:
+        async def resume_pending(self) -> None:
+            return None
+
+    monkeypatch.setattr("src.main.get_report_runner", _NoResume)  # leave the dev DB's other reports alone
+    suggestion = {
+        "type": "use_hint_suggestion",
+        "id": f"{sid}:utt-3:hint",
+        "question_id": "",  # the pipeline has no question id until the interviewer changes question
+        "text": "What lookup would let you find the complement in constant time?",
+    }
+    plan = {"phases": [{"questions": [{"id": "q1", "hints": [{"level": 1, "text": "Think about lookups."}]}]}]}
+
+    # The app's startup opens its checkpointer and persistence service; shutdown flushes hint rows.
+    with TestClient(app) as client:
+        assert client.post(f"/api/sessions/{sid}/register-plan-hints", json=plan).status_code == 200
+        with client.websocket_connect(f"/ws/dashboard/{sid}") as ws:
+            ws.send_json(suggestion)
+            ws.send_json(suggestion)  # a double click records it once
+            ws.send_json({"type": "ping", "timestamp": 1})
+            while ws.receive_json()["type"] != "pong":
+                pass
+        response = client.post(f"/api/sessions/{sid}/end")
+        assert response.status_code == 200, response.text
+    assert ended, "end_session did not start the report"
+
+    async def report_and_rows() -> tuple[dict, list[HintEvent]]:
+        cp = Checkpointer()
+        await cp.open(settings.database_url_sync, max_size=2)
+        try:
+            await ReportRunner(build_scripted_failover_manager(), factory, cp).run(**ended)  # type: ignore[arg-type]
+        finally:
+            await cp.delete_threads(report_thread_id(ended["report_id"]))
+            await cp.close()
+        async with factory() as db:
+            report = (await db.execute(select(Report).where(Report.id == uuid.UUID(ended["report_id"])))).scalar_one()
+            rows = list((await db.execute(select(HintEvent).where(HintEvent.session_id == uuid.UUID(sid)))).scalars())
+            await db.execute(delete(HintEvent).where(HintEvent.session_id == uuid.UUID(sid)))
+            await db.commit()
+        await engine.dispose()
+        return report.report_data, rows
+
+    report_data, rows = asyncio.run(report_and_rows())
+    assert report_data["hint_summary"]["total_hints_given"] == 1
+    assert [(r.question_id, r.text, r.interviewer_used) for r in rows] == [("q1", suggestion["text"], True)]
+
+
 # ── Code tracking per question ─────────────────────────────────────────────
 
 

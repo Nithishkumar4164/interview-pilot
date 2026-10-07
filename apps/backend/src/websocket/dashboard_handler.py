@@ -228,11 +228,19 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                             )
 
                 elif msg_type == "use_hint_suggestion":
-                    # The interviewer is giving the drafted hint: analyses score hint_reception against it.
-                    worker = _active_workers.get(session_id)
+                    # The interviewer is giving the drafted hint: it counts as a hint given in the
+                    # report, and analyses score hint_reception against it.
                     text = str(message.get("text", "")).strip()
-                    if worker and text:
-                        worker.set_active_hint(text)
+                    suggestion_id = str(message.get("id", "")).strip()
+                    if text and suggestion_id:
+                        from src.api.sessions import _get_or_create_hint_service
+
+                        _get_or_create_hint_service(session_id).record_suggested_hint(
+                            suggestion_id, str(message.get("question_id", "")), text
+                        )
+                        worker = _active_workers.get(session_id)
+                        if worker:
+                            worker.set_active_hint(text)
 
                 elif msg_type == "change_question":
                     worker = _active_workers.get(session_id)

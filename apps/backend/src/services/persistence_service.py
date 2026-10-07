@@ -169,6 +169,7 @@ class PersistenceService:
         displayed_at: str | datetime,
         hint_id: str | None = None,
         idempotency_key: str | None = None,
+        interviewer_used: bool = False,
     ) -> None:
         """Enqueue a hint event for persistence."""
         entity = HintEvent(
@@ -179,6 +180,7 @@ class PersistenceService:
             text=text,
             displayed_at=_to_datetime(displayed_at),
             idempotency_key=idempotency_key,
+            interviewer_used=interviewer_used,
         )
         self._queue.put_nowait(entity)
 

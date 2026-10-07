@@ -26,6 +26,8 @@ import { TranscriptPanel } from '@/components/dashboard/TranscriptPanel';
 import { SpeakersPanel } from '@/components/dashboard/SpeakersPanel';
 import { HintPanel } from '@/components/dashboard/HintPanel';
 import { ScoreRings } from '@/components/dashboard/ScoreRings';
+import { FlagsPanel } from '@/components/dashboard/FlagsPanel';
+import { flagsFromPayload } from '@/lib/flags';
 import { InterviewPlanPanel } from '@/components/dashboard/InterviewPlanPanel';
 import * as api from '@/api/client';
 
@@ -128,6 +130,10 @@ export function LiveSessionPage() {
             dimensions: mapDimensions(a.dimensions),
           }));
           useAnalysisStore.getState().restoreAnalyses(analysisEntries);
+          // Analysis red flags are persisted; restore them into the Flags panel.
+          useAnalysisStore
+            .getState()
+            .addRedFlags(state.analyses.flatMap((a) => flagsFromPayload({ flags: a.red_flags }, a.timestamp)));
         }
 
         // Restore hints
@@ -532,6 +538,7 @@ export function LiveSessionPage() {
           <div className="live-session__right">
             <SpeakersPanel />
             <ScoreRings />
+            <FlagsPanel />
             <HintPanel
               onRequestRuntimeHint={handleRequestRuntimeHint}
               onRegenerateRuntimeHint={handleRegenerateRuntimeHint}

@@ -218,7 +218,7 @@ load_session_data (DB: transcripts, analyses, hints, code snapshots, contradicti
 | 2 | **PlanGraph** with `Send` fan-out | Plan tests pass. SSE shows per-phase progress. Latency improves. **Done except SSE progress** — see §10 |
 | 3 | **SessionGraph** utterances and question_change paths, **MemoryGraph**, `SessionIngress`, `EffectsSink`, behind `USE_LANGGRAPH_SESSION` | Replay parity, crash/resume, and latency tests pass. The factory switches to the new pipeline under the flag. **Done** — see §11 |
 | 4 | Move the code_snapshot path, `RuntimeHintGraph` and `CodeRatingGraph` in. `code_handler` switches over. `/state` adapter | Code-hint tests pass. The `code_handler` per-process dict and `SessionStateService` snapshot loop are gone. **Done** (runtime-hint and code-rating graphs moved to Phase 5) — see §12 |
-| 5 | Add `invoke_with_tools` to the LLM layer. Agentic routing on the hot path. Agentic report scoring with `synthesize` | Agentic scenario assertions pass. Manually compare reports from both modes on real sessions |
+| 5 | Add `invoke_with_tools` to the LLM layer. Agentic routing on the hot path. Agentic report scoring with `synthesize` | Agentic scenario assertions pass. Manually compare reports from both modes on real sessions. **Done** — see §13 |
 | 6 | Delete `AnalysisWorker`, service-level state and `SessionStateService`. Drop `session_snapshots`. Update `ARCHITECTURE.md` §4.7, §10, §11, §13.5 | No references to the old code remain. The full test suite is green |
 
 Phases 1 and 2 are independent of each other. Phase 3 depends only on Phase 0.
@@ -368,3 +368,44 @@ Known gaps carried forward: the transcript of an utterance spoken within 2 s of 
 **Notes for later:**
 - The mock provider's canned `CODE_ANALYSIS` response has the wrong shape for live code analysis (it matches nothing that uses this task type), so in mock mode the refined push repeats the local result.
 - A test once reached the real Anthropic API through `audio_handler`'s import-time failover manager; it is now patched. The provider answered `404 not_found_error` for the configured model, which suggests a default model in `src/llm/config.py` is no longer available. Not verified which one.
+
+## 13. Phase 5 notes (tool calling, agentic routing, agentic reports)
+
+**Decisions (made with you, 2026-10-06/07):**
+- Update the Claude model IDs.
+- Allow a small number of real API calls, with synthetic data only.
+- Ship live-path agentic routing with a "Suggested hint" dashboard card, behind `AGENTIC_ROUTING_ENABLED` (off).
+- Ship agentic report scoring behind `REPORT_AGENTIC_SCORING` (off), with cost bounded by **price** at most 3× the single-call report, plus prompt caching.
+- Add a dashboard Flags panel.
+
+**Tool calling** (`50c477d`):
+- `ILLMProvider.invoke_with_tools` runs one turn over a provider-neutral conversation, implemented for Anthropic, OpenAI, mock and scripted providers.
+- `FailoverManager.invoke_with_tools` applies the same failover, health and span semantics as `analyze`; the two now share one failover path.
+- `run_tool_loop` adds a step cap and a forced final answer.
+- Verified live on Anthropic: a two-turn loop, and failover from a nonexistent model. OpenAI is unverified; there is no key in this environment.
+
+**Agentic live routing** (`9982cfd`): the analysis returns `next_actions`.
+- The rule-based contradiction pass always runs; the LLM confirmation, a drafted hint (`hint_suggestion` → dashboard card; Use → active hint) and a code check (`code_mismatch` → Flags panel) run only when chosen.
+- Each action retries once on transient errors, has a timeout, and never fails the run.
+- Not evaluated on the real model: the §5.6 assertions (scenario 03 must check a contradiction, 02 must draft a hint, 01 neither) remain to run with real calls.
+
+**Agentic reports** (`41ae60e`):
+- An evidence index numbers transcript entries T1..Tn with elapsed times.
+- Seven Sonnet tool loops each score one criterion, with validated citations and one repair; one Opus synthesis follows; anything invalid falls back to the single-call report.
+- Real models, synthetic interview, final run: all 7 criteria and the synthesis valid, and 0.89× the single-call report's price (8× raw tokens).
+- The price ratio (`REPORT_COST_SONNET_RATIO=0.2`) is an assumption, not read from a price list.
+
+**Bugs found and fixed:**
+- **Retired model IDs** (`70768cc`): the map pointed at retired Claude 4 IDs (404), so every Anthropic call failed over.
+- **Temperature rejected** (`50c477d`): current Claude models reject `temperature` (400), so after the ID fix every call still failed over. The provider now retries without it, deciding per request (`6b47a43` fixed a race in the first version).
+- **Opus thinking blocks** (`6b47a43`): Opus returns a thinking block first, so `analyze` crashed on every real report.
+- **Report output cap** (`6b47a43`): report `max_tokens=3000` truncated the JSON, because thinking counts toward it. It is now 16000, with a truncation warning.
+- **Flags never shown** (`49312e7`): the live dashboard never displayed red flags or contradictions.
+
+**Not done this phase:**
+- **Runtime-hint and code-rating graphs:** still single-call functions. They gained no multi-step behavior, so converting them would add nothing (the agreed condition).
+- **Plan generation fallback:** falling back to bank questions on failure is still open.
+
+**Real API usage, all synthetic content:**
+- **Model and tool checks:** about 25 tiny calls.
+- **Report runs:** three, the first of which crashed early on the temperature race. Totals: Sonnet about 216k input tokens (about 83k of them cache reads) and 26k output; Opus about 13k input and 15k output.

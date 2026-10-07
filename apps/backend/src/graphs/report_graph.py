@@ -18,23 +18,30 @@ LLM call is not paid for twice. The thread is deleted once the run ends.
 
 import uuid
 from collections.abc import Callable
-from typing import Any, TypedDict
+from typing import Annotated, Any, TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Send
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.graphs.checkpointer import Checkpointer
 from src.llm.failover import FailoverManager
+from src.llm.retry import retry_transient
 from src.models.report import Report
 from src.repositories.report_repo import ReportRepository
-from src.services.report_generator import GeneratedReport, ReportGenerator, ReportInput
+from src.services.report_agentic import assemble_report, build_evidence_index, score_criterion, synthesize
+from src.services.report_generator import ALL_CRITERIA, GeneratedReport, ReportGenerator, ReportInput
 from src.services.report_service import ReportService
 from src.utils.logging import get_logger
 
 logger = get_logger("graphs.report")
+
+
+def _merge(left: dict | None, right: dict | None) -> dict:
+    return {**(left or {}), **(right or {})}
 
 
 class ReportState(TypedDict, total=False):
@@ -44,6 +51,15 @@ class ReportState(TypedDict, total=False):
     report_input: ReportInput
     llm: dict[str, Any]
     report: GeneratedReport
+    # agentic scoring (REPORT_AGENTIC_SCORING)
+    criteria: Annotated[dict[str, dict[str, Any]], _merge]
+    synthesis: dict[str, Any]
+
+
+class CriterionTask(TypedDict):
+    session_id: str
+    criterion: str
+    report_input: ReportInput
 
 
 def thread_id_for(report_id: str) -> str:
@@ -81,7 +97,18 @@ async def persist_report(db: AsyncSession, report_id: str, generated: GeneratedR
 def build_report_graph(
     failover_manager: FailoverManager,
     session_factory: async_sessionmaker[AsyncSession] | Callable[[], Any],
+    agentic: bool | None = None,
 ) -> StateGraph:
+    """The report graph; ``agentic`` (REPORT_AGENTIC_SCORING) adds per-criterion scoring.
+
+    agentic:  load_inputs -> Send(score_criterion) x 7 -> synthesize -+-> assemble_agentic -> persist
+                                                                      +-> generate -> assemble -> persist
+              (the single-call path is the fallback when any criterion or the synthesis is invalid)
+    """
+    if agentic is None:
+        from src.config import settings
+
+        agentic = settings.report_agentic_scoring
     service = ReportService(failover_manager)
     generator = ReportGenerator(failover_manager)
 
@@ -114,13 +141,68 @@ def build_report_graph(
             )
         return {}
 
+    def fan_out_criteria(state: ReportState) -> list[Send]:
+        return [
+            Send(
+                "score_criterion",
+                CriterionTask(session_id=state["session_id"], criterion=c, report_input=state["report_input"]),
+            )
+            for c in ALL_CRITERIA
+        ]
+
+    async def score_criterion_node(state: CriterionTask) -> dict:
+        index = build_evidence_index(state["report_input"])
+        try:
+            result = await retry_transient(
+                lambda: score_criterion(failover_manager, state["session_id"], state["criterion"], index)
+            )
+        except Exception as e:
+            logger.warning("criterion_scoring_failed", criterion=state["criterion"], error=str(e))
+            result = {"criterion": state["criterion"], "valid": False, "errors": [str(e)], "usage": {}}
+        return {"criteria": {state["criterion"]: result}}
+
+    async def synthesize_node(state: ReportState) -> dict:
+        criteria = state.get("criteria", {})
+        invalid = sorted(c for c in ALL_CRITERIA if not criteria.get(c, {}).get("valid"))
+        if invalid:
+            logger.warning("agentic_report_fallback", reason="invalid_criteria", criteria=invalid)
+            return {"synthesis": {"valid": False, "errors": [f"invalid criteria: {invalid}"]}}
+        index = build_evidence_index(state["report_input"])
+        results = {c: criteria[c]["result"] for c in ALL_CRITERIA}
+        try:
+            synthesis = await retry_transient(lambda: synthesize(failover_manager, state["session_id"], results, index))
+        except Exception as e:
+            synthesis = {"valid": False, "errors": [str(e)]}
+        if not synthesis["valid"]:
+            logger.warning("agentic_report_fallback", reason="invalid_synthesis")
+        return {"synthesis": synthesis}
+
+    def after_synthesis(state: ReportState) -> str:
+        return "assemble_agentic" if state["synthesis"].get("valid") else "generate"
+
+    def assemble_agentic(state: ReportState) -> dict:
+        report_input = state["report_input"]
+        index = build_evidence_index(report_input)
+        results = {c: state["criteria"][c]["result"] for c in ALL_CRITERIA}
+        report = assemble_report(report_input.session_id, results, state["synthesis"]["result"], index)
+        return {"report": generator.enrich(report, report_input)}
+
     graph = StateGraph(ReportState)
     graph.add_node("load_inputs", load_inputs)
     graph.add_node("generate", generate)
     graph.add_node("assemble", assemble)
     graph.add_node("persist", persist)
     graph.add_edge(START, "load_inputs")
-    graph.add_edge("load_inputs", "generate")
+    if agentic:
+        graph.add_node("score_criterion", score_criterion_node, input_schema=CriterionTask)
+        graph.add_node("synthesize", synthesize_node)
+        graph.add_node("assemble_agentic", assemble_agentic)
+        graph.add_conditional_edges("load_inputs", fan_out_criteria, ["score_criterion"])
+        graph.add_edge("score_criterion", "synthesize")
+        graph.add_conditional_edges("synthesize", after_synthesis, ["assemble_agentic", "generate"])
+        graph.add_edge("assemble_agentic", "persist")
+    else:
+        graph.add_edge("load_inputs", "generate")
     graph.add_edge("generate", "assemble")
     graph.add_edge("assemble", "persist")
     graph.add_edge("persist", END)

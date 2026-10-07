@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     use_langgraph_session: bool = False
     # Session graph only: the analysis chooses follow-ups (contradiction check, hint draft, code check).
     agentic_routing_enabled: bool = False
+    # Reports: score each criterion with evidence tools, then one synthesis (single call if off).
+    report_agentic_scoring: bool = False
+    # Price of a Sonnet token relative to an Opus token, for report cost accounting.
+    # An assumption (1:5 held for earlier generations), not read from any price list.
+    report_cost_sonnet_ratio: float = 0.2
 
     # Storage
     s3_endpoint: str = "http://localhost:9000"

@@ -158,7 +158,7 @@ def _default_arguments(schema: dict, h: int) -> dict:
 
 # kind -> policy(messages, tools, h) -> tool calls for this turn ([] = answer now)
 ToolPolicy = Callable[[list[ChatMessage], list[ToolSpec], int], list[ToolCall]]
-TOOL_POLICIES: dict[str, ToolPolicy] = {}
+TOOL_POLICIES: dict[str, ToolPolicy] = {}  # filled below
 
 
 def _call_each_tool_once(messages: list[ChatMessage], tools: list[ToolSpec], h: int) -> list[ToolCall]:
@@ -178,8 +178,67 @@ def classify_tool_system(system: str) -> str:
     return "tools"
 
 
-# (system prompt prefix, kind); extended by call sites that run tool loops.
-TOOL_KINDS: list[tuple[str, str]] = []
+# (system prompt prefix, kind)
+TOOL_KINDS: list[tuple[str, str]] = [("You score one criterion", "report_criterion")]
+
+_ENTRY_LINE = re.compile(r"^(T\d+) \[[^\]]*\] [a-z]+: (.+)$", re.MULTILINE)
+
+
+def _criterion_policy(messages: list[ChatMessage], tools: list[ToolSpec], h: int) -> list[ToolCall]:
+    """Read the transcript once (a window and a search), then answer."""
+    if any(m.role == "tool" for m in messages):
+        return []
+    criterion = re.search(r"Criterion: (\w+)", messages[0].content)
+    query = (criterion.group(1) if criterion else "answer").replace("_", " ")
+    return [
+        ToolCall(id=f"call-0-{h % 10_000:04d}", name="read_transcript", arguments={"from_id": "T1", "to_id": "T6"}),
+        ToolCall(id=f"call-1-{h % 10_000:04d}", name="search_transcript", arguments={"query": query}),
+        ToolCall(id=f"call-2-{h % 10_000:04d}", name="get_analyses", arguments={}),
+    ]
+
+
+def _criterion_answer(system: str, messages: list[ChatMessage], h: int) -> str:
+    criterion = re.search(r"Criterion: (\w+)", messages[0].content)
+    seen: dict[str, str] = {}
+    for m in messages:
+        if m.role == "tool":
+            for entry_id, text in _ENTRY_LINE.findall(m.content):
+                seen.setdefault(entry_id, text)
+    picks = sorted(seen, key=lambda e: int(e[1:]))[h % max(1, len(seen)) :][:2] or sorted(seen)[:1]
+    return json.dumps(
+        {
+            "criterion": criterion.group(1) if criterion else "unknown",
+            "applicable": True,
+            "score": 1 + h % 5,
+            "trend": _pick(("improving", "stable", "declining"), h, 3),
+            "citations": [
+                {"entry_id": e, "quote": " ".join(seen[e].split()[:6]), "why": f"scripted-why-{h % 1_000:03d}"}
+                for e in picks
+            ],
+        }
+    )
+
+
+def _report_synthesis(user_content: str, h: int) -> dict:
+    cited = list(dict.fromkeys(re.findall(r"^  - (T\d+) ", user_content, re.MULTILINE)))
+    return {
+        "recommendation": _pick(("strong_hire", "hire", "lean_hire", "lean_no_hire", "no_hire"), h),
+        "confidence_level": round(0.5 + (h % 40) / 100, 2),
+        "key_moments": [
+            {
+                "entry_id": e,
+                "title": f"scripted-moment-{i}",
+                "description": f"scripted-description-{h % 1_000:03d}-{i}",
+                "sentiment": _pick(("positive", "negative", "neutral"), h, i),
+                "impact_on_assessment": "scripted-impact",
+                "type": _pick(("breakthrough", "struggle", "strong_answer", "weak_answer"), h, i),
+            }
+            for i, e in enumerate(cited[:4])
+        ],
+        "strengths": [f"scripted-strength-{h % 100:02d}"],
+        "areas_for_growth": [f"scripted-growth-{h % 100:02d}"],
+        "level_comparison": f"scripted-level-{h % 1_000:03d}",
+    }
 
 
 def fail_marker(kind: str) -> str:
@@ -207,6 +266,8 @@ def classify(context: AnalysisContext) -> str:
         return "code_analysis"
     if sp.startswith("Compare a candidate's spoken explanation"):
         return "code_inspection"
+    if sp.startswith("You write the final assessment"):
+        return "report_synthesis"
     if context.task_type == TaskType.REAL_TIME_ANALYSIS:
         return "utterance_analysis"
     if context.task_type == TaskType.CODE_RATING:
@@ -370,6 +431,8 @@ def respond(kind: str, context: AnalysisContext) -> str:
         return json.dumps(data)
     if kind == "code_inspection":
         return json.dumps(_code_inspection(h))
+    if kind == "report_synthesis":
+        return json.dumps(_report_synthesis(context.user_content, h))
     if kind == "fact_extraction":
         return json.dumps(_fact_extraction(context.user_content))
     if kind == "contradiction":
@@ -383,8 +446,9 @@ def respond(kind: str, context: AnalysisContext) -> str:
     return MOCK_RESPONSES.get(context.task_type, '{"result": "scripted"}')
 
 
-# kind -> final answer of a tool conversation; extended by call sites.
-TOOL_ANSWERS: dict[str, Callable[[str, list[ChatMessage], int], str]] = {}
+# kind -> final answer of a tool conversation
+TOOL_ANSWERS: dict[str, Callable[[str, list[ChatMessage], int], str]] = {"report_criterion": _criterion_answer}
+TOOL_POLICIES["report_criterion"] = _criterion_policy
 
 
 def respond_tools(kind: str, system: str, messages: list[ChatMessage], h: int) -> str:
@@ -426,7 +490,8 @@ class ScriptedProvider(ILLMProvider):
             parsed=parsed,
             model=self.model,
             provider="scripted",
-            input_tokens=len(context.user_content) // 4,
+            # ~4 characters per token, everything the API would bill as input.
+            input_tokens=len(context.system_prompt + context.user_content) // 4,
             output_tokens=len(content) // 4,
             latency_ms=0.0,
         )
@@ -460,7 +525,7 @@ class ScriptedProvider(ILLMProvider):
             stop_reason="tool_use" if calls else "end",
             model=self.model,
             provider="scripted",
-            input_tokens=len(system + flat) // 4,
+            input_tokens=(len(system + flat) + len(json.dumps([t.__dict__ for t in tools]))) // 4,
             output_tokens=len(text) // 4 + 20 * len(calls),
         )
 

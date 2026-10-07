@@ -104,9 +104,15 @@ async def test_anthropic_provider_request_and_response() -> None:
     turn = await provider.invoke_with_tools("sys", CONVERSATION[:1], [CAPITAL], LLMConfig(max_tokens=100), "auto")
     kwargs = provider.client.messages.create.await_args.kwargs
     assert kwargs["tools"] == [
-        {"name": "lookup_capital", "description": "Capital city of a country.", "input_schema": CAPITAL.input_schema}
+        {
+            "name": "lookup_capital",
+            "description": "Capital city of a country.",
+            "input_schema": CAPITAL.input_schema,
+            "cache_control": {"type": "ephemeral"},  # system + tools repeat every turn: cached
+        }
     ]
-    assert kwargs["tool_choice"] == {"type": "auto"} and kwargs["system"] == "sys"
+    assert kwargs["tool_choice"] == {"type": "auto"}
+    assert kwargs["system"] == [{"type": "text", "text": "sys", "cache_control": {"type": "ephemeral"}}]
     assert turn.text == "One moment." and turn.stop_reason == "tool_use"
     assert turn.tool_calls == [ToolCall(id="toolu_1", name="lookup_capital", arguments={"country": "Peru"})]
     assert (turn.input_tokens, turn.output_tokens, turn.provider) == (50, 12, "anthropic")
@@ -241,3 +247,112 @@ async def test_anthropic_drops_temperature_for_models_that_reject_it() -> None:
     assert (await provider.analyze(context, config)).parsed == {"ok": True}
     sent = [call.kwargs for call in create.await_args_list]
     assert [("temperature" in k) for k in sent] == [True, False, False]  # retried once, then never sent
+
+
+async def test_anthropic_retries_concurrent_temperature_rejections() -> None:
+    """Parallel calls sent before the first rejection came back must each be retried too."""
+    import asyncio
+
+    import anthropic
+    import httpx
+
+    from src.llm.interface import AnalysisContext
+
+    def rejected() -> anthropic.BadRequestError:
+        return anthropic.BadRequestError(
+            "`temperature` is deprecated for this model.",
+            response=httpx.Response(400, request=httpx.Request("POST", "https://api.anthropic.com/v1/messages")),
+            body=None,
+        )
+
+    ok = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text='{"ok": true}')],
+        stop_reason="end_turn",
+        usage=SimpleNamespace(input_tokens=5, output_tokens=3),
+    )
+    gate = asyncio.Event()
+
+    async def create(**kwargs):
+        if "temperature" in kwargs:
+            await gate.wait()  # both requests are in flight before either is rejected
+            raise rejected()
+        return ok
+
+    provider = AnthropicProvider("claude-sonnet-5")
+    provider.client = SimpleNamespace(messages=SimpleNamespace(create=create))
+    context = AnalysisContext(system_prompt="s", user_content="u", task_type=TaskType.REAL_TIME_ANALYSIS)
+    config = LLMConfig(max_tokens=10, temperature=0.3, response_format="json")
+    calls = [asyncio.create_task(provider.analyze(context, config)) for _ in range(3)]
+    await asyncio.sleep(0)
+    gate.set()
+    assert [r.parsed for r in await asyncio.gather(*calls)] == [{"ok": True}] * 3
+
+
+async def test_anthropic_analyze_skips_thinking_blocks() -> None:
+    """Current models can return a thinking block before the text."""
+    from src.llm.interface import AnalysisContext
+
+    provider = AnthropicProvider("claude-opus-5-5")
+    provider.client = SimpleNamespace(
+        messages=SimpleNamespace(
+            create=AsyncMock(
+                return_value=SimpleNamespace(
+                    content=[
+                        SimpleNamespace(type="thinking", thinking="..."),
+                        SimpleNamespace(type="text", text='{"recommendation": "hire"}'),
+                    ],
+                    stop_reason="end_turn",
+                    usage=SimpleNamespace(input_tokens=5, output_tokens=3),
+                )
+            )
+        )
+    )
+    context = AnalysisContext(system_prompt="s", user_content="u", task_type=TaskType.REPORT_GENERATION)
+    result = await provider.analyze(context, LLMConfig(max_tokens=10, temperature=0.3, response_format="json"))
+    assert result.parsed == {"recommendation": "hire"}
+
+
+async def test_a_loop_still_exploring_at_the_last_step_is_told_to_answer() -> None:
+    """Real models answered in prose when only tool_choice=none stopped them."""
+    from src.llm.interface import ToolTurn
+
+    seen: list[list[ChatMessage]] = []
+
+    class Explorer:
+        async def invoke_with_tools(
+            self, task_type, system, messages, tools, config, session_id=None, tool_choice="auto"
+        ):
+            seen.append(list(messages))
+            if tool_choice == "none":
+                return ToolTurn(text='{"done": true}', tool_calls=[], stop_reason="end")
+            return ToolTurn(
+                text="",
+                tool_calls=[ToolCall(id=f"c{len(seen)}", name="lookup_capital", arguments={"country": "Peru"})],
+                stop_reason="tool_use",
+            )
+
+    async def execute(call: ToolCall) -> str:
+        return "Lima"
+
+    result = await run_tool_loop(
+        Explorer(),
+        TaskType.REPORT_CRITERION,
+        "sys",
+        "q",
+        [CAPITAL],
+        execute,
+        LLMConfig(),
+        max_steps=3,
+        final_instruction="Answer now in JSON.",
+    )
+    assert result.text == '{"done": true}'
+    last_request = seen[-1]
+    assert last_request[-1].role == "user" and last_request[-1].content == "Answer now in JSON."
+    assert all(m.content != "Answer now in JSON." for m in seen[0] + seen[1])
+
+
+def test_anthropic_translation_keeps_turns_alternating_after_tool_results() -> None:
+    messages = [*CONVERSATION, ChatMessage(role="user", content="Answer now in JSON.")]
+    out = to_anthropic_messages(messages)
+    assert [m["role"] for m in out] == ["user", "assistant", "user"]
+    assert out[-1]["content"][-1] == {"type": "text", "text": "Answer now in JSON."}

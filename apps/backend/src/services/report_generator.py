@@ -25,6 +25,9 @@ from src.utils.logging import get_logger
 
 logger = get_logger("report_generator")
 
+# Output budget (thinking included) for report-generation calls.
+REPORT_MAX_TOKENS = 16000
+
 ALL_CRITERIA = (
     "problem_solving",
     "code_quality",
@@ -194,8 +197,10 @@ class ReportGenerator:
                     user_content=self._build_context(input_data),
                     task_type=TaskType.REPORT_GENERATION,
                 ),
+                # Current Opus models think before answering, and thinking counts
+                # toward max_tokens: 3000 truncated the report JSON.
                 LLMConfig(
-                    max_tokens=3000,
+                    max_tokens=REPORT_MAX_TOKENS,
                     temperature=0.3,
                     response_format="json",
                 ),

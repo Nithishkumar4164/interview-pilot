@@ -219,7 +219,7 @@ load_session_data (DB: transcripts, analyses, hints, code snapshots, contradicti
 | 3 | **SessionGraph** utterances and question_change paths, **MemoryGraph**, `SessionIngress`, `EffectsSink`, behind `USE_LANGGRAPH_SESSION` | Replay parity, crash/resume, and latency tests pass. The factory switches to the new pipeline under the flag. **Done** — see §11 |
 | 4 | Move the code_snapshot path, `RuntimeHintGraph` and `CodeRatingGraph` in. `code_handler` switches over. `/state` adapter | Code-hint tests pass. The `code_handler` per-process dict and `SessionStateService` snapshot loop are gone. **Done** (runtime-hint and code-rating graphs moved to Phase 5) — see §12 |
 | 5 | Add `invoke_with_tools` to the LLM layer. Agentic routing on the hot path. Agentic report scoring with `synthesize` | Agentic scenario assertions pass. Manually compare reports from both modes on real sessions. **Done** — see §13 |
-| 6 | Delete `AnalysisWorker`, service-level state and `SessionStateService`. Drop `session_snapshots`. Update `ARCHITECTURE.md` §4.7, §10, §11, §13.5 | No references to the old code remain. The full test suite is green |
+| 6 | Delete `AnalysisWorker`, service-level state and `SessionStateService`. Drop `session_snapshots`. Update `ARCHITECTURE.md` §4.7, §10, §11, §13.5 | No references to the old code remain. The full test suite is green. **Done** — see §14 |
 
 Phases 1 and 2 are independent of each other. Phase 3 depends only on Phase 0.
 
@@ -409,3 +409,22 @@ Known gaps carried forward: the transcript of an utterance spoken within 2 s of 
 **Real API usage, all synthetic content:**
 - **Model and tool checks:** about 25 tiny calls.
 - **Report runs:** three, the first of which crashed early on the temperature race. Totals: Sonnet about 216k input tokens (about 83k of them cache reads) and 26k output; Opus about 13k input and 15k output.
+
+## 14. Phase 6 notes (removal)
+
+**Decisions (made with you, 2026-10-07):** drop `session_snapshots`, and delete the old pipeline now on this branch.
+
+- `c5fb236` removes `AnalysisWorker`, the five stateful service classes (their logic was already in the module functions the graphs call) and `SessionStateService` with its 30 s loop. `USE_LANGGRAPH_SESSION` is gone; the agentic flags stay optional.
+- `86ed639` drops `session_snapshots` (destructive; downgrade recreates it empty). It ran on the dev DB, `alembic check` reported no drift, and downgrade/upgrade round-tripped.
+- **Tests:** everything that ran on the old classes now runs on the session pipeline (real checkpointer) or the module functions.
+  - The goldens stay the oracle. Their `session_state` sections were re-recorded from the graph after checking, for all 7 scenarios, that each equals the old service's snapshot refreshed from the final state.
+  - The rate-limit and latency tests keep `AnalysisWorker`'s measured results as fixed expectations.
+  - Tests of removed internals (the old timer race, service `to_dict` round trips) were dropped.
+- `ARCHITECTURE.md`: §4.4, §4.7, new §4.8 (graphs), §9.2, §10, §11, §13.5, §15.1 (auth, outdated by this branch) and §16.1.
+
+**Production rollout:**
+- **No fallback:** the session pipeline has never run in production, and deploying this branch switches every live session to it.
+- **Postgres:** the live path now needs Postgres for checkpoints and locks.
+- **Snapshots:** back up `session_snapshots` first if its rows are wanted.
+
+**Left over:** `ReportService.generate_report_from_db` was already unused before this phase and is still there.

@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.authz import authorized_session, get_user_principal
 from src.config import settings
 from src.dependencies import get_db
-from src.models.resilience import SessionSnapshot
 from src.models.session import InterviewSession
 from src.repositories.session_repo import SessionRepository
 from src.schemas.auth import PairingTokenResponse
@@ -137,7 +136,6 @@ async def get_session_state(
     hints = await hint_repo.get_session_hints(uuid.UUID(session_id))
 
     # Fetch plan data
-    from sqlalchemy import select
 
     from src.models.plan import InterviewPlan
 
@@ -153,7 +151,7 @@ async def get_session_state(
     # Get session state snapshot
     snapshot_data = None
     try:
-        snapshot_data = await _graph_state_snapshot(session_id, hints, db)
+        snapshot_data = await _graph_state_snapshot(session_id, hints)
     except Exception:
         import logging
 
@@ -584,8 +582,8 @@ async def create_pairing_token(
     )
 
 
-async def _graph_state_snapshot(session_id: str, hints: list, db: AsyncSession) -> dict | None:
-    """/state snapshot with the LangGraph pipeline: the live checkpoints, else the final saved snapshot."""
+async def _graph_state_snapshot(session_id: str, hints: list) -> dict | None:
+    """/state snapshot from the session's checkpoints; None once they are gone (ended session)."""
     from src.dependencies import failover_manager, get_checkpointer
     from src.workers.langgraph_session import read_state_snapshot
 
@@ -594,14 +592,4 @@ async def _graph_state_snapshot(session_id: str, hints: list, db: AsyncSession) 
         for h in hints
     ]
     snapshot = await read_state_snapshot(get_checkpointer(), failover_manager, session_id, hint_history)
-    if snapshot is not None:
-        return jsonable_encoder(snapshot)
-    row = (
-        await db.execute(
-            select(SessionSnapshot)
-            .where(SessionSnapshot.session_id == uuid.UUID(session_id))
-            .order_by(SessionSnapshot.created_at.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-    return row.snapshot_data if row else None
+    return jsonable_encoder(snapshot) if snapshot is not None else None

@@ -22,7 +22,6 @@ from src.config import settings
 from src.graphs.code_graph import code_thread_id
 from src.main import app
 from src.models.report import Report
-from src.models.resilience import SessionSnapshot
 from src.models.session import InterviewSession
 from src.models.transcript import Transcript
 from src.replay.runner import build_scripted_failover_manager
@@ -83,7 +82,7 @@ async def env(monkeypatch) -> AsyncIterator[dict]:
     await dependencies.checkpointer.delete_threads(thread_id_for(str(sid)), code_thread_id(str(sid)))
     await dependencies.checkpointer.close()
     async with factory() as db:
-        for model in (Report, SessionSnapshot, Transcript):
+        for model in (Report, Transcript):
             await db.execute(delete(model).where(model.session_id == sid))
         await db.execute(delete(InterviewSession).where(InterviewSession.id == sid))
         await db.commit()

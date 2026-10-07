@@ -96,7 +96,7 @@ class Contradiction:
     detected_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
-# ── Pure helpers (shared by ContradictionService and the LangGraph session graph) ──
+# ── Used by the LangGraph session pipeline ─────────────────────────────────
 
 
 def pair_key(claim: str, new_statement: str) -> str:
@@ -243,64 +243,3 @@ async def llm_check(failover: FailoverManager, session_id: str, claim: str, new_
         )
 
     return None
-
-
-class ContradictionService:
-    """Detects contradictions in candidate statements.
-
-    Usage:
-        service = ContradictionService(session_id, failover_manager)
-        contradictions = await service.check(new_text, fact_store)
-    """
-
-    def __init__(self, session_id: str, failover_manager: FailoverManager) -> None:
-        self.session_id = session_id
-        self._failover = failover_manager
-        self._contradictions: list[Contradiction] = []
-        self._checked_pairs: set[str] = set()
-
-    async def check(
-        self,
-        new_statement: str,
-        fact_store: FactStore,
-        exclude_claims: Set[str] = frozenset(),
-    ) -> list[Contradiction]:
-        """Check a new statement against known facts for contradictions.
-
-        Returns a list of newly detected contradictions.
-        """
-        new_contradictions, checked = await check_contradictions(
-            self._failover, self.session_id, new_statement, fact_store, self._checked_pairs, exclude_claims
-        )
-        self._checked_pairs |= checked
-        self._contradictions.extend(new_contradictions)
-        return new_contradictions
-
-    def _rule_based_check(self, claim: str, new_statement: str) -> Contradiction | None:
-        return rule_based_check(claim, new_statement)
-
-    def _has_tech_overlap(self, claim: str, new_statement: str) -> bool:
-        return has_tech_overlap(claim, new_statement)
-
-    async def _llm_check(self, claim: str, new_statement: str) -> Contradiction | None:
-        return await llm_check(self._failover, self.session_id, claim, new_statement)
-
-    @property
-    def contradictions(self) -> list[Contradiction]:
-        return list(self._contradictions)
-
-    def to_dict(self) -> dict:
-        return {
-            "contradictions": [
-                {
-                    "claim": c.claim,
-                    "new_statement": c.new_statement,
-                    "explanation": c.explanation,
-                    "confidence": c.confidence,
-                    "suggested_probe": c.suggested_probe,
-                    "detection_method": c.detection_method,
-                    "detected_at": c.detected_at,
-                }
-                for c in self._contradictions
-            ],
-        }

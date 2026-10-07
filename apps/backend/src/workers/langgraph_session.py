@@ -1,6 +1,6 @@
 """LangGraphSessionPipeline — the SessionPipeline backed by SessionGraph.
 
-Transport stays here, unchanged from AnalysisWorker: the dashboard gets every
+Transport stays here (not in the graph): the dashboard gets every
 final transcript immediately and interims at most every 300 ms; speaker
 snapshots; the in-process transcript history for dashboard catch-up; the
 transcript DB write.

@@ -1,10 +1,9 @@
-"""GET /api/sessions/{id}/state with the LangGraph pipeline.
+"""GET /api/sessions/{id}/state.
 
 The snapshot comes from the session's checkpoints in Postgres, so any backend
-process can serve it (SessionStateService kept it in the memory of the
-process running the pipeline, and on disk only every 30 s). After the
-session ends and its checkpoints are deleted, it comes from the final
-snapshot end-session saves.
+process can serve it. Once the session has ended and its checkpoints are
+deleted there is no snapshot (the UI uses it only to restore a live
+session's question after a reload).
 """
 
 import uuid
@@ -61,7 +60,6 @@ async def env(monkeypatch) -> AsyncIterator[dict]:
     from src.api import sessions as sessions_api
 
     app.dependency_overrides[dependencies.get_db] = _get_db
-    monkeypatch.setattr(settings, "use_langgraph_session", True)
     monkeypatch.setattr(settings, "deepgram_api_key", "")
     monkeypatch.setattr(sessions_api, "_generate_report_background", _no_report)
     # Pipelines are built with the failover manager audio_handler imported at load time.
@@ -99,7 +97,7 @@ async def _get_state(sid: str) -> dict | None:
     return response.json()["snapshot"]
 
 
-async def test_state_snapshot_comes_from_the_checkpoints_then_the_final_snapshot(env) -> None:
+async def test_state_snapshot_comes_from_the_checkpoints_until_the_session_ends(env) -> None:
     sid = env["sid"]
     pipeline = audio_handler.get_session_pipeline(sid)  # what the audio/code sockets do
     assert isinstance(pipeline, LangGraphSessionPipeline)
@@ -125,9 +123,6 @@ async def test_state_snapshot_comes_from_the_checkpoints_then_the_final_snapshot
         await pipeline.on_code_snapshot("def reverse(head):\n    prev = None\n", "python", "codemirror")
         await pipeline.wait_idle()
 
-        # Nothing about this session is in SessionStateService's memory: the
-        # endpoint must be reading Postgres.
-        assert dependencies.get_session_state_service().get_state_or_none(sid) is None
         live = await _get_state(sid)
         assert live is not None
         assert live["plan_progress"]["current_question_index"] == 2  # what the frontend restores
@@ -137,17 +132,14 @@ async def test_state_snapshot_comes_from_the_checkpoints_then_the_final_snapshot
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             assert (await client.post(f"/api/sessions/{sid}/end")).status_code == 200
 
-    after_end = await _get_state(sid)
-    assert after_end is not None
-    assert after_end["plan_progress"]["current_question_index"] == 2
-    assert (after_end["transcript_count"], after_end["analysis_count"]) == (1, 1)
+    assert await _get_state(sid) is None  # ended: checkpoints deleted, nothing to restore
 
 
 async def test_ending_from_a_process_without_the_pipeline_still_tears_down(env, monkeypatch) -> None:
     """End-session can run in a process that never held the session's pipeline
-    (after a restart, or on another worker). It must still save the final
-    snapshot, delete the session's checkpoints, and give the report the
-    session's memory, all read from the checkpoints."""
+    (after a restart, or on another worker). It must still delete the
+    session's checkpoints, and give the report the session's memory, read
+    from the checkpoints."""
     from src.api import sessions as sessions_api
 
     sid = env["sid"]
@@ -189,13 +181,7 @@ async def test_ending_from_a_process_without_the_pipeline_still_tears_down(env, 
         left = conn.execute(
             "SELECT count(*) FROM checkpoints WHERE thread_id IN (%s, %s)", (sid, code_thread_id(sid))
         ).fetchone()[0]
-        saved = conn.execute(
-            "SELECT snapshot_data FROM session_snapshots WHERE session_id = %s ORDER BY created_at DESC LIMIT 1",
-            (sid,),
-        ).fetchone()
     assert left == 0, "the ended session's checkpoints were left behind"
-    assert saved is not None and saved[0]["plan_progress"]["current_question_index"] == 2
-    assert (saved[0]["analysis_count"], saved[0]["code_snapshot_count"]) == (1, 1)
     snapshots = reports[0]["snapshots"]
     assert CLAIM in snapshots["fact_store"]["claimed_experience"]
     assert len(snapshots["analysis_results"]) == 1

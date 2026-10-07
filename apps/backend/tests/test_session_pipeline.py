@@ -1,36 +1,66 @@
 """The SessionPipeline seam: conformance and the reads handlers depend on."""
 
+from collections.abc import AsyncIterator
 from pathlib import Path
 
-from src.replay.runner import ReplayRunner, build_scripted_failover_manager
+import psycopg
+import pytest
+
+from src.config import settings
+from src.graphs.checkpointer import Checkpointer
+from src.graphs.code_graph import code_thread_id
+from src.replay.runner import PipelineTiming, ReplayRunner, build_scripted_failover_manager
 from src.replay.scenario import load_scenario
-from src.workers.analysis_worker import AnalysisWorker
+from src.workers.langgraph_session import LangGraphSessionPipeline, thread_id_for
 from src.workers.session_pipeline import SessionPipeline, create_session_pipeline
 
 SCENARIOS_DIR = Path(__file__).parent / "scenarios"
 
 
-def test_factory_returns_a_session_pipeline() -> None:
+def _postgres_available() -> bool:
+    try:
+        with psycopg.connect(settings.database_url_sync, connect_timeout=2):
+            return True
+    except psycopg.OperationalError:
+        return False
+
+
+@pytest.fixture
+async def checkpointer() -> AsyncIterator[Checkpointer]:
+    if not _postgres_available():
+        pytest.skip("Postgres not reachable")
+    cp = Checkpointer()
+    await cp.open(settings.database_url_sync)
+    yield cp
+    await cp.close()
+
+
+def test_factory_returns_the_langgraph_pipeline() -> None:
     pipeline = create_session_pipeline("s-1", build_scripted_failover_manager())
+    assert isinstance(pipeline, LangGraphSessionPipeline)
     assert isinstance(pipeline, SessionPipeline)
-    assert isinstance(pipeline, AnalysisWorker)
 
 
-async def test_report_snapshot_reflects_the_session(monkeypatch) -> None:
+async def test_report_snapshot_reflects_the_session(checkpointer: Checkpointer) -> None:
     """End-session builds report inputs from report_snapshot(); check it carries real session data."""
-    captured: dict[str, AnalysisWorker] = {}
-    original_init = AnalysisWorker.__init__
+    captured: dict[str, LangGraphSessionPipeline] = {}
 
-    def capturing_init(self, *args, **kwargs):
-        original_init(self, *args, **kwargs)
-        captured["worker"] = self
+    def factory(session_id, fm, timing: PipelineTiming):
+        captured["pipeline"] = LangGraphSessionPipeline(
+            session_id, fm, checkpointer, min_analysis_interval_s=timing.min_analysis_interval_s
+        )
+        return captured["pipeline"]
 
-    monkeypatch.setattr(AnalysisWorker, "__init__", capturing_init)
     scenario = load_scenario(SCENARIOS_DIR / "04_long_interview_memory.scenario.json")
-    report = await ReplayRunner(scenario, llm_mode="scripted").run()
+    threads = (thread_id_for(scenario.meta.id), code_thread_id(scenario.meta.id))
+    await checkpointer.delete_threads(*threads)
+    try:
+        report = await ReplayRunner(scenario, llm_mode="scripted", pipeline_factory=factory).run()
+    finally:
+        await checkpointer.delete_threads(*threads)
     assert report.error is None
 
-    snap = captured["worker"].report_snapshot()
+    snap = captured["pipeline"].report_snapshot()
     assert set(snap) == {
         "fact_store",
         "rolling_summary",
@@ -44,18 +74,9 @@ async def test_report_snapshot_reflects_the_session(monkeypatch) -> None:
     assert snap["fact_store"]["claimed_experience"]
 
 
-async def test_get_transcripts_by_ids_returns_matching_finals_in_order() -> None:
-    worker = create_session_pipeline("s-2", build_scripted_failover_manager())
-    worker._transcript_history.extend({"id": i, "text": f"t{i}"} for i in ("a", "b", "c"))
-    assert [t["id"] for t in worker.get_transcripts_by_ids({"c", "a"})] == ["a", "c"]
-    assert worker.get_transcripts_by_ids(set()) == []
-
-
-def test_factory_returns_the_langgraph_pipeline_under_the_flag(monkeypatch) -> None:
-    from src.config import settings
-    from src.workers.langgraph_session import LangGraphSessionPipeline
-
-    monkeypatch.setattr(settings, "use_langgraph_session", True)
-    pipeline = create_session_pipeline("s-3", build_scripted_failover_manager())
+def test_get_transcripts_by_ids_returns_matching_finals_in_order() -> None:
+    pipeline = create_session_pipeline("s-2", build_scripted_failover_manager())
     assert isinstance(pipeline, LangGraphSessionPipeline)
-    assert isinstance(pipeline, SessionPipeline)
+    pipeline._transcript_history.extend({"id": i, "text": f"t{i}"} for i in ("a", "b", "c"))
+    assert [t["id"] for t in pipeline.get_transcripts_by_ids({"c", "a"})] == ["a", "c"]
+    assert pipeline.get_transcripts_by_ids(set()) == []

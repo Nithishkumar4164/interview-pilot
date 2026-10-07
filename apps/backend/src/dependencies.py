@@ -96,16 +96,6 @@ def get_persistence_service():
     return persistence_service
 
 
-def get_session_state_service():
-    """FastAPI dependency for the session state service.
-
-    Lazy import to avoid circular dependency with main.py.
-    """
-    from src.main import session_state_service
-
-    return session_state_service
-
-
 def get_report_runner():
     """The process-wide ReportRunner (ReportGraph on the shared checkpointer)."""
     global _report_runner

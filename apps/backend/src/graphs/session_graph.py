@@ -62,7 +62,7 @@ from src.utils.logging import get_logger
 
 logger = get_logger("graphs.session")
 
-RECENT_ANALYSES = 5  # AnalysisService.to_dict / RuntimeHintService insight window
+RECENT_ANALYSES = 5  # analyses kept for to_dict and as runtime-hint insights
 REPORT_DIGEST_SIZE = 50  # report_snapshot's analysis_results window
 
 # ── Ingress events ────────────────────────────────────────────────────────
@@ -724,11 +724,11 @@ def build_session_graph(failover: FailoverManager, session_id: str, agentic: boo
     return graph
 
 
-# ── Reads over state values (the shapes the old AnalysisWorker exposed) ────
+# ── Reads over state values (shapes the handlers and reports consume) ─────
 
 
 def worker_dict(values: dict, pending_transport_events: int = 0, memory_in_flight: int = 0) -> dict:
-    """``AnalysisWorker.to_dict()`` shape, from graph state values."""
+    """The pipeline's ``to_dict()`` (memory, analysis, contradictions), from graph state values."""
     session_id = values["session_id"]
     return {
         "session_id": session_id,
@@ -769,7 +769,7 @@ def worker_dict(values: dict, pending_transport_events: int = 0, memory_in_fligh
 
 
 def report_snapshot(values: dict) -> dict:
-    """``AnalysisWorker.report_snapshot()`` shape, from graph state values."""
+    """Report inputs derived from the session (``SessionPipeline.report_snapshot``)."""
     return {
         "fact_store": values["fact_store"].to_dict(),
         "rolling_summary": values["rolling_summary"],
@@ -780,7 +780,7 @@ def report_snapshot(values: dict) -> dict:
     }
 
 
-STATE_SNAPSHOT_SCHEMA_VERSION = 1  # SessionStateService.SNAPSHOT_SCHEMA_VERSION
+STATE_SNAPSHOT_SCHEMA_VERSION = 1  # the snapshot shape the frontend has always received
 
 
 def state_snapshot(
@@ -791,8 +791,8 @@ def state_snapshot(
 ) -> dict:
     """The session-state snapshot GET /api/sessions/{id}/state serves, from graph state.
 
-    Same shape as ``SessionState.to_snapshot()``, but current: the old
-    snapshot was refreshed only when an analysis ran (and every 30 s to disk).
+    The shape SessionStateService served before this pipeline (the frontend
+    reads ``plan_progress.current_question_index``), but current to the last run.
     Fields nothing maintained keep their defaults.
     """
     score = values["problem_solving_score"]

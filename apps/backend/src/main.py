@@ -9,14 +9,12 @@ from src.api.router import api_router
 from src.config import settings
 from src.dependencies import async_session_factory, checkpointer, get_report_runner, health_monitor
 from src.services.persistence_service import PersistenceService
-from src.services.session_state_service import SessionStateService
 from src.utils.logging import setup_logging
 from src.utils.tracing import setup_tracing, shutdown_tracing
 from src.websocket.audio_handler import router as audio_ws_router
 from src.websocket.code_handler import router as code_ws_router
 from src.websocket.dashboard_handler import router as dashboard_ws_router
 
-session_state_service = SessionStateService()
 persistence_service = PersistenceService(async_session_factory)
 
 
@@ -28,11 +26,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Start health monitoring for LLM providers
     health_monitor.start()
-
-    # Periodic session-state snapshots. The LangGraph pipeline checkpoints
-    # session state itself, and GET /state reads it from there.
-    if not settings.use_langgraph_session:
-        session_state_service.start_periodic_snapshots(async_session_factory)
 
     # Start persistence service
     await persistence_service.start()
@@ -50,7 +43,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await checkpointer.close()
     await persistence_service.stop()
     health_monitor.stop()
-    session_state_service.stop_periodic_snapshots()
     shutdown_tracing()
 
 

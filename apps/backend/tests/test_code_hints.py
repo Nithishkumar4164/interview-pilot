@@ -8,8 +8,6 @@ Covers:
 - Hint metrics computation
 """
 
-import pytest
-
 from src.llm.config import TaskProviderMapping
 from src.llm.failover import FailoverManager
 from src.llm.health import HealthMonitor
@@ -18,9 +16,14 @@ from src.schemas.hint import HintResponseQuality
 from src.services.code_analysis_service import (
     ApproachInfo,
     CodeAnalysisResult,
-    CodeAnalysisService,
-    CodeSnapshot,
     ProgressState,
+    analyze_locally,
+    detect_approach_local,
+    detect_progress,
+    detect_stuck,
+    extract_data_structures,
+    make_snapshot,
+    normalize_code,
 )
 from src.services.hint_service import HintService
 
@@ -45,16 +48,13 @@ def _mock_failover_manager() -> FailoverManager:
 
 
 class TestProgressDetection:
-    def setup_method(self):
-        self.service = CodeAnalysisService("test", _mock_failover_manager())
-
     def test_empty_code(self):
-        assert self.service._detect_progress("") == ProgressState.EMPTY
-        assert self.service._detect_progress("   \n  \n  ") == ProgressState.EMPTY
+        assert detect_progress("") == ProgressState.EMPTY
+        assert detect_progress("   \n  \n  ") == ProgressState.EMPTY
 
     def test_skeleton_code(self):
         code = "def two_sum(nums, target):\n    pass"
-        assert self.service._detect_progress(code) == ProgressState.SKELETON
+        assert detect_progress(code) == ProgressState.SKELETON
 
     def test_partial_code(self):
         code = """def two_sum(nums, target):
@@ -64,7 +64,7 @@ class TestProgressDetection:
         if complement in result:
             return
 """
-        assert self.service._detect_progress(code) == ProgressState.PARTIAL
+        assert detect_progress(code) == ProgressState.PARTIAL
 
     def test_near_complete_code(self):
         code = """def two_sum(nums, target):
@@ -80,7 +80,7 @@ class TestProgressDetection:
 result = two_sum([2, 7, 11, 15], 9)
 print(result)
 """
-        progress = self.service._detect_progress(code)
+        progress = detect_progress(code)
         assert progress in (ProgressState.NEAR_COMPLETE, ProgressState.COMPLETE)
 
     def test_complete_code_with_edge_cases(self):
@@ -101,16 +101,13 @@ assert two_sum([1], 1) == []
 assert two_sum([2, 7, 11, 15], 9) == [0, 1]
 print("All tests passed!")
 """
-        assert self.service._detect_progress(code) == ProgressState.COMPLETE
+        assert detect_progress(code) == ProgressState.COMPLETE
 
 
 # ── Approach Detection ───────────────────────────────────────────────
 
 
 class TestApproachDetection:
-    def setup_method(self):
-        self.service = CodeAnalysisService("test", _mock_failover_manager())
-
     def test_hash_map_approach(self):
         code = """
 seen = {}
@@ -120,7 +117,7 @@ for num in nums:
         return [seen[target-num], i]
     seen[num] = i
 """
-        approach = self.service._detect_approach_local(code)
+        approach = detect_approach_local(code)
         assert approach is not None
         assert approach.name == "hash_map"
 
@@ -131,7 +128,7 @@ right = len(nums) - 1
 while left < right:
     total = nums[left] + nums[right]
 """
-        approach = self.service._detect_approach_local(code)
+        approach = detect_approach_local(code)
         assert approach is not None
         assert approach.name == "two_pointer"
 
@@ -146,13 +143,13 @@ while queue:
         if neighbor not in visited:
             queue.append(neighbor)
 """
-        approach = self.service._detect_approach_local(code)
+        approach = detect_approach_local(code)
         assert approach is not None
         assert approach.name == "bfs"
 
     def test_empty_code_no_approach(self):
-        assert self.service._detect_approach_local("") is None
-        assert self.service._detect_approach_local("   ") is None
+        assert detect_approach_local("") is None
+        assert detect_approach_local("   ") is None
 
     def test_data_structure_extraction(self):
         code = """
@@ -160,7 +157,7 @@ seen = {}
 result = []
 heap = heapq.heappush([], val)
 """
-        structures = self.service._extract_data_structures(code)
+        structures = extract_data_structures(code)
         assert "hash_map" in structures
         assert "array/list" in structures
         assert "heap" in structures
@@ -170,48 +167,30 @@ heap = heapq.heappush([], val)
 
 
 class TestStuckDetection:
-    def setup_method(self):
-        self.service = CodeAnalysisService("test", _mock_failover_manager())
-
     def test_not_stuck_with_few_snapshots(self):
-        for i in range(3):
-            self.service._snapshots.append(CodeSnapshot(code=f"code {i}", char_count=50 + i * 10))
-        assert self.service._detect_stuck() is False
+        assert detect_stuck([50, 60, 70]) is False
 
     def test_stuck_oscillation(self):
-        # Simulate adding/removing code repeatedly
-        lengths = [100, 120, 95, 130, 90]
-        for l in lengths:
-            self.service._snapshots.append(CodeSnapshot(code="x" * l, char_count=l))
-        assert self.service._detect_stuck() is True
+        # Adding and removing code repeatedly
+        assert detect_stuck([100, 120, 95, 130, 90]) is True
 
     def test_stuck_no_progress(self):
         # Code length barely changes
-        for _ in range(5):
-            self.service._snapshots.append(CodeSnapshot(code="x" * 100, char_count=100))
-        assert self.service._detect_stuck() is True
+        assert detect_stuck([100] * 5) is True
 
     def test_not_stuck_steady_growth(self):
-        for i in range(5):
-            length = 50 + i * 30  # Steady growth
-            self.service._snapshots.append(CodeSnapshot(code="x" * length, char_count=length))
-        assert self.service._detect_stuck() is False
+        assert detect_stuck([50 + i * 30 for i in range(5)]) is False
 
 
-# ── Code Analysis Service (Full) ─────────────────────────────────────
+# ── Local analysis of a snapshot ─────────────────────────────────────
 
 
-class TestCodeAnalysisService:
-    def setup_method(self):
-        self.service = CodeAnalysisService("test", _mock_failover_manager())
+class TestLocalAnalysis:
+    def test_analyze_empty_snapshot(self):
+        snapshot = make_snapshot("", "python")
+        assert analyze_locally(snapshot, [snapshot]).progress_state == ProgressState.EMPTY
 
-    @pytest.mark.asyncio
-    async def test_analyze_empty_snapshot(self):
-        result = await self.service.analyze_snapshot("", "python")
-        assert result.progress_state == ProgressState.EMPTY
-
-    @pytest.mark.asyncio
-    async def test_analyze_real_code(self):
+    def test_analyze_real_code(self):
         code = """def two_sum(nums, target):
     seen = {}
     for i, num in enumerate(nums):
@@ -220,34 +199,17 @@ class TestCodeAnalysisService:
             return [seen[complement], i]
         seen[num] = i
 """
-        result = await self.service.analyze_snapshot(code, "python")
+        snapshot = make_snapshot(code, "python")
+        result = analyze_locally(snapshot, [snapshot])
         assert result.progress_state != ProgressState.EMPTY
         assert result.detected_approach is not None
 
-    @pytest.mark.asyncio
-    async def test_normalize_code(self):
-        code = "  def foo():  \n    pass  \n\n\n"
-        normalized = self.service._normalize_code(code)
+    def test_normalize_code(self):
+        normalized = normalize_code("  def foo():  \n    pass  \n\n\n")
         assert not normalized.endswith("\n")
         assert "  \n" not in normalized  # No trailing spaces on lines
 
-    @pytest.mark.asyncio
-    async def test_set_question_resets_state(self):
-        await self.service.analyze_snapshot("code", "python")
-        assert len(self.service._snapshots) == 1
-
-        await self.service.set_question("New question")
-        assert len(self.service._snapshots) == 0
-
-    @pytest.mark.asyncio
-    async def test_serialization(self):
-        await self.service.analyze_snapshot("def foo(): pass", "python")
-        data = self.service.to_dict()
-        assert data["session_id"] == "test"
-        assert data["snapshot_count"] == 1
-
-    @pytest.mark.asyncio
-    async def test_result_to_dict(self):
+    def test_result_to_dict(self):
         result = CodeAnalysisResult(
             progress_state=ProgressState.PARTIAL,
             detected_approach=ApproachInfo(name="hash_map", confidence=0.8),

@@ -18,7 +18,6 @@ from src.schemas.hint import (
     RuntimeHintRequest,
     RuntimeHintResponse,
 )
-from src.services.memory_service import MemoryService
 from src.utils.logging import get_logger
 from src.utils.token_budget import BUDGET_RUNTIME_HINT
 
@@ -41,7 +40,7 @@ Directness levels:
   direct = Explicitly states the approach or key insight"""
 
 
-# ── Pure helpers (shared by RuntimeHintService and the LangGraph session pipeline) ──
+# ── Used by the LangGraph session pipeline ─────────────────────────────────
 
 
 async def generate_runtime_hint(
@@ -199,94 +198,3 @@ def assemble_hint_context(
         )
 
     return "\n\n".join(parts)
-
-
-class RuntimeHintService:
-    """Generates runtime LLM-powered hints for interview sessions.
-
-    Usage:
-        service = RuntimeHintService(session_id, failover_manager, memory_service)
-        service.set_question(question_data)
-        response = await service.generate_hint(request)
-    """
-
-    def __init__(
-        self,
-        session_id: str,
-        failover_manager: FailoverManager,
-        memory: MemoryService,
-    ) -> None:
-        self.session_id = session_id
-        self._failover = failover_manager
-        self._memory = memory
-        self._current_question: dict | None = None
-        self._recent_insights: list[EnhancedAnalysisResult] = []
-        self._generation_history: list[RuntimeHintResponse] = []
-        self._generation_count: dict[str, int] = {}  # question_id → count
-
-    def set_question(self, question_data: dict) -> None:
-        """Store the full planned question."""
-        self._current_question = question_data
-
-    def add_insight(self, result: EnhancedAnalysisResult) -> None:
-        """Append to recent insights buffer (keeps last 5)."""
-        self._recent_insights.append(result)
-        self._recent_insights = self._recent_insights[-5:]
-
-    async def generate_hint(
-        self,
-        request: RuntimeHintRequest,
-    ) -> RuntimeHintResponse:
-        """Generate a contextual hint for the current question."""
-        question_id = request.question_id
-
-        # Track generation count per question
-        gen_count = self._generation_count.get(question_id, 0) + 1
-        self._generation_count[question_id] = gen_count
-
-        # Determine directness
-        directness = self._resolve_directness(request)
-
-        # Build user content
-        user_content = self._assemble_context(request, directness)
-
-        response = await generate_runtime_hint(
-            self._failover, self.session_id, request, directness, user_content, gen_count
-        )
-        self._generation_history.append(response)
-
-        logger.info(
-            "runtime_hint_generated",
-            session_id=self.session_id,
-            question_id=question_id,
-            directness=response.directness.value,
-            generation_number=gen_count,
-            is_regeneration=request.regenerate,
-            latency_ms=response.latency_ms,
-        )
-
-        return response
-
-    def _resolve_directness(self, request: RuntimeHintRequest) -> RuntimeHintDirectness:
-        """Determine hint directness from request, insight, or default."""
-        return resolve_directness(request, self._recent_insights)
-
-    def _assemble_context(self, request: RuntimeHintRequest, directness: RuntimeHintDirectness) -> str:
-        """Build the user content for the hint generation prompt."""
-        return assemble_hint_context(
-            request,
-            directness,
-            self._current_question,
-            self._memory.get_working_memory_text(),
-            self._memory.get_summary(),
-            self._recent_insights,
-            self._generation_history[-1].text if self._generation_history else None,
-        )
-
-    def to_dict(self) -> dict:
-        return {
-            "session_id": self.session_id,
-            "generation_count": dict(self._generation_count),
-            "total_hints": len(self._generation_history),
-            "recent_insights_count": len(self._recent_insights),
-        }

@@ -16,7 +16,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from src import dependencies
 from src.config import settings
+from src.graphs.code_graph import code_thread_id
 from src.main import app
 from src.models.analysis import CodeSnapshot
 from src.models.session import InterviewSession
@@ -25,6 +27,7 @@ from src.replay.runner import build_scripted_failover_manager
 from src.services.access_control import DEV_USER_ID
 from src.services.code_analysis_service import detect_progress
 from src.services.persistence_service import PersistenceService
+from src.websocket import audio_handler
 
 
 def _postgres_available() -> bool:
@@ -88,9 +91,21 @@ def test_code_snapshot_and_transcript_in_one_batch_are_both_persisted(monkeypatc
             timestamp="2026-01-01T00:00:00+00:00",
         )
         with TestClient(app).websocket_connect(f"/ws/code/{sid}") as ws:
-            ws.send_json({"type": "code_snapshot", "payload": {"code": TWO_SUM, "language": "python"}})
-            ws.send_json({"type": "ping", "timestamp": 1})
-            assert ws.receive_json()["type"] == "pong"  # the snapshot was handled before the ping
+            # The session pipeline checkpoints to Postgres; open the app's checkpointer on the
+            # app's event loop (the socket's portal), without running the app's startup.
+            ws.portal.call(dependencies.checkpointer.open, settings.database_url_sync)
+            try:
+                ws.send_json({"type": "code_snapshot", "payload": {"code": TWO_SUM, "language": "python"}})
+                ws.send_json({"type": "ping", "timestamp": 1})
+                assert ws.receive_json()["type"] == "pong"
+                pipeline = audio_handler.active_pipeline(str(sid))
+                assert pipeline is not None
+                ws.portal.call(pipeline.wait_idle)  # the code graph persisted the snapshot
+                ws.portal.call(dependencies.checkpointer.delete_threads, str(sid), code_thread_id(str(sid)))
+            finally:
+                audio_handler._active_workers.pop(str(sid), None)
+                audio_handler._active_sessions.pop(str(sid), None)
+                ws.portal.call(dependencies.checkpointer.close)
 
         async def flush_and_read(factory):
             queued._session_factory = factory

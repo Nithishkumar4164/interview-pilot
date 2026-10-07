@@ -54,8 +54,6 @@ class Settings(BaseSettings):
 
     # Upper bound on parallel LLM calls while generating one interview plan.
     plan_generation_max_concurrency: int = 4
-    # Real-time pipeline: the LangGraph session graph instead of AnalysisWorker.
-    use_langgraph_session: bool = False
     # Session graph only: the analysis chooses follow-ups (contradiction check, hint draft, code check).
     agentic_routing_enabled: bool = False
     # Reports: score each criterion with evidence tools, then one synthesis (single call if off).

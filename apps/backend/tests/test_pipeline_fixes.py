@@ -1,4 +1,4 @@
-"""Regression tests for real-time pipeline bugs, on both implementations.
+"""Regression tests for real-time pipeline bugs (each reproduced first on AnalysisWorker and the graph).
 
 Each test replays a scenario the way the goldens do (scripted LLM, real
 Postgres checkpointer for the graph) and asserts the user-visible behavior:
@@ -16,7 +16,7 @@ import pytest
 from src.config import settings
 from src.graphs.checkpointer import Checkpointer
 from src.graphs.code_graph import code_thread_id
-from src.replay.runner import ReplayReport, ReplayRunner, analysis_worker_factory
+from src.replay.runner import ReplayReport, ReplayRunner
 from src.replay.scenario import load_scenario
 from src.workers.langgraph_session import LangGraphSessionPipeline, thread_id_for
 
@@ -31,18 +31,9 @@ def _postgres_available() -> bool:
         return False
 
 
-@pytest.fixture(params=["worker", "graph"])
-async def replay(request) -> AsyncIterator:
-    """replay(scenario_file) -> ReplayReport, through one pipeline implementation."""
-    if request.param == "worker":
-
-        async def run_worker(name: str) -> ReplayReport:
-            scenario = load_scenario(SCENARIOS_DIR / name)
-            return await ReplayRunner(scenario, llm_mode="scripted", pipeline_factory=analysis_worker_factory).run()
-
-        yield run_worker
-        return
-
+@pytest.fixture
+async def replay() -> AsyncIterator:
+    """replay(scenario_file) -> ReplayReport, through the session pipeline."""
     if not _postgres_available():
         pytest.skip("Postgres not reachable")
     cp = Checkpointer()
@@ -190,8 +181,7 @@ async def live_session(monkeypatch) -> AsyncIterator[str]:
     await engine.dispose()
 
 
-@pytest.mark.parametrize("use_graph", [False, True], ids=["worker", "graph"])
-async def test_ending_a_session_stops_its_transcription_and_pipeline(live_session: str, use_graph: bool) -> None:
+async def test_ending_a_session_stops_its_transcription_and_pipeline(live_session: str) -> None:
     """Before the fix nothing removed an ended session's transcription service or
     pipeline: audio still arriving on the open socket kept producing transcripts
     and LLM analyses for a session that was over."""
@@ -205,17 +195,12 @@ async def test_ending_a_session_stops_its_transcription_and_pipeline(live_sessio
     from src.services.transcription_service import TranscriptionService
     from src.websocket import audio_handler
     from src.websocket.manager import dashboard_manager
-    from src.workers.analysis_worker import AnalysisWorker
 
     sid = live_session
     fm = build_scripted_failover_manager()
-    cp = None
-    if use_graph:
-        cp = Checkpointer()
-        await cp.open(settings.database_url_sync)
-        pipeline = LangGraphSessionPipeline(sid, fm, cp, min_analysis_interval_s=0)
-    else:
-        pipeline = AnalysisWorker(sid, fm, min_analysis_interval_s=0)
+    cp = Checkpointer()
+    await cp.open(settings.database_url_sync)
+    pipeline = LangGraphSessionPipeline(sid, fm, cp, min_analysis_interval_s=0)
     service = TranscriptionService(sid)  # registered the way get_transcription_service does
     service.on_event(pipeline.on_transcript_event)
     audio_handler._active_sessions[sid] = service
@@ -254,19 +239,15 @@ async def test_ending_a_session_stops_its_transcription_and_pipeline(live_sessio
             await pipeline.on_transcript_event(utterance(1))
             await asyncio.sleep(0.1)
             assert send_analysis.await_count == 1
-        if cp is not None:
-            state = await pipeline._compiled().aget_state({"configurable": {"thread_id": thread_id_for(sid)}})
-            assert not state.values, "session checkpoints were not deleted"
-            code_state = await pipeline._code.compiled().aget_state(
-                {"configurable": {"thread_id": code_thread_id(sid)}}
-            )
-            assert not code_state.values, "code checkpoints were not deleted"
+        state = await pipeline._compiled().aget_state({"configurable": {"thread_id": thread_id_for(sid)}})
+        assert not state.values, "session checkpoints were not deleted"
+        code_state = await pipeline._code.compiled().aget_state({"configurable": {"thread_id": code_thread_id(sid)}})
+        assert not code_state.values, "code checkpoints were not deleted"
     finally:
         if service.is_running:
             await service.stop()
-        if cp is not None:
-            await cp.delete_threads(thread_id_for(sid), code_thread_id(sid))
-            await cp.close()
+        await cp.delete_threads(thread_id_for(sid), code_thread_id(sid))
+        await cp.close()
 
 
 _ANSWER = "I would keep a hash map from value to index and look up the complement in one pass."
@@ -331,8 +312,7 @@ async def test_code_llm_analysis_runs_with_the_current_question(replay) -> None:
         assert local["code_length"] == p["code_length"] and local["is_stuck"] == p["is_stuck"]
 
 
-@pytest.mark.parametrize("impl", ["worker", "graph"])
-async def test_a_refinement_for_superseded_code_is_dropped(impl: str) -> None:
+async def test_a_refinement_for_superseded_code_is_dropped() -> None:
     """The LLM analysis takes 300 ms; the candidate keeps typing. Its result is about
     code that is no longer on screen, so it must not replace the newer local result."""
     from src.replay.runner import REPLAY_LATENCY_MS, PipelineTiming
@@ -345,18 +325,15 @@ async def test_a_refinement_for_superseded_code_is_dropped(impl: str) -> None:
         CodeUpdateEvent(code=first + "    return sum(nums)\n", delay_ms=50),  # small change: does not qualify
         QuestionChangeEvent(question_text="Done.", question_index=1, delay_ms=600),
     ]
-    session_id = f"supersede-{impl}-{uuid.uuid4()}"
+    session_id = f"supersede-{uuid.uuid4()}"
     scenario = Scenario(meta=ScenarioMeta(id=session_id), events=events)
-    cp = None
-    factory = analysis_worker_factory
-    if impl == "graph":
-        if not _postgres_available():
-            pytest.skip("Postgres not reachable")
-        cp = Checkpointer()
-        await cp.open(settings.database_url_sync)
+    if not _postgres_available():
+        pytest.skip("Postgres not reachable")
+    cp = Checkpointer()
+    await cp.open(settings.database_url_sync)
 
-        def factory(sid, fm, timing: PipelineTiming):
-            return LangGraphSessionPipeline(sid, fm, cp, min_analysis_interval_s=timing.min_analysis_interval_s)
+    def factory(sid, fm, timing: PipelineTiming):
+        return LangGraphSessionPipeline(sid, fm, cp, min_analysis_interval_s=timing.min_analysis_interval_s)
 
     try:
         report = await ReplayRunner(
@@ -367,9 +344,8 @@ async def test_a_refinement_for_superseded_code_is_dropped(impl: str) -> None:
             latency_ms={**REPLAY_LATENCY_MS, "code_analysis": 300},
         ).run()
     finally:
-        if cp is not None:
-            await cp.delete_threads(thread_id_for(session_id), code_thread_id(session_id))
-            await cp.close()
+        await cp.delete_threads(thread_id_for(session_id), code_thread_id(session_id))
+        await cp.close()
 
     assert [c["kind"] for c in report.llm_calls].count("code_analysis") == 1  # it did run
     pushes = [e.payload for e in report.events if e.method == "send_code_analysis"]

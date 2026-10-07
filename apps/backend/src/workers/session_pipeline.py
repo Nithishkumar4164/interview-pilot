@@ -1,8 +1,8 @@
 """The seam between transport (WebSocket/REST handlers) and the real-time pipeline.
 
 Handlers talk to a session's pipeline only through this Protocol, so the
-implementation (today ``AnalysisWorker``; later the LangGraph session graph)
-can be swapped by ``create_session_pipeline`` without touching call sites.
+implementation (``LangGraphSessionPipeline``) can change without touching
+call sites.
 """
 
 from collections.abc import Callable
@@ -68,16 +68,9 @@ def create_session_pipeline(
     failover_manager: FailoverManager,
     get_speaker_snapshot: Callable[[], dict] | None = None,
 ) -> SessionPipeline:
-    from src.config import settings
+    from src.dependencies import get_checkpointer
+    from src.workers.langgraph_session import LangGraphSessionPipeline
 
-    if settings.use_langgraph_session:
-        from src.dependencies import get_checkpointer
-        from src.workers.langgraph_session import LangGraphSessionPipeline
-
-        return LangGraphSessionPipeline(
-            session_id, failover_manager, get_checkpointer(), get_speaker_snapshot=get_speaker_snapshot
-        )
-
-    from src.workers.analysis_worker import AnalysisWorker
-
-    return AnalysisWorker(session_id, failover_manager, get_speaker_snapshot=get_speaker_snapshot)
+    return LangGraphSessionPipeline(
+        session_id, failover_manager, get_checkpointer(), get_speaker_snapshot=get_speaker_snapshot
+    )

@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import patch
 
-from src.services.session_state_service import SessionStateService
 from src.websocket.manager import dashboard_manager
 
 
@@ -58,15 +57,12 @@ class EventCollector:
     - every ``dashboard_manager.send_*`` broadcast (patched on the shared
       manager object, so it works for any pipeline implementation);
     - every persistence enqueue (``safe_enqueue`` resolves the persistence
-      service through ``src.dependencies`` at call time);
-    - session-state updates, into a private in-memory ``SessionStateService``
-      (``session_state``) instead of the app's.
+      service through ``src.dependencies`` at call time).
     """
 
     def __init__(self) -> None:
         self.events: list[CapturedEvent] = []
         self.persisted: list[PersistedWrite] = []
-        self.session_state = SessionStateService()
         self._patchers: list = []
 
     async def __aenter__(self) -> "EventCollector":
@@ -74,7 +70,6 @@ class EventCollector:
         self._patchers = [patch.object(dashboard_manager, m, self._make_capture(m)) for m in _CAPTURED_METHODS]
         self._patchers += [
             patch("src.dependencies.get_persistence_service", lambda: persistence),
-            patch("src.dependencies.get_session_state_service", lambda: self.session_state),
         ]
         for p in self._patchers:
             p.start()

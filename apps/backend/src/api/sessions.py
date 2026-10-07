@@ -29,7 +29,6 @@ from src.schemas.session import (
 )
 from src.services.access_control import Principal
 from src.services.hint_service import HintService
-from src.services.session_state_service import SNAPSHOT_SCHEMA_VERSION
 from src.utils.logging import get_logger
 
 logger = get_logger("api.sessions")
@@ -154,19 +153,7 @@ async def get_session_state(
     # Get session state snapshot
     snapshot_data = None
     try:
-        if settings.use_langgraph_session:
-            snapshot_data = await _graph_state_snapshot(session_id, hints, db)
-        else:
-            from src.dependencies import get_session_state_service
-
-            sss = get_session_state_service()
-            state = sss.get_state_or_none(session_id)
-            if state:
-                snapshot_data = state.to_snapshot()
-            else:
-                recovered = await sss.recover_session(session_id, db)
-                if recovered:
-                    snapshot_data = recovered.to_snapshot()
+        snapshot_data = await _graph_state_snapshot(session_id, hints, db)
     except Exception:
         import logging
 
@@ -316,9 +303,6 @@ async def end_session(
     # Create placeholder report and launch background generation
     report_id = None
     try:
-        from src.dependencies import (
-            get_session_state_service,
-        )
         from src.models.report import Report
         from src.repositories.report_repo import ReportRepository
         from src.websocket.audio_handler import _active_workers
@@ -349,7 +333,7 @@ async def end_session(
         stored = None
         if worker:
             snapshots.update(worker.report_snapshot())
-        elif settings.use_langgraph_session:
+        else:
             # This process never held the pipeline (restart, or another worker):
             # the session's state is in its checkpoints.
             from src.dependencies import failover_manager, get_checkpointer
@@ -389,37 +373,6 @@ async def end_session(
         await report_repo.create(placeholder_report)
         report_id = str(placeholder_report.id)
 
-        # Save final session snapshot before cleanup (with timeout)
-        try:
-            sss = get_session_state_service()
-            if settings.use_langgraph_session:
-                # The pipeline's checkpoints are deleted when it closes below; this
-                # row is what GET /state serves for the ended session.
-                source = worker if worker is not None else stored
-                if source is not None:
-                    hint_history = [
-                        {
-                            "hint_id": h.hint_id,
-                            "question_id": h.question_id,
-                            "level": h.level,
-                            "displayed_at": h.displayed_at,
-                        }
-                        for h in (hint_service.get_events() if hint_service else [])
-                    ]
-                    db.add(
-                        SessionSnapshot(
-                            session_id=uuid.UUID(session_id),
-                            snapshot_data=jsonable_encoder(source.state_snapshot(hint_history)),
-                            schema_version=SNAPSHOT_SCHEMA_VERSION,
-                        )
-                    )
-                    await db.flush()
-            else:
-                await asyncio.wait_for(sss.save_snapshot(session_id, db), timeout=3.0)
-            sss.remove_state(session_id)
-        except (TimeoutError, Exception):
-            logger.warning("final_session_snapshot_failed", session_id=session_id, exc_info=True)
-
         await db.commit()
 
         # Cleanup in-memory services
@@ -427,13 +380,12 @@ async def end_session(
         from src.websocket.audio_handler import close_transcription_service
 
         await close_transcription_service(session_id)
-        if settings.use_langgraph_session:
-            # Whether or not this process held the pipeline, the session is over:
-            # its report inputs and final snapshot are saved, so drop its checkpoints.
-            from src.dependencies import get_checkpointer
-            from src.workers.langgraph_session import delete_session_threads
+        # Whether or not this process held the pipeline, the session is over:
+        # its report inputs and final snapshot are saved, so drop its checkpoints.
+        from src.dependencies import get_checkpointer
+        from src.workers.langgraph_session import delete_session_threads
 
-            await delete_session_threads(get_checkpointer(), session_id)
+        await delete_session_threads(get_checkpointer(), session_id)
 
         # Fire background task for report generation
         asyncio.create_task(
@@ -623,7 +575,6 @@ async def create_pairing_token(
     db: AsyncSession = Depends(get_db),
 ) -> PairingTokenResponse:
     """Mint a credential for the Chrome extension that works only for this session."""
-    from src.config import settings
     from src.services.auth_service import AuthService
 
     return PairingTokenResponse(

@@ -36,7 +36,7 @@ def get_transcription_service(session_id: str) -> TranscriptionService:
         service.on_event(worker.on_transcript_event)
         _active_sessions[session_id] = service
         _active_workers[session_id] = worker
-        logger.info("analysis_worker_created", session_id=session_id)
+        logger.info("session_pipeline_created", session_id=session_id)
     return _active_sessions[session_id]
 
 

@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
+from src.graphs.checkpointer import Checkpointer
 from src.llm.config import TaskProviderMapping
 from src.llm.factory import ProviderFactory
 from src.llm.failover import FailoverManager
@@ -26,7 +27,7 @@ from src.replay.scenario import (
 )
 from src.replay.scripted_provider import LLMCallRecorder, ScriptedProvider, behavior, recording
 from src.schemas.transcript import TranscriptEventSchema
-from src.workers.analysis_worker import MIN_ANALYSIS_INTERVAL_S, AnalysisWorker
+from src.workers.langgraph_session import MIN_ANALYSIS_INTERVAL_S, LangGraphSessionPipeline
 from src.workers.session_pipeline import SessionPipeline
 
 LLMMode = Literal["mock", "scripted", "real"]
@@ -100,14 +101,21 @@ def _real_failover_manager() -> FailoverManager:
     return failover_manager
 
 
-def analysis_worker_factory(session_id: str, fm: FailoverManager, timing: PipelineTiming) -> SessionPipeline:
-    return AnalysisWorker(
-        session_id,
-        fm,
-        get_speaker_snapshot=lambda: {},
-        min_analysis_interval_s=timing.min_analysis_interval_s,
-        interim_throttle_s=timing.interim_throttle_s,
-    )
+def graph_pipeline_factory(checkpointer: Checkpointer, **options) -> PipelineFactory:
+    """Pipelines on ``checkpointer`` (the session's thread is its scenario id)."""
+
+    def factory(session_id: str, fm: FailoverManager, timing: PipelineTiming) -> SessionPipeline:
+        return LangGraphSessionPipeline(
+            session_id,
+            fm,
+            checkpointer,
+            get_speaker_snapshot=lambda: {},
+            min_analysis_interval_s=timing.min_analysis_interval_s,
+            interim_throttle_s=timing.interim_throttle_s,
+            **options,
+        )
+
+    return factory
 
 
 @dataclass
@@ -162,7 +170,7 @@ class ReplayReport:
 
 
 class ReplayRunner:
-    """Replays a Scenario through a session pipeline (AnalysisWorker by default).
+    """Replays a Scenario through a session pipeline built by ``pipeline_factory``.
 
     Compressed-time mode (the default) analyzes every qualifying utterance
     (rate-limit interval 0), pushes every interim transcript (throttle 0) and
@@ -172,7 +180,7 @@ class ReplayRunner:
     300 ms interim throttle instead.
 
     Usage:
-        runner = ReplayRunner(scenario, llm_mode="mock")
+        runner = ReplayRunner(scenario, llm_mode="mock", pipeline_factory=graph_pipeline_factory(checkpointer))
         report = await runner.run()
     """
 
@@ -181,7 +189,8 @@ class ReplayRunner:
         scenario: Scenario,
         llm_mode: LLMMode = "mock",
         real_time: bool = False,
-        pipeline_factory: PipelineFactory = analysis_worker_factory,
+        *,
+        pipeline_factory: PipelineFactory,
         latency_ms: dict[str, float] | None = None,
         min_analysis_interval_s: float | None = None,
     ) -> None:

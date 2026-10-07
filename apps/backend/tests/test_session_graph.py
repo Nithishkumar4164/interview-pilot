@@ -4,8 +4,8 @@ The goldens (test_replay_golden.py) settle after every event, so each run is
 one event. These tests cover what happens between events and across
 processes, against the real Postgres checkpointer:
 
-- rate limiting and batching in real time, compared with AnalysisWorker;
-- latency of the analysis push, compared with AnalysisWorker;
+- rate limiting and batching in real time (expectations recorded from AnalysisWorker);
+- latency of the analysis push (budget from AnalysisWorker's measured median);
 - a compression in flight never delays an analysis;
 - a new pipeline (process restart) continues from the checkpointed state;
 - two pipelines on one session (two processes) never lose an update;
@@ -40,7 +40,6 @@ from src.replay.runner import (
     REPLAY_LATENCY_MS,
     PipelineFactory,
     ReplayRunner,
-    analysis_worker_factory,
     build_scripted_failover_manager,
 )
 from src.replay.scenario import QuestionChangeEvent, Scenario, ScenarioMeta, TranscriptEvent, load_scenario
@@ -49,7 +48,6 @@ from src.schemas.transcript import SpeakerRole, TranscriptEventSchema
 from src.services.access_control import DEV_USER_ID
 from src.services.persistence_service import PersistenceService
 from src.websocket.manager import dashboard_manager
-from src.workers.analysis_worker import AnalysisWorker
 from src.workers.langgraph_session import LangGraphSessionPipeline, thread_id_for
 
 SCENARIOS_DIR = Path(__file__).parent / "scenarios"
@@ -131,28 +129,25 @@ TIMELINES = {
 }
 
 
-@pytest.mark.parametrize("name", list(TIMELINES))
-async def test_rate_limit_matches_analysis_worker(name: str, checkpointer: Checkpointer, thread: str) -> None:
-    scenario = Scenario(meta=ScenarioMeta(id=thread), events=TIMELINES[name])
-    reports = {}
-    for impl, factory in (("worker", analysis_worker_factory), ("graph", _graph_factory(checkpointer))):
-        reports[impl] = await ReplayRunner(
-            scenario,
-            llm_mode="scripted",
-            real_time=True,
-            pipeline_factory=factory,
-            min_analysis_interval_s=INTERVAL_S,
-        ).run()
-        assert reports[impl].error is None
+# Which candidate answers AnalysisWorker analyzed on each timeline (the graph
+# matched it in Phase 3, before AnalysisWorker was removed).
+WORKER_ANALYZED = {"window-keeps-latest": [0, 2, 3], "burst": [0, 7]}
 
-    assert _analyzed(reports["graph"]) == _analyzed(reports["worker"])
-    assert len(_analyzed(reports["graph"])) < sum(e.speaker_role == SpeakerRole.CANDIDATE for e in scenario.events)
-    # Memory saw every utterance either way.
-    assert (
-        reports["graph"].final_state["memory"]["total_utterances"]
-        == reports["worker"].final_state["memory"]["total_utterances"]
-        == len(scenario.events)
-    )
+
+@pytest.mark.parametrize("name", list(TIMELINES))
+async def test_rate_limit_analyzes_what_analysis_worker_did(name: str, checkpointer: Checkpointer, thread: str) -> None:
+    scenario = Scenario(meta=ScenarioMeta(id=thread), events=TIMELINES[name])
+    report = await ReplayRunner(
+        scenario,
+        llm_mode="scripted",
+        real_time=True,
+        pipeline_factory=_graph_factory(checkpointer),
+        min_analysis_interval_s=INTERVAL_S,
+    ).run()
+    assert report.error is None
+    assert _analyzed(report) == [f"[candidate]: {_answer(n)}" for n in WORKER_ANALYZED[name]]
+    # Memory saw every utterance.
+    assert report.final_state["memory"]["total_utterances"] == len(scenario.events)
 
 
 async def test_same_tick_burst_is_rate_limited(checkpointer: Checkpointer, thread: str) -> None:
@@ -231,8 +226,13 @@ async def _push_latencies_ms(
     return latencies
 
 
+# AnalysisWorker's median push latency on scenario 04 with REPLAY_LATENCY_MS
+# (30 ms analysis), measured in Phase 3 before it was removed.
+WORKER_MEDIAN_PUSH_MS = 32.3
+
+
 async def test_analysis_push_latency_is_within_budget(checkpointer: Checkpointer, thread: str) -> None:
-    """Budget: median at most 15 ms over AnalysisWorker on the same scripted latencies.
+    """Budget: median at most 15 ms over AnalysisWorker's on the same scripted latencies.
 
     The graph adds a superstep before the analysis node and a checkpoint per
     step; against a real provider (0.5-3 s per analysis) this is noise, but
@@ -242,16 +242,12 @@ async def test_analysis_push_latency_is_within_budget(checkpointer: Checkpointer
     utterances = [e for e in scenario.events if isinstance(e, TranscriptEvent)]
     fm = build_scripted_failover_manager()
     with behavior(REPLAY_LATENCY_MS):
-        old = await _push_latencies_ms(AnalysisWorker(f"{thread}-old", fm, min_analysis_interval_s=0), utterances)
         new = await _push_latencies_ms(
             LangGraphSessionPipeline(thread, fm, checkpointer, min_analysis_interval_s=0), utterances
         )
-    print(
-        f"\nanalysis push ms: worker median {statistics.median(old):.1f} max {max(old):.1f}; "
-        f"graph median {statistics.median(new):.1f} max {max(new):.1f}"
-    )
-    assert len(new) == len(old) > 10
-    assert statistics.median(new) <= statistics.median(old) + 15
+    print(f"\nanalysis push ms: graph median {statistics.median(new):.1f} max {max(new):.1f}")
+    assert len(new) > 10
+    assert statistics.median(new) <= WORKER_MEDIAN_PUSH_MS + 15
 
 
 async def test_compression_in_flight_does_not_delay_analysis(checkpointer: Checkpointer, thread: str) -> None:

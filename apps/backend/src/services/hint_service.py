@@ -148,24 +148,6 @@ class HintService:
             hint_id=active.hint_id,
         )
 
-        # Update session state with hint history
-        try:
-            from src.dependencies import get_session_state_service
-
-            sss = get_session_state_service()
-            state = sss.get_state(self.session_id)
-            state.hint_history.append(
-                {
-                    "hint_id": active.hint_id,
-                    "question_id": qid,
-                    "level": next_level,
-                    "displayed_at": active.displayed_at,
-                }
-            )
-            state.mark_dirty()
-        except Exception:
-            logger.warning("session_state_hint_update_failed")
-
         logger.info(
             "hint_advanced",
             session_id=self.session_id,

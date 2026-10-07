@@ -1,9 +1,15 @@
-"""Golden parity for the real-time pipeline under the scripted LLM.
+"""Golden replay of the real-time pipeline under the scripted LLM.
 
-These goldens were recorded from the pre-LangGraph AnalysisWorker. Every
-implementation of the real-time pipeline must reproduce them; each scenario
-runs through AnalysisWorker and through the LangGraph session pipeline (on
-the real Postgres checkpointer).
+The goldens were recorded from the pre-LangGraph AnalysisWorker (with
+realistic call latencies, settling after each event) and the LangGraph
+session pipeline reproduced them before AnalysisWorker was removed. Later
+intentional behavior changes re-recorded them, each with a reviewed diff
+(see git log tests/golden). They are the oracle for the pipeline's dashboard
+pushes, DB writes, LLM prompts and state.
+
+The session_state section was re-recorded from the graph when
+SessionStateService was removed: it is the graph's current snapshot, which
+Phase 4 showed equals SessionStateService's snapshot refreshed at the end.
 
 To re-record after an intentional behavior change:
     REPLAY_UPDATE_GOLDEN=1 uv run pytest tests/test_replay_golden.py
@@ -21,10 +27,9 @@ from src.config import settings
 from src.graphs.checkpointer import Checkpointer
 from src.graphs.code_graph import code_thread_id
 from src.replay.golden import golden_path, normalize, read_golden, write_golden
-from src.replay.runner import PipelineFactory, ReplayRunner, analysis_worker_factory
+from src.replay.runner import ReplayRunner, graph_pipeline_factory
 from src.replay.scenario import load_scenario
-from src.services.session_state_service import SessionState, SessionStateService
-from src.workers.langgraph_session import LangGraphSessionPipeline, thread_id_for
+from src.workers.langgraph_session import thread_id_for
 
 SCENARIOS_DIR = Path(__file__).parent / "scenarios"
 GOLDEN_DIR = Path(__file__).parent / "golden"
@@ -53,70 +58,22 @@ async def checkpointer() -> AsyncIterator[Checkpointer]:
     await cp.close()
 
 
-def graph_factory(checkpointer: Checkpointer) -> PipelineFactory:
-    def factory(session_id, fm, timing):
-        return LangGraphSessionPipeline(
-            session_id,
-            fm,
-            checkpointer,
-            min_analysis_interval_s=timing.min_analysis_interval_s,
-            interim_throttle_s=timing.interim_throttle_s,
-        )
-
-    return factory
-
-
-async def _run(path: Path, factory: PipelineFactory = analysis_worker_factory) -> dict:
+async def _run(path: Path, checkpointer: Checkpointer) -> dict:
     scenario = load_scenario(path)
-    report = await ReplayRunner(scenario, llm_mode="scripted", pipeline_factory=factory).run()
-    return normalize(report)
-
-
-async def _run_graph(path: Path, checkpointer: Checkpointer) -> dict:
-    thread = thread_id_for(load_scenario(path).meta.id)
-    threads = (thread, code_thread_id(load_scenario(path).meta.id))
+    threads = (thread_id_for(scenario.meta.id), code_thread_id(scenario.meta.id))
     await checkpointer.delete_threads(*threads)
     try:
-        return await _run(path, graph_factory(checkpointer))
+        report = await ReplayRunner(
+            scenario, llm_mode="scripted", pipeline_factory=graph_pipeline_factory(checkpointer)
+        ).run()
+        return normalize(report)
     finally:
         await checkpointer.delete_threads(*threads)
 
 
-def _refreshed_session_state(golden: dict) -> dict:
-    """SessionStateService's snapshot as it would be if refreshed from the final worker state."""
-    service = SessionStateService()
-    sid = golden["scenario_id"]
-    service._states[sid] = SessionState.from_snapshot({**golden["session_state"], "session_id": sid})
-    service.update_from_worker(sid, golden["final_state"])
-    snapshot = service.get_state(sid).to_snapshot()
-    snapshot.pop("captured_at")
-    return snapshot
-
-
-def _assert_matches(actual: dict, expected: dict) -> None:
-    # Compare section by section so a failure names what diverged.
-    for section in expected:
-        assert actual.get(section) == expected[section], f"golden section {section!r} diverged"
-    assert set(actual) == set(expected)
-
-
 @pytest.mark.parametrize("scenario_path", _scenario_paths(), ids=lambda p: p.stem)
-async def test_langgraph_pipeline_matches_golden(scenario_path: Path, checkpointer: Checkpointer) -> None:
-    path = golden_path(GOLDEN_DIR, load_scenario(scenario_path).meta.id)
-    assert path.exists(), f"missing golden {path}; record with REPLAY_UPDATE_GOLDEN=1"
-    expected = read_golden(path)
-    actual = await _run_graph(scenario_path, checkpointer)
-    # The graph serves the session-state snapshot current; SessionStateService
-    # refreshed it only when an analysis ran. Compare with what it would hold
-    # refreshed at the end.
-    assert actual.pop("session_state") == _refreshed_session_state(expected)
-    _assert_matches(actual, {k: v for k, v in expected.items() if k != "session_state"})
-
-
-@pytest.mark.parametrize("scenario_path", _scenario_paths(), ids=lambda p: p.stem)
-@pytest.mark.asyncio
-async def test_replay_matches_golden(scenario_path: Path) -> None:
-    actual = await _run(scenario_path)
+async def test_replay_matches_golden(scenario_path: Path, checkpointer: Checkpointer) -> None:
+    actual = await _run(scenario_path, checkpointer)
     path = golden_path(GOLDEN_DIR, actual["scenario_id"])
 
     if UPDATE:
@@ -124,11 +81,14 @@ async def test_replay_matches_golden(scenario_path: Path) -> None:
         pytest.skip(f"golden re-recorded: {path.name}")
 
     assert path.exists(), f"missing golden {path}; record with REPLAY_UPDATE_GOLDEN=1"
-    _assert_matches(actual, read_golden(path))
+    expected = read_golden(path)
+    # Compare section by section so a failure names what diverged.
+    for section in expected:
+        assert actual.get(section) == expected[section], f"golden section {section!r} diverged"
+    assert set(actual) == set(expected)
 
 
 @pytest.mark.parametrize("scenario_path", _scenario_paths(), ids=lambda p: p.stem)
-@pytest.mark.asyncio
-async def test_scripted_replay_is_deterministic(scenario_path: Path) -> None:
+async def test_scripted_replay_is_deterministic(scenario_path: Path, checkpointer: Checkpointer) -> None:
     """A golden is only an oracle if the recording itself is reproducible."""
-    assert await _run(scenario_path) == await _run(scenario_path)
+    assert await _run(scenario_path, checkpointer) == await _run(scenario_path, checkpointer)

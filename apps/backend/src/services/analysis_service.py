@@ -24,7 +24,6 @@ from src.schemas.analysis import (
     InsightDimensions,
     RelevanceDimension,
 )
-from src.services.memory_service import MemoryService
 from src.utils.logging import get_logger
 from src.utils.token_budget import BUDGET_RESPONSE
 
@@ -134,7 +133,7 @@ HINT_RECEPTION_BLOCK = """"hint_reception": {
     },"""
 
 
-# ── Pure helpers (shared by AnalysisService and the LangGraph session graph) ──
+# ── Used by the LangGraph session pipeline ─────────────────────────────────
 
 
 def build_system_prompt(active_hint: str) -> str:
@@ -544,96 +543,3 @@ async def analyze_utterance_with_actions(
         failover, session_id, context_text, question_plan, active_hint, speaker, text, AGENT_ACTIONS_INSTRUCTION
     )
     return result, parse_next_actions(data)
-
-
-class AnalysisService:
-    """Runs real-time analysis on interview utterances.
-
-    Usage:
-        service = AnalysisService(session_id, failover_manager, memory_service)
-        result = await service.analyze_utterance(speaker, text)
-    """
-
-    def __init__(
-        self,
-        session_id: str,
-        failover_manager: FailoverManager,
-        memory: MemoryService,
-    ) -> None:
-        self.session_id = session_id
-        self._failover = failover_manager
-        self._memory = memory
-        self._analysis_history: list[EnhancedAnalysisResult] = []
-        self._current_question: str = ""
-        self._active_hint: str = ""
-        self._question_plan: dict | None = None
-
-    def set_current_question(self, question_text: str) -> None:
-        """Update the current question context."""
-        self._current_question = question_text
-
-    def set_active_hint(self, hint_text: str) -> None:
-        """Update the active hint context."""
-        self._active_hint = hint_text
-
-    def set_question_plan(self, question_data: dict) -> None:
-        """Store the full planned question for richer analysis context."""
-        self._question_plan = question_data
-
-    def _build_system_prompt(self) -> str:
-        return build_system_prompt(self._active_hint)
-
-    def _build_question_plan_context(self) -> str:
-        return build_question_plan_context(self._question_plan)
-
-    async def analyze_utterance(
-        self,
-        speaker: str,
-        text: str,
-    ) -> EnhancedAnalysisResult:
-        """Analyze a candidate utterance in context.
-
-        Assembles the full context from memory tiers and runs LLM analysis.
-        """
-        # Assemble context from memory hierarchy
-        context_text = self._memory.assemble_context(
-            question_text=self._current_question,
-            hint_text=self._active_hint,
-        )
-        analysis = await analyze_utterance(
-            self._failover, self.session_id, context_text, self._question_plan, self._active_hint, speaker, text
-        )
-        self._analysis_history.append(analysis)
-        return analysis
-
-    def _parse_analysis(self, content: str, parsed: dict | None) -> EnhancedAnalysisResult:
-        return parse_analysis(content, parsed, self.session_id)
-
-    def _parse_dimensions(self, raw: dict | None) -> InsightDimensions | None:
-        return _parse_dimensions(raw, self.session_id)
-
-    def _build_fallback_dimensions(self, raw: dict) -> InsightDimensions | None:
-        return _build_fallback_dimensions(raw, self.session_id)
-
-    async def rate_candidate_code(self, code: str, language: str = "unknown") -> dict:
-        """Rate candidate code against the question plan's known solutions and pitfalls."""
-        return await rate_code(
-            self._failover, self.session_id, self._current_question, self._question_plan, code, language
-        )
-
-    def get_recent_analyses(self, count: int = 5) -> list[EnhancedAnalysisResult]:
-        """Get the most recent analysis results."""
-        return self._analysis_history[-count:]
-
-    def get_average_quality(self) -> float:
-        """Get the running average answer quality score."""
-        return average_quality((a.answer_quality, a.on_track) for a in self._analysis_history)
-
-    def to_dict(self) -> dict:
-        return {
-            "session_id": self.session_id,
-            "analysis_count": len(self._analysis_history),
-            "average_quality": self.get_average_quality(),
-            "current_question": self._current_question,
-            "recent_analyses": [a.model_dump() for a in self._analysis_history[-5:]],
-        }

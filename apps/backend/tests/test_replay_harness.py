@@ -1,17 +1,52 @@
 """Smoke-level regression coverage for the transcript-level replay harness."""
 
+from collections.abc import AsyncIterator
 from pathlib import Path
 
+import psycopg
 import pytest
 
-from src.replay.runner import ReplayRunner
+from src.config import settings
+from src.graphs.checkpointer import Checkpointer
+from src.graphs.code_graph import code_thread_id
+from src.replay.runner import ReplayRunner, graph_pipeline_factory
 from src.replay.scenario import load_scenario
+from src.workers.langgraph_session import thread_id_for
 
 SCENARIOS_DIR = Path(__file__).parent / "scenarios"
 
 
 def _scenario_paths() -> list[Path]:
     return sorted(SCENARIOS_DIR.glob("*.scenario.json"))
+
+
+def _postgres_available() -> bool:
+    try:
+        with psycopg.connect(settings.database_url_sync, connect_timeout=2):
+            return True
+    except psycopg.OperationalError:
+        return False
+
+
+@pytest.fixture
+async def checkpointer() -> AsyncIterator[Checkpointer]:
+    if not _postgres_available():
+        pytest.skip("Postgres not reachable")
+    cp = Checkpointer()
+    await cp.open(settings.database_url_sync)
+    yield cp
+    await cp.close()
+
+
+async def _replay(scenario, checkpointer: Checkpointer):
+    threads = (thread_id_for(scenario.meta.id), code_thread_id(scenario.meta.id))
+    await checkpointer.delete_threads(*threads)
+    try:
+        return await ReplayRunner(
+            scenario, llm_mode="mock", pipeline_factory=graph_pipeline_factory(checkpointer)
+        ).run()
+    finally:
+        await checkpointer.delete_threads(*threads)
 
 
 # Per-scenario invariants checked under llm_mode="mock". Mock LLM responses
@@ -61,10 +96,9 @@ EXPECTED = {
     ids=lambda p: p.stem,
 )
 @pytest.mark.asyncio
-async def test_scenario_replay_smoke(scenario_path: Path) -> None:
+async def test_scenario_replay_smoke(scenario_path: Path, checkpointer: Checkpointer) -> None:
     scenario = load_scenario(scenario_path)
-    runner = ReplayRunner(scenario, llm_mode="mock")
-    report = await runner.run()
+    report = await _replay(scenario, checkpointer)
 
     assert report.error is None, f"Replay raised: {report.error}"
 
@@ -92,10 +126,10 @@ async def test_malformed_scenario_raises_validation_error(tmp_path: Path) -> Non
 
 
 @pytest.mark.asyncio
-async def test_replay_is_deterministic_under_mock_llm() -> None:
+async def test_replay_is_deterministic_under_mock_llm(checkpointer: Checkpointer) -> None:
     scenario = load_scenario(SCENARIOS_DIR / "01_strong_candidate_two_sum.scenario.json")
-    r1 = await ReplayRunner(scenario, llm_mode="mock").run()
-    r2 = await ReplayRunner(scenario, llm_mode="mock").run()
+    r1 = await _replay(scenario, checkpointer)
+    r2 = await _replay(scenario, checkpointer)
     assert r1.summary == r2.summary
     assert len(r1.events) == len(r2.events)
     assert [e.method for e in r1.events] == [e.method for e in r2.events]

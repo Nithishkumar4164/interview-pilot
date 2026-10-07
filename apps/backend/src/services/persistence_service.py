@@ -279,17 +279,3 @@ def safe_enqueue(event_type: str, session_id: str, **kwargs: Any) -> None:
         method(session_id, **kwargs)
     except Exception:
         logger.warning("persistence_enqueue_failed", type=event_type, exc_info=True)
-
-
-def safe_update_session_state(session_id: str, snapshot: dict[str, Any]) -> None:
-    """Fire-and-forget helper that pushes a worker snapshot to the
-    session-state service. Wiring and runtime errors are logged and
-    swallowed so the hot path isn't interrupted by a failed snapshot.
-    """
-    try:
-        from src.dependencies import get_session_state_service
-
-        sss = get_session_state_service()
-        sss.update_from_worker(session_id, snapshot)
-    except Exception:
-        logger.warning("session_state_update_failed", exc_info=True)

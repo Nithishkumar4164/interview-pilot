@@ -55,6 +55,7 @@ class StructuredOutput:
     input_tokens: int = 0
     output_tokens: int = 0
     latency_ms: float = 0
+    truncated: bool = False  # the answer stopped at max_tokens
 
 
 @dataclass

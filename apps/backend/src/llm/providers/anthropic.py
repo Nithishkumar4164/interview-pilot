@@ -163,6 +163,7 @@ class AnthropicProvider(ILLMProvider):
                 input_tokens=response.usage.input_tokens,
                 output_tokens=response.usage.output_tokens,
                 latency_ms=latency,
+                truncated=response.stop_reason == "max_tokens",
             )
         except anthropic.APIError as e:
             logger.error("llm_analyze_error", provider="anthropic", error=str(e))

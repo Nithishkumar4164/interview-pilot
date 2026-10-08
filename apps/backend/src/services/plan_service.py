@@ -141,6 +141,11 @@ class GeneratedPlan:
     focus_areas: list[str]
 
 
+# Full question-generation answers took 2,136-2,540 output tokens on claude-sonnet-5
+# (2026-10-08); only generated tokens are billed.
+QUESTION_GENERATION_MAX_TOKENS = 8000
+
+
 class PlanService:
     """Generates and manages interview plans."""
 
@@ -294,9 +299,12 @@ class PlanService:
             user_content=user_content,
             task_type=TaskType.QUESTION_GENERATION,
         )
-        config = LLMConfig(max_tokens=2000, temperature=0.7, response_format="json")
+        config = LLMConfig(max_tokens=QUESTION_GENERATION_MAX_TOKENS, temperature=0.7, response_format="json")
 
         result = await self.llm.analyze(context, config)
+        if result.truncated:
+            # The JSON is incomplete: this phase gets no generated questions.
+            logger.error("question_generation_truncated", categories=categories, max_tokens=config.max_tokens)
 
         questions: list[QuestionData] = []
         if result.parsed and "questions" in result.parsed:

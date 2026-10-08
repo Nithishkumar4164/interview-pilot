@@ -12,7 +12,7 @@
       },
       {
         "kind": "question_generation",
-        "max_tokens": 2000,
+        "max_tokens": 8000,
         "response_format": "json",
         "system_prompt_sha": "8e06818dd10e",
         "task_type": "question_generation",
@@ -184,7 +184,7 @@
       },
       {
         "kind": "question_generation",
-        "max_tokens": 2000,
+        "max_tokens": 8000,
         "response_format": "json",
         "system_prompt_sha": "8e06818dd10e",
         "task_type": "question_generation",
@@ -193,7 +193,7 @@
       },
       {
         "kind": "question_generation",
-        "max_tokens": 2000,
+        "max_tokens": 8000,
         "response_format": "json",
         "system_prompt_sha": "8e06818dd10e",
         "task_type": "question_generation",
@@ -202,7 +202,7 @@
       },
       {
         "kind": "question_generation",
-        "max_tokens": 2000,
+        "max_tokens": 8000,
         "response_format": "json",
         "system_prompt_sha": "8e06818dd10e",
         "task_type": "question_generation",
@@ -359,7 +359,7 @@
       },
       {
         "kind": "question_generation",
-        "max_tokens": 2000,
+        "max_tokens": 8000,
         "response_format": "json",
         "system_prompt_sha": "8e06818dd10e",
         "task_type": "question_generation",
@@ -368,7 +368,7 @@
       },
       {
         "kind": "question_generation",
-        "max_tokens": 2000,
+        "max_tokens": 8000,
         "response_format": "json",
         "system_prompt_sha": "8e06818dd10e",
         "task_type": "question_generation",
@@ -377,7 +377,7 @@
       },
       {
         "kind": "question_generation",
-        "max_tokens": 2000,
+        "max_tokens": 8000,
         "response_format": "json",
         "system_prompt_sha": "8e06818dd10e",
         "task_type": "question_generation",
@@ -526,7 +526,7 @@
       },
       {
         "kind": "question_generation",
-        "max_tokens": 2000,
+        "max_tokens": 8000,
         "response_format": "json",
         "system_prompt_sha": "8e06818dd10e",
         "task_type": "question_generation",
@@ -535,7 +535,7 @@
       },
       {
         "kind": "question_generation",
-        "max_tokens": 2000,
+        "max_tokens": 8000,
         "response_format": "json",
         "system_prompt_sha": "8e06818dd10e",
         "task_type": "question_generation",

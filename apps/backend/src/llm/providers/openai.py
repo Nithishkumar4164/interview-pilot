@@ -140,6 +140,7 @@ class OpenAIProvider(ILLMProvider):
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 latency_ms=latency,
+                truncated=response.choices[0].finish_reason == "length",
             )
         except openai.APIError as e:
             logger.error("llm_analyze_error", provider="openai", error=str(e))

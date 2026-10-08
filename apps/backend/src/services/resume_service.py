@@ -53,6 +53,11 @@ Focus on extracting verifiable_claims — specific, measurable assertions that c
 Return ONLY valid JSON, no markdown fences or explanation."""
 
 
+# A full extraction of a detailed 5-job resume took 3,050 output tokens on
+# claude-sonnet-5 (2026-10-08); only generated tokens are billed.
+RESUME_EXTRACTION_MAX_TOKENS = 8000
+
+
 class ResumeService:
     """Orchestrates resume upload, text extraction, and LLM-powered structured extraction."""
 
@@ -84,12 +89,20 @@ class ResumeService:
         )
 
         config = LLMConfig(
-            max_tokens=2000,
+            max_tokens=RESUME_EXTRACTION_MAX_TOKENS,
             temperature=0.3,
             response_format="json",
         )
 
         result = await self.llm.analyze(context, config)
+        if result.truncated:
+            logger.error(
+                "resume_extraction_truncated", max_tokens=config.max_tokens, output_tokens=result.output_tokens
+            )
+            raise ValueError(
+                f"Resume extraction was cut off at the {config.max_tokens}-token output limit; "
+                "the resume is too long to extract in one pass"
+            )
 
         if result.parsed:
             logger.info(

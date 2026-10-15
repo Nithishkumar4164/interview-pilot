@@ -6,6 +6,8 @@ from src.services.peer_interviewer import (
     copilot_card,
     looks_like_a_question,
     monologue_card,
+    pace_alert,
+    pace_card,
     seconds_between,
     talk_share,
     talk_share_card,
@@ -57,3 +59,18 @@ def test_cards_have_one_shape_and_refuse_unknown_kinds() -> None:
     with pytest.raises(AssertionError):
         copilot_card("x", "weather", "t", "b")
     assert word_count("  a  b c ") == 3
+
+
+def test_pace_alerts_fire_once_per_threshold_highest_first() -> None:
+    assert pace_alert(30, 60, []) is None
+    assert pace_alert(60, 60, []) == "over"
+    assert pace_alert(61, 60, ["over"]) is None
+    assert pace_alert(95, 60, ["over"]) == "far_over"
+    assert pace_alert(95, 60, []) == "far_over"  # a long gap between ticks skips straight to the higher alert
+    assert pace_alert(10_000, 0, []) is None  # no budget, no alert
+    card = pace_card("s:q1:pace:over", "over", 125, 60, 2, 25, "q1", "2026-01-01T00:02:05+00:00")
+    assert card["title"] == "1 min over this question's 1 min budget"
+    assert card["body"].startswith("2 questions and 25 min of plan left.")
+    assert pace_card("s:q:pace:far_over", "far_over", 200, 60, 0, 0, "q", "")["body"].startswith(
+        "This is the last planned question."
+    )

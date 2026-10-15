@@ -64,6 +64,7 @@ from src.graphs.session_graph import (
     QuestionChanged,
     RuntimeHintGenerated,
     SummaryCompressed,
+    Tick,
     UtteranceIn,
     build_session_graph,
     initial_state,
@@ -87,6 +88,7 @@ logger = get_logger("langgraph_session")
 
 MIN_ANALYSIS_INTERVAL_S = 3.0
 INTERIM_THROTTLE_S = 0.3
+TICK_INTERVAL_S = 30.0  # peer interviewer: how often the clock runs through the graph
 
 
 def thread_id_for(session_id: str) -> str:
@@ -223,7 +225,10 @@ class LangGraphSessionPipeline:
         interim_throttle_s: float = INTERIM_THROTTLE_S,
         agentic: bool | None = None,
         peer: bool | None = None,
+        tick_interval_s: float = 0.0,
     ) -> None:
+        """``tick_interval_s`` > 0 runs a clock through the graph that often (peer interviewer pacing
+        and stuck checks); 0 means ticks come only from ``on_tick`` (replay, tests)."""
         self.session_id = session_id
         self._failover = failover_manager
         self._checkpointer = checkpointer
@@ -275,6 +280,10 @@ class LangGraphSessionPipeline:
         # Runtime hint numbering must be synchronous so concurrent requests get distinct numbers.
         self._hint_counts: dict[str, int] = {}
         self._last_runtime_hint: str | None = None
+
+        # The peer interviewer's clock
+        self._tick_interval_s = tick_interval_s if peer else 0.0
+        self._tick_task: asyncio.Task | None = None
 
     # ── Inbound events ────────────────────────────────────────────────
 
@@ -332,16 +341,37 @@ class LangGraphSessionPipeline:
                 idempotency_key=f"{self.session_id}:{event.id}:transcript",
             )
 
-    async def on_question_change(self, question_text: str, question_plan: dict, question_index: int = 0) -> None:
+    async def on_question_change(
+        self,
+        question_text: str,
+        question_plan: dict,
+        question_index: int = 0,
+        *,
+        at: str | None = None,
+        remaining_questions: int = 0,
+        remaining_minutes: float = 0.0,
+    ) -> None:
         logger.info(
             "question_change_started",
             session_id=self.session_id,
             question_index=question_index,
             question_text=question_text[:80],
         )
-        change = QuestionChanged(question_text, question_plan or {}, question_index)
+        change = QuestionChanged(
+            question_text,
+            question_plan or {},
+            question_index,
+            at=at or datetime.now(UTC).isoformat(),
+            remaining_questions=remaining_questions,
+            remaining_minutes=remaining_minutes,
+        )
         self._enqueue(change)
         self._code.enqueue(change)
+
+    def on_tick(self, at: str | None = None) -> None:
+        """The peer interviewer's clock: pacing and stuck checks at ``at`` (now by default)."""
+        if self._running:
+            self._enqueue(Tick(at or datetime.now(UTC).isoformat()))
 
     def set_active_hint(self, hint_text: str) -> None:
         self._enqueue(HintRevealed(hint_text))
@@ -490,7 +520,7 @@ class LangGraphSessionPipeline:
         with contextlib.suppress(Exception):
             await asyncio.wait_for(self.wait_idle(), timeout=5.0)
         self._cancel_pending_timer()
-        for task in (self._consumer, self._compress_task):
+        for task in (self._tick_task, self._consumer, self._compress_task):
             if task is not None and not task.done():
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
@@ -511,6 +541,14 @@ class LangGraphSessionPipeline:
     def _ensure_consumer(self) -> None:
         if self._consumer is None or self._consumer.done():
             self._consumer = asyncio.create_task(self._consume(), name=f"session-graph:{self.session_id}")
+        if self._tick_interval_s > 0 and self._running and (self._tick_task is None or self._tick_task.done()):
+            self._tick_task = asyncio.create_task(self._tick_loop(), name=f"session-ticks:{self.session_id}")
+
+    async def _tick_loop(self) -> None:
+        while self._running:
+            await asyncio.sleep(self._tick_interval_s)
+            if self._running:
+                self.on_tick()
 
     async def _ensure_loaded(self) -> None:
         self._ensure_consumer()
@@ -622,10 +660,7 @@ class LangGraphSessionPipeline:
             "analyze": target,
             "transport_events": self._transport_events,
             "memory_in_flight": self._compress_in_flight,
-            "code_context": {
-                "code": self._code.values.get("latest_code", ""),
-                "language": self._code.values.get("latest_language", ""),
-            },
+            "code_context": self._code_context(),
         }
         self._transport_events = 0
         self._running_graph = True
@@ -648,6 +683,18 @@ class LangGraphSessionPipeline:
                 self._start_compression(effect["upto"])
             elif effect["effect"] == EFFECT_COMPRESS_AFTER_IN_FLIGHT:
                 self._compress_after_in_flight = True
+
+    def _code_context(self) -> dict:
+        """What the session graph may know about the candidate's code (from CodeGraph's latest values)."""
+        values = self._code.values
+        last = values.get("last_result")
+        return {
+            "code": values.get("latest_code", ""),
+            "language": values.get("latest_language", ""),
+            "snapshot_id": values.get("latest_snapshot_id") or "",
+            "is_stuck": bool(last.is_stuck) if last is not None else False,
+            "bugs": list(getattr(last, "bugs", []) or []) if last is not None else [],
+        }
 
     async def _stream(self, graph_input: dict | None) -> list[dict]:
         """Run (or resume) the graph, performing streamed effects; returns the memory effects for after the run."""

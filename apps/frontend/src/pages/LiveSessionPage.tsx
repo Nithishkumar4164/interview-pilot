@@ -412,7 +412,10 @@ export function LiveSessionPage() {
       useAnalysisStore.getState().clearCodeRating();
       useSessionStore.getState().setContextReloading(true);
 
-      // Notify backend so analysis pipeline evaluates against the new question
+      // Notify backend so analysis pipeline evaluates against the new question.
+      // The rest of the plan (count and minutes) lets the copilot's time steward
+      // weigh an overrun against what is still to come.
+      const rest = allQ.slice(newIndex + 1);
       send({
         type: 'change_question',
         question_index: newIndex,
@@ -425,10 +428,13 @@ export function LiveSessionPage() {
           difficulty: q.difficulty,
           time_minutes: q.time_minutes,
           hints: q.hints,
+          alternates: q.alternates,
           brute_force_approach: q.brute_force_approach,
           optimal_approaches: q.optimal_approaches,
           common_pitfalls: q.common_pitfalls,
         },
+        remaining_questions: rest.length,
+        remaining_minutes: rest.reduce((sum, x) => sum + (x.time_minutes || 0), 0),
       });
 
     },

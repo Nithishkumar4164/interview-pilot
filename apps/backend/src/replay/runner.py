@@ -24,6 +24,7 @@ from src.replay.scenario import (
     HintRequestEvent,
     QuestionChangeEvent,
     Scenario,
+    TickEvent,
     TranscriptEvent,
 )
 from src.replay.scripted_provider import LLMCallRecorder, ScriptedProvider, behavior, recording
@@ -280,7 +281,12 @@ class ReplayRunner:
                         ev.question_text,
                         ev.question_plan,
                         ev.question_index,
+                        at=scenario_clock.isoformat(),
+                        remaining_questions=ev.remaining_questions,
+                        remaining_minutes=ev.remaining_minutes,
                     )
+                elif isinstance(ev, TickEvent):
+                    worker.on_tick(scenario_clock.isoformat())
                 elif isinstance(ev, TranscriptEvent):
                     transcript = TranscriptEventSchema(
                         id=str(uuid.uuid5(_REPLAY_ID_NAMESPACE, f"{session_id}:{index}")),

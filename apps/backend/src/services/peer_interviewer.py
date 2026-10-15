@@ -611,3 +611,55 @@ def interviewer_note(note_id: str, criterion: str, text: str, question_id: str, 
 
 def scorecard_payload(notes: list[dict[str, Any]], timestamp: str) -> dict[str, Any]:
     return {"notes": list(notes), "timestamp": timestamp}
+
+
+# ── Edge-case whisper ──────────────────────────────────────────────────────
+
+EDGE_CASES_SYSTEM_PROMPT = """Suggest edge cases for a live coding interview. Return JSON.
+
+You see the question and the candidate's current code. Propose two or three concrete inputs the interviewer can
+ask the candidate to trace by hand, chosen to expose the most likely bug or missing case in THIS code (empty
+input, one element, duplicates, negatives, overflow, ties, cycles, unicode...). Each must have a definite
+expected output. Do not explain the fix; the point is for the candidate to find it.
+
+Respond in JSON:
+{
+  "edge_cases": [
+    {"input": "<the input, literally>", "expected": "<the correct output>", "exposes": "<what in the code it tests, a few words>"}
+  ]
+}"""
+
+MAX_EDGE_CASES = 3
+
+
+async def suggest_edge_cases(
+    failover: FailoverManager, session_id: str, question: str, code: str, language: str, bugs: list[str]
+) -> list[dict[str, str]]:
+    """Inputs to trace by hand against the candidate's code, or []. LLM errors propagate."""
+    user_content = (
+        f"## Question\n{question or '(not given)'}"
+        + ("\n\n## Suspected Bugs (from a heuristic pass)\n- " + "\n- ".join(bugs) if bugs else "")
+        + f"\n\n## Candidate's Code ({language})\n```{language}\n{code}\n```"
+    )
+    result = await failover.analyze(
+        AnalysisContext(
+            system_prompt=EDGE_CASES_SYSTEM_PROMPT, user_content=user_content, task_type=TaskType.PEER_INTERVIEWER
+        ),
+        LLMConfig(max_tokens=400, temperature=0.2, response_format="json"),
+        session_id=session_id,
+    )
+    cases: list[dict[str, str]] = []
+    for item in _parsed(result.content, result.parsed).get("edge_cases") or []:
+        if not isinstance(item, dict):
+            continue
+        given = str(item.get("input", "")).strip()
+        if given:
+            cases.append(
+                {"input": given, "expected": str(item.get("expected", "")), "exposes": str(item.get("exposes", ""))}
+            )
+    return cases[:MAX_EDGE_CASES]
+
+
+def edge_case_line(case: dict[str, str]) -> str:
+    line = f"{case['input']} → {case['expected']}" if case.get("expected") else case["input"]
+    return f"{line} ({case['exposes']})" if case.get("exposes") else line

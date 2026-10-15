@@ -308,6 +308,8 @@ def classify(context: AnalysisContext) -> str:
         return "clarification"
     if sp.startswith("Coach the interviewer"):
         return "coaching"
+    if sp.startswith("Suggest edge cases"):
+        return "edge_cases"
     if context.task_type == TaskType.REAL_TIME_ANALYSIS:
         return "utterance_analysis"
     if context.task_type == TaskType.CODE_RATING:
@@ -478,6 +480,16 @@ def _coaching(h: int) -> dict:
     }
 
 
+def _edge_cases(h: int) -> dict:
+    n = 1 + h % 3
+    return {
+        "edge_cases": [
+            {"input": f"scripted-input-{h % 100:02d}-{i}", "expected": f"scripted-expected-{i}", "exposes": "scripted"}
+            for i in range(n)
+        ]
+    }
+
+
 def _probes(h: int) -> dict:
     n = h % 4  # 0..3 probes
     return {
@@ -528,6 +540,8 @@ def respond(kind: str, context: AnalysisContext) -> str:
         return json.dumps(_clarification(h))
     if kind == "coaching":
         return json.dumps(_coaching(h))
+    if kind == "edge_cases":
+        return json.dumps(_edge_cases(h))
     if kind == "code_inspection":
         return json.dumps(_code_inspection(h))
     if kind == "report_synthesis":

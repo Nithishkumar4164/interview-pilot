@@ -96,6 +96,17 @@ class CopilotCardUsedEvent(BaseModel):
     delay_ms: int = 0
 
 
+class ScorecardNoteEvent(BaseModel):
+    """The interviewer typed a scorecard note (``handle_scorecard_note``)."""
+
+    type: Literal["scorecard_note"] = "scorecard_note"
+    note_id: str
+    criterion: str
+    text: str
+    question_id: str = ""
+    delay_ms: int = 0
+
+
 class TickEvent(BaseModel):
     """The peer interviewer's clock (``on_tick`` at the scenario time)."""
 
@@ -112,6 +123,7 @@ ScenarioEvent = Annotated[
     | CodeUpdateEvent
     | CodeSnapshotEvent
     | CopilotCardUsedEvent
+    | ScorecardNoteEvent
     | TickEvent,
     Field(discriminator="type"),
 ]

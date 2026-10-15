@@ -42,6 +42,10 @@ class SessionPipeline(Protocol):
         """The interviewer acted on a copilot card (peer interviewer)."""
         ...
 
+    async def handle_scorecard_note(self, data: dict) -> None:
+        """The interviewer typed a scorecard note (peer interviewer)."""
+        ...
+
     async def on_code_snapshot(self, code: str, language: str, source: str) -> None:
         """A snapshot of the candidate's editor, from the code WebSocket."""
         ...

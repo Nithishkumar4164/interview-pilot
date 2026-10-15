@@ -409,6 +409,53 @@ async def test_difficulty_card_once_per_question(checkpointer, monkeypatch, qual
     assert cards[0]["items"] == ["Variant A"] and cards[1]["items"] == []
 
 
+# ── Live scorecard ─────────────────────────────────────────────────────────
+
+
+async def test_scorecard_collects_copilot_drafts_and_interviewer_notes(checkpointer, chosen) -> None:
+    from src.replay.scenario import QuestionChangeEvent, ScorecardNoteEvent
+
+    events = [
+        QuestionChangeEvent(question_text="Two sum", question_plan={"id": "q1", "category": "coding"}),
+        TranscriptEvent(
+            speaker_role=SpeakerRole.CANDIDATE, text="I would use a hash map to look up complements in one pass."
+        ),
+        ScorecardNoteEvent(note_id="n1", criterion="communication", text="  Very clear walkthrough ", delay_ms=1000),
+        ScorecardNoteEvent(note_id="n2", criterion="weather", text="ignored: unknown criterion", delay_ms=1000),
+        ScorecardNoteEvent(note_id="n1", criterion="communication", text="a repeated click", delay_ms=1000),
+    ]
+    scenario = Scenario(meta=ScenarioMeta(id=f"peer-{uuid.uuid4()}"), events=events)
+    pipelines: list[LangGraphSessionPipeline] = []
+
+    def factory(session_id, fm, timing: PipelineTiming):
+        pipelines.append(LangGraphSessionPipeline(session_id, fm, checkpointer, min_analysis_interval_s=0, peer=True))
+        return pipelines[-1]
+
+    try:
+        report = await ReplayRunner(scenario, llm_mode="scripted", pipeline_factory=factory).run()
+        assert report.error is None and len(chosen) == 1
+        snapshots = [e.payload["notes"] for e in report.events if e.method == "send_scorecard"]
+        assert [len(n) for n in snapshots][-1] == len(snapshots[0]) + 1  # the analysis' note(s), then one typed note
+        notes = pipelines[0].report_snapshot()["scorecard_notes"]
+        assert notes == snapshots[-1]
+        draft, *_, typed = notes
+        assert draft["criterion"] == "problem_solving" and draft["source"] == "copilot" and draft["quality"] >= 1
+        assert draft["quote"].startswith("I would use a hash map") and draft["question_id"] == "q1"
+        assert typed == {
+            "id": "n1",
+            "criterion": "communication",
+            "quote": "",
+            "note": "Very clear walkthrough",
+            "quality": None,
+            "question_id": "q1",
+            "utterance_id": "",
+            "source": "interviewer",
+            "at": "2026-01-01T00:00:01+00:00",
+        }
+    finally:
+        await checkpointer.delete_threads(thread_id_for(scenario.meta.id), code_thread_id(scenario.meta.id))
+
+
 # ── Cards the interviewer acted on ─────────────────────────────────────────
 
 

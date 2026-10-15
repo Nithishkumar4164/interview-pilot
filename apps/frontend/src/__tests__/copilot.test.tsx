@@ -122,3 +122,32 @@ describe('rubric coverage', () => {
     expect(screen.getByLabelText('Rubric coverage').textContent).toContain('Q3 covers it: Question c');
   });
 });
+
+import { scorecardFromPayload } from '@/stores/copilot-store';
+
+describe('live scorecard', () => {
+  beforeEach(() => useCopilotStore.getState().clear());
+
+  it('maps notes and groups them by criterion with the quote', () => {
+    const notes = scorecardFromPayload({
+      notes: [
+        { id: 'u1:note', criterion: 'problem_solving', quote: 'I would sort first', note: 'Reasonable start', quality: 3, source: 'copilot', at: 't' },
+        { id: 'n1', criterion: 'behavioral', note: 'Owned the mistake', source: 'interviewer', at: 't' },
+        { criterion: 'bad' },
+      ],
+    });
+    expect(notes?.map((n) => n.id)).toEqual(['u1:note', 'n1']);
+    useCopilotStore.getState().setScorecard(notes!);
+    const onAdd = vi.fn();
+    render(<CopilotPanel onUseCard={vi.fn()} onAddNote={onAdd} />);
+    fireEvent.click(screen.getByRole('button', { name: /Scorecard/ }));
+    const card = screen.getByLabelText('Scorecard');
+    expect(card.textContent).toContain('Reasonable start (3/5)');
+    expect(card.textContent).toContain('“I would sort first”');
+    expect(card.textContent).toContain('you: Owned the mistake');
+    fireEvent.change(screen.getByLabelText('Note criterion'), { target: { value: 'communication' } });
+    fireEvent.change(screen.getByLabelText('Note text'), { target: { value: '  Clear walkthrough ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    expect(onAdd).toHaveBeenCalledWith('communication', 'Clear walkthrough');
+  });
+});

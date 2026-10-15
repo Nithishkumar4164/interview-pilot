@@ -31,6 +31,7 @@ consumer task, so exactly one graph run per session is in flight:
 import asyncio
 import contextlib
 import time
+import uuid
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -63,6 +64,7 @@ from src.graphs.session_graph import (
     IngressEvent,
     QuestionChanged,
     RuntimeHintGenerated,
+    ScorecardNoteAdded,
     SummaryCompressed,
     Tick,
     UtteranceIn,
@@ -395,6 +397,21 @@ class LangGraphSessionPipeline:
                 card_id=card_id,
                 kind=str(data.get("kind", "")),
                 text=str(data.get("text", "")),
+                question_id=str(data.get("question_id", "")),
+                at=str(data.get("at") or datetime.now(UTC).isoformat()),
+            )
+        )
+
+    async def handle_scorecard_note(self, data: dict) -> None:
+        """The interviewer typed a scorecard note (peer interviewer)."""
+        text = str(data.get("text", "")).strip()
+        if not text:
+            return
+        self._enqueue(
+            ScorecardNoteAdded(
+                note_id=str(data.get("id") or uuid.uuid4()),
+                criterion=str(data.get("criterion", "")),
+                text=text,
                 question_id=str(data.get("question_id", "")),
                 at=str(data.get("at") or datetime.now(UTC).isoformat()),
             )

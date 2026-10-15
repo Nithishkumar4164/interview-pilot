@@ -4480,3 +4480,79 @@ ul, ol {
   font-size: 0.8rem;
   color: var(--color-text-secondary);
 }
+
+.scorecard__toggle {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.scorecard__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 0.8rem;
+}
+
+.scorecard__group h4 {
+  margin: 0 0 var(--space-1);
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.scorecard__group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.scorecard__note--interviewer .scorecard__text {
+  color: var(--color-text);
+}
+
+.scorecard__source,
+.scorecard__quality {
+  color: var(--color-text-muted);
+}
+
+.scorecard__quote {
+  margin: 2px 0 0;
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.scorecard__add {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.scorecard__add select,
+.scorecard__add input {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 6px);
+  padding: 2px 6px;
+  font-size: 0.8rem;
+  min-width: 0;
+}
+
+.scorecard__add input {
+  flex: 1;
+}

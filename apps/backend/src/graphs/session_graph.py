@@ -62,7 +62,13 @@ from src.services.memory_service import (
     format_utterances,
     should_extract_facts,
 )
-from src.services.peer_interviewer import copilot_card, suggest_probes
+from src.services.peer_interviewer import (
+    copilot_card,
+    draft_clarification,
+    looks_like_a_question,
+    suggest_probes,
+    verify_claim,
+)
 from src.services.runtime_hint_service import assemble_hint_context, generate_runtime_hint, resolve_directness
 from src.utils.logging import get_logger
 
@@ -307,6 +313,17 @@ class ProbeTask(TypedDict):
     question_plan: dict
     context_text: str
     analysis: EnhancedAnalysisResult | None
+    speaker: str
+    text: str
+
+
+class PeerUtteranceTask(TypedDict):
+    """A peer action about one utterance (claim check, clarification)."""
+
+    utterance_id: str
+    question_id: str
+    question_plan: dict
+    context_text: str
     speaker: str
     text: str
 
@@ -676,24 +693,90 @@ def build_session_graph(
         """The peer actions to run for this analysis: chosen by it, or due on the evidence it produced."""
         sends: list[Send] = []
         dims = result.dimensions
+        context_text = peer_context(state)
+        task = PeerUtteranceTask(
+            utterance_id=target.id,
+            question_id=state.get("active_question_id") or "",
+            question_plan=state.get("question_plan", {}),
+            context_text=context_text,
+            speaker=target.speaker,
+            text=target.text,
+        )
         # A probe is due when the analysis asked for one, or when it found gaps worth asking about.
         gaps = bool(dims and dims.depth_completeness.key_points_missed)
         if "suggest_probe" in chosen or gaps:
-            sends.append(
-                Send(
-                    "suggest_probes",
-                    ProbeTask(
-                        utterance_id=target.id,
-                        question_id=state.get("active_question_id") or "",
-                        question_plan=state.get("question_plan", {}),
-                        context_text=peer_context(state),
-                        analysis=result,
-                        speaker=target.speaker,
-                        text=target.text,
-                    ),
-                )
-            )
+            sends.append(Send("suggest_probes", ProbeTask(**task, analysis=result)))
+        if "verify_claim" in chosen:
+            sends.append(Send("verify_claim", task))
+        # The candidate asking something is checked even if the analysis did not flag it.
+        if "clarify" in chosen or looks_like_a_question(target.text):
+            sends.append(Send("draft_clarification", task))
         return sends
+
+    async def verify_claim_node(state: PeerUtteranceTask) -> dict:
+        try:
+            found = await asyncio.wait_for(
+                retry_transient(
+                    lambda: verify_claim(
+                        failover,
+                        session_id,
+                        state["context_text"],
+                        state["question_plan"] or None,
+                        state["speaker"],
+                        state["text"],
+                    )
+                ),
+                ACTION_TIMEOUT_S,
+            )
+        except Exception as e:
+            logger.warning("peer_action_failed", action="verify_claim", session_id=session_id, error=str(e))
+            return {}
+        if found is None:
+            return {}
+        emit_card(
+            copilot_card(
+                f"{session_id}:{state['utterance_id']}:claim_check",
+                "claim_check",
+                f"Claim looks {found['verdict']}: {found['claim']}",
+                found["correction"],
+                probe=found["self_correct_probe"],
+                priority="urgent",
+                question_id=state["question_id"],
+            )
+        )
+        return {}
+
+    async def draft_clarification_node(state: PeerUtteranceTask) -> dict:
+        try:
+            found = await asyncio.wait_for(
+                retry_transient(
+                    lambda: draft_clarification(
+                        failover,
+                        session_id,
+                        state["context_text"],
+                        state["question_plan"] or None,
+                        state["speaker"],
+                        state["text"],
+                    )
+                ),
+                ACTION_TIMEOUT_S,
+            )
+        except Exception as e:
+            logger.warning("peer_action_failed", action="clarify", session_id=session_id, error=str(e))
+            return {}
+        if found is None:
+            return {}
+        emit_card(
+            copilot_card(
+                f"{session_id}:{state['utterance_id']}:clarification",
+                "clarification",
+                "Candidate needs a clarification",
+                found["what_is_unclear"],
+                probe=found["reply"],
+                question_id=state["question_id"],
+            )
+        )
+        return {}
 
     async def suggest_probes_node(state: ProbeTask) -> dict:
         try:
@@ -853,7 +936,9 @@ def build_session_graph(
         graph.add_node("inspect_code", inspect_code, input_schema=InspectTask)
         if peer:
             graph.add_node("suggest_probes", suggest_probes_node, input_schema=ProbeTask)
-            actions += ["suggest_probes"]
+            graph.add_node("verify_claim", verify_claim_node, input_schema=PeerUtteranceTask)
+            graph.add_node("draft_clarification", draft_clarification_node, input_schema=PeerUtteranceTask)
+            actions += ["suggest_probes", "verify_claim", "draft_clarification"]
         graph.add_node("finish", finish)
         graph.add_conditional_edges("merge_results", plan_actions, [*actions, END])
         for action in actions:

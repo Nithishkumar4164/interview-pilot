@@ -8,6 +8,7 @@ analysis found gaps, nothing when the flag is off, and a failing follow-up
 never fails the run.
 """
 
+import json
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -166,6 +167,65 @@ async def test_a_failing_probe_does_not_fail_the_run(checkpointer, chosen, monke
     assert report.error is None
     assert not _cards(report, "probe")
     assert report.final_state["analyses_run"] == len(chosen) > 0
+
+
+# ── Claim checks and clarifications ────────────────────────────────────────
+
+
+@pytest.mark.parametrize("scenario", ["04_long_interview_memory.scenario.json", "07_live_coding.scenario.json"])
+async def test_claims_are_verified_only_when_chosen_and_flagged_only_when_wrong(checkpointer, chosen, scenario):
+    report = await _replay(checkpointer, scenario)
+    assert report.error is None
+    due = [text for text, actions, _ in chosen if "verify_claim" in actions]
+    assert due, "scenario exercises no claim check"
+    calls = _calls(report, "claim_check")
+    assert [c["user_content"].rsplit("\n", 1)[-1] for c in calls] == [f"[candidate]: {t}" for t in due]
+    # Exactly the checks the scripted LLM judged wrong (recomputed from the recorded prompt) become cards.
+    from src.llm.interface import AnalysisContext, TaskType
+    from src.replay.scripted_provider import respond
+    from src.services.peer_interviewer import CLAIM_SYSTEM_PROMPT
+
+    wrong = [
+        c
+        for c in calls
+        if json.loads(
+            respond(
+                "claim_check",
+                AnalysisContext(
+                    system_prompt=CLAIM_SYSTEM_PROMPT,
+                    user_content=c["user_content"],
+                    task_type=TaskType.PEER_INTERVIEWER,
+                ),
+            )
+        )["verdict"]
+        in ("incorrect", "misleading")
+    ]
+    cards = _cards(report, "claim_check")
+    assert len(cards) == len(wrong)
+    for card in cards:
+        assert card["priority"] == "urgent" and card["probe"].startswith("scripted-self-correct-")
+        assert card["title"].startswith(("Claim looks incorrect", "Claim looks misleading"))
+
+
+async def test_clarification_runs_when_chosen_or_when_the_candidate_asks(checkpointer, chosen) -> None:
+    asked = "Can I assume the input array fits in memory, or should I handle a stream of values here?"
+    events = [
+        TranscriptEvent(
+            speaker_role=SpeakerRole.INTERVIEWER, text="Find two numbers in the array that sum to a target."
+        ),
+        TranscriptEvent(speaker_role=SpeakerRole.CANDIDATE, text=asked),
+        TranscriptEvent(
+            speaker_role=SpeakerRole.CANDIDATE, text="I will keep a hash map from value to index and scan once."
+        ),
+    ]
+    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events))
+    assert report.error is None
+    due = [text for text, actions, _ in chosen if "clarify" in actions or "?" in text]
+    assert asked in due
+    calls = _calls(report, "clarification")
+    assert [c["user_content"].rsplit("\n", 1)[-1] for c in calls] == [f"[candidate]: {t}" for t in due]
+    for card in _cards(report, "clarification"):
+        assert card["probe"].startswith("scripted-clarification-") and card["kind"] == "clarification"
 
 
 # ── Cards the interviewer acted on ─────────────────────────────────────────

@@ -148,3 +148,108 @@ async def suggest_probes(
                 {"question": question, "targets": str(item.get("targets", "")), "why": str(item.get("why", ""))}
             )
     return probes[:MAX_PROBES]
+
+
+# ── Claim verification ─────────────────────────────────────────────────────
+
+CLAIM_SYSTEM_PROMPT = """Verify a technical claim made in a live interview. Return JSON.
+
+The candidate just stated something technical as fact: a complexity, a guarantee, how an algorithm, data
+structure, protocol or tool behaves. Decide whether it is right. Be strict about what was actually claimed and
+generous about imprecise wording. If the statement is an opinion, a plan, or cannot be checked, say so.
+
+Respond in JSON:
+{
+  "claim": "<the claim, in one sentence>",
+  "verdict": "<correct|incorrect|misleading|unverifiable>",
+  "confidence": <0.0-1.0>,
+  "correction": "<what is actually true, one or two sentences; empty if correct>",
+  "self_correct_probe": "<a question the interviewer can ask so the candidate finds the error themselves; empty if correct>"
+}"""
+
+CLAIM_MIN_CONFIDENCE = 0.6
+
+
+async def verify_claim(
+    failover: FailoverManager,
+    session_id: str,
+    context_text: str,
+    question_plan: dict | None,
+    speaker: str,
+    text: str,
+) -> dict[str, Any] | None:
+    """A wrong or misleading claim with its correction, or None. LLM errors propagate."""
+    user_content = (
+        f"{context_text}{build_question_plan_context(question_plan)}\n\n## Statement To Verify\n[{speaker}]: {text}"
+    )
+    result = await failover.analyze(
+        AnalysisContext(
+            system_prompt=CLAIM_SYSTEM_PROMPT, user_content=user_content, task_type=TaskType.PEER_INTERVIEWER
+        ),
+        LLMConfig(max_tokens=400, temperature=0.1, response_format="json"),
+        session_id=session_id,
+    )
+    data = _parsed(result.content, result.parsed)
+    verdict = str(data.get("verdict", "")).lower()
+    try:
+        confidence = float(data.get("confidence", 0) or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    if verdict not in ("incorrect", "misleading") or confidence < CLAIM_MIN_CONFIDENCE:
+        return None
+    return {
+        "claim": str(data.get("claim", "")) or text[:160],
+        "verdict": verdict,
+        "confidence": confidence,
+        "correction": str(data.get("correction", "")),
+        "self_correct_probe": str(data.get("self_correct_probe", "")),
+    }
+
+
+# ── Clarification watch ────────────────────────────────────────────────────
+
+CLARIFY_SYSTEM_PROMPT = """Draft a clarification for a live interview. Return JSON.
+
+Decide whether the candidate needs something cleared up right now: they asked a question the interviewer has
+not answered, or they seem to have misread the problem (wrong input assumptions, solving a different task).
+If so, draft the reply the interviewer can give. The reply clarifies the problem statement only; it must not
+hint at the solution.
+
+Respond in JSON:
+{
+  "needs_clarification": true/false,
+  "what_is_unclear": "<the open question or misunderstanding, one sentence; empty if none>",
+  "reply": "<what the interviewer can say, in their voice; empty if none>"
+}"""
+
+
+async def draft_clarification(
+    failover: FailoverManager,
+    session_id: str,
+    context_text: str,
+    question_plan: dict | None,
+    speaker: str,
+    text: str,
+) -> dict[str, str] | None:
+    """{"what_is_unclear", "reply"} when the candidate needs a clarification, else None. LLM errors propagate."""
+    user_content = (
+        f"{context_text}{build_question_plan_context(question_plan)}\n\n## Latest Utterance\n[{speaker}]: {text}"
+    )
+    result = await failover.analyze(
+        AnalysisContext(
+            system_prompt=CLARIFY_SYSTEM_PROMPT, user_content=user_content, task_type=TaskType.PEER_INTERVIEWER
+        ),
+        LLMConfig(max_tokens=300, temperature=0.2, response_format="json"),
+        session_id=session_id,
+    )
+    data = _parsed(result.content, result.parsed)
+    reply = str(data.get("reply", "")).strip()
+    if not data.get("needs_clarification") or not reply:
+        return None
+    return {"what_is_unclear": str(data.get("what_is_unclear", "")), "reply": reply}
+
+
+def looks_like_a_question(text: str) -> bool:
+    """A candidate utterance that is asking the interviewer something (cheap trigger for the clarification check)."""
+    stripped = text.strip()
+    return "?" in stripped or stripped.lower().startswith(("can i assume", "should i", "do you want", "is it okay if"))

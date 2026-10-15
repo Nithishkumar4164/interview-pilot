@@ -117,6 +117,50 @@ class ConnectionManager:
             },
         )
 
+    async def send_copilot_card(self, session_id: str, card: dict) -> None:
+        """A whisper from the peer interviewer (probe, claim check, coaching, pacing, ...)."""
+        await self.broadcast(
+            session_id,
+            {
+                "type": "copilot_card",
+                "session_id": session_id,
+                "payload": card,
+            },
+        )
+
+    async def send_copilot_coverage(self, session_id: str, coverage: dict) -> None:
+        """Evidence gathered so far per report criterion (peer interviewer)."""
+        await self.broadcast(
+            session_id,
+            {
+                "type": "copilot_coverage",
+                "session_id": session_id,
+                "payload": coverage,
+            },
+        )
+
+    async def send_scorecard(self, session_id: str, scorecard: dict) -> None:
+        """The live scorecard draft: notes with quotes per criterion (peer interviewer)."""
+        await self.broadcast(
+            session_id,
+            {
+                "type": "scorecard",
+                "session_id": session_id,
+                "payload": scorecard,
+            },
+        )
+
+    async def send_copilot_reply(self, session_id: str, reply: dict) -> None:
+        """The copilot's answer to a question the interviewer typed (peer interviewer)."""
+        await self.broadcast(
+            session_id,
+            {
+                "type": "copilot_reply",
+                "session_id": session_id,
+                "payload": reply,
+            },
+        )
+
     async def send_analysis(self, session_id: str, analysis: dict) -> None:
         """Send an analysis event to all dashboard connections."""
         await self.broadcast(

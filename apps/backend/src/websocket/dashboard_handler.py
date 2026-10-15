@@ -242,6 +242,15 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                         if worker:
                             worker.set_active_hint(text)
 
+                elif msg_type == "use_copilot_card":
+                    # The interviewer asked the suggested probe / relayed the card to the candidate.
+                    worker = _active_workers.get(session_id)
+                    if worker:
+                        try:
+                            await worker.handle_copilot_card_used(message)
+                        except Exception as e:
+                            logger.error("copilot_card_used_error", session_id=session_id, error=str(e))
+
                 elif msg_type == "change_question":
                     worker = _active_workers.get(session_id)
                     if worker:

@@ -115,6 +115,20 @@ MOCK_RESPONSES: dict[TaskType, str] = {
             ]
         }
     ),
+    TaskType.PEER_INTERVIEWER: json.dumps(
+        {
+            "probes": [{"question": "What happens when the array is empty?", "targets": "edge cases", "why": "mock"}],
+            "verdict": "correct",
+            "confidence": 0.9,
+            "correction": "",
+            "self_correct_probe": "",
+            "needs_clarification": False,
+            "reply": "",
+            "edge_cases": [{"input": "[]", "expected": "[]", "exposes": "empty input handling"}],
+        }
+    ),
+    TaskType.INTERVIEWER_COACHING: json.dumps({"issues": []}),
+    TaskType.COPILOT_QUERY: json.dumps({"answer": "Mock copilot answer.", "citations": []}),
 }
 
 

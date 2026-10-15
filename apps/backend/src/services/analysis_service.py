@@ -509,24 +509,59 @@ def average_quality(qualities: Iterable[tuple[int, bool]]) -> float:
     return sum(scored) / len(scored)
 
 
-# ── Agentic routing (session graph, AGENTIC_ROUTING_ENABLED) ──
+# ── Follow-up actions the analysis may choose (agentic routing, peer interviewer) ──
 
 AGENT_ACTIONS = ("check_contradiction", "draft_hint", "inspect_code")
 
-AGENT_ACTIONS_INSTRUCTION = """
+# Peer interviewer (PEER_INTERVIEWER_ENABLED): what the copilot may do for the interviewer.
+PEER_ACTIONS = ("suggest_probe", "verify_claim", "clarify", "edge_cases")
 
-Also include "next_actions": a list (often empty) of follow-ups worth running now, chosen only from:
-  "check_contradiction" - the response makes a claim about experience, skills, numbers or past work that may conflict with something the candidate said earlier;
-  "draft_hint" - the candidate is stuck or heading the wrong way, and a concrete hint the interviewer could give would help now;
-  "inspect_code" - the candidate is describing code they have written, which should be checked against their actual code.
-Return "next_actions": [] when none apply."""
+ACTION_DESCRIPTIONS: dict[str, str] = {
+    "check_contradiction": (
+        "the response makes a claim about experience, skills, numbers or past work that may conflict "
+        "with something the candidate said earlier"
+    ),
+    "draft_hint": (
+        "the candidate is stuck or heading the wrong way, and a concrete hint the interviewer could give would help now"
+    ),
+    "inspect_code": "the candidate is describing code they have written, which should be checked against their actual code",
+    "suggest_probe": (
+        "the answer leaves an important gap, makes a claim worth digging into, or a sharper follow-up question "
+        "would reveal more than moving on"
+    ),
+    "verify_claim": (
+        "the response states a technical fact (a complexity, a guarantee, how a tool or algorithm behaves) "
+        "that may be wrong and the interviewer should know before relying on it"
+    ),
+    "clarify": (
+        "the candidate asked something that has not been answered, or seems to have misunderstood "
+        "the problem statement, so a clarifying reply from the interviewer would help now"
+    ),
+    "edge_cases": (
+        "the candidate says their code is done, correct or ready to test, so inputs to trace by hand "
+        "would help the interviewer check it now"
+    ),
+}
 
 
-def parse_next_actions(data: dict | None) -> list[str]:
-    """The follow-ups an agentic analysis chose, in canonical order, unknown ones dropped."""
+def actions_instruction(actions: tuple[str, ...]) -> str:
+    """The prompt addendum asking the analysis to choose among ``actions``."""
+    lines = ";\n".join(f'  "{a}" - {ACTION_DESCRIPTIONS[a]}' for a in actions)
+    return (
+        '\n\nAlso include "next_actions": a list (often empty) of follow-ups worth running now, chosen only from:\n'
+        f"{lines}.\n"
+        'Return "next_actions": [] when none apply.'
+    )
+
+
+AGENT_ACTIONS_INSTRUCTION = actions_instruction(AGENT_ACTIONS)
+
+
+def parse_next_actions(data: dict | None, actions: tuple[str, ...] = AGENT_ACTIONS) -> list[str]:
+    """The follow-ups an analysis chose, in canonical order, unknown or unoffered ones dropped."""
     raw = (data or {}).get("next_actions") or []
     chosen = {a for a in raw if isinstance(a, str)}
-    return [a for a in AGENT_ACTIONS if a in chosen]
+    return [a for a in actions if a in chosen]
 
 
 async def analyze_utterance_with_actions(
@@ -537,9 +572,10 @@ async def analyze_utterance_with_actions(
     active_hint: str,
     speaker: str,
     text: str,
+    actions: tuple[str, ...] = AGENT_ACTIONS,
 ) -> tuple[EnhancedAnalysisResult, list[str]]:
-    """``analyze_utterance`` whose prompt also asks the model to choose follow-up actions."""
+    """``analyze_utterance`` whose prompt also asks the model to choose follow-up actions from ``actions``."""
     result, data = await _analyze(
-        failover, session_id, context_text, question_plan, active_hint, speaker, text, AGENT_ACTIONS_INSTRUCTION
+        failover, session_id, context_text, question_plan, active_hint, speaker, text, actions_instruction(actions)
     )
-    return result, parse_next_actions(data)
+    return result, parse_next_actions(data, actions)

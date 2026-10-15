@@ -83,6 +83,17 @@ class CodeSnapshotEvent(BaseModel):
     delay_ms: int = 0
 
 
+class CopilotCardUsedEvent(BaseModel):
+    """The interviewer acted on a copilot card (dashboard ``use_copilot_card`` -> ``handle_copilot_card_used``)."""
+
+    type: Literal["copilot_card_used"] = "copilot_card_used"
+    card_id: str
+    kind: str = "probe"
+    text: str = ""
+    question_id: str = ""
+    delay_ms: int = 0
+
+
 ScenarioEvent = Annotated[
     TranscriptEvent
     | QuestionChangeEvent
@@ -90,7 +101,8 @@ ScenarioEvent = Annotated[
     | HintAckEvent
     | ActiveHintEvent
     | CodeUpdateEvent
-    | CodeSnapshotEvent,
+    | CodeSnapshotEvent
+    | CopilotCardUsedEvent,
     Field(discriminator="type"),
 ]
 

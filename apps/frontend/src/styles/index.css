@@ -4301,3 +4301,143 @@ ul, ol {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+ * COPILOT PANEL (peer interviewer)
+ * ══════════════════════════════════════════════════════════════════════ */
+.copilot-panel {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-height: 420px;
+}
+
+.copilot-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.copilot-panel__header h3 {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.copilot-panel__header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.copilot-panel__count {
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0 var(--space-2);
+  font-size: 0.75rem;
+}
+
+.copilot-panel__mutes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.copilot-panel__mute {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  cursor: pointer;
+}
+
+.copilot-panel__empty {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.copilot-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.copilot-card {
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-bg-secondary);
+  border-radius: 0 var(--radius-md, 8px) var(--radius-md, 8px) 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.copilot-card--urgent {
+  border-left-color: var(--color-danger);
+}
+
+.copilot-card--info {
+  border-left-color: var(--color-text-muted);
+}
+
+.copilot-card--coaching {
+  border-left-color: var(--color-warning);
+}
+
+.copilot-card--pace,
+.copilot-card--stuck {
+  border-left-color: var(--color-info);
+}
+
+.copilot-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.copilot-card__kind {
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.copilot-card__source {
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+}
+
+.copilot-card__title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.copilot-card__body {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.copilot-card__items {
+  margin: 0;
+  padding-left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.copilot-card__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}

@@ -68,6 +68,7 @@ async def test_report_snapshot_reflects_the_session(checkpointer: Checkpointer) 
         "contradictions",
         "code_progress",
         "detected_approach",
+        "copilot_cards_used",
     }
     assert len(snap["analysis_results"]) == report.summary.analyses
     assert len(snap["contradictions"]) == report.summary.contradictions >= 1

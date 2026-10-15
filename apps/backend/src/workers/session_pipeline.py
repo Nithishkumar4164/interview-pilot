@@ -25,6 +25,10 @@ class SessionPipeline(Protocol):
 
     async def handle_runtime_hint_ack(self, data: dict) -> None: ...
 
+    async def handle_copilot_card_used(self, data: dict) -> None:
+        """The interviewer acted on a copilot card (peer interviewer)."""
+        ...
+
     async def on_code_snapshot(self, code: str, language: str, source: str) -> None:
         """A snapshot of the candidate's editor, from the code WebSocket."""
         ...

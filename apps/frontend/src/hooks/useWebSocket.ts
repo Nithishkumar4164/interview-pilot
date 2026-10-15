@@ -14,6 +14,7 @@ import { useAnalysisStore, mapDimensions, type CodeRatingResult } from '@/stores
 import { useHintStore, type RuntimeHintEntry } from '@/stores/hint-store';
 import { useOfflineStore } from '@/stores/offline-store';
 import { useSessionStore } from '@/stores/session-store';
+import { useCopilotStore, cardFromPayload } from '@/stores/copilot-store';
 
 export function useWebSocket(sessionId: string | null) {
   const clientRef = useRef<DashboardWSClient | null>(null);
@@ -160,6 +161,12 @@ export function useWebSocket(sessionId: string | null) {
 
         case 'red_flag': {
           addRedFlags(flagsFromPayload(message.payload as Record<string, unknown>, message.timestamp));
+          break;
+        }
+
+        case 'copilot_card': {
+          const card = cardFromPayload(message.payload as Record<string, unknown>, message.timestamp);
+          if (card) useCopilotStore.getState().addCard(card);
           break;
         }
 

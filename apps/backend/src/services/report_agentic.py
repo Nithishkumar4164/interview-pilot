@@ -121,6 +121,7 @@ class EvidenceIndex:
     target_level: str
     duration_minutes: float
     questions: list[str] = field(default_factory=list)
+    notes: list[dict[str, Any]] = field(default_factory=list)  # live scorecard (peer interviewer)
 
     def entry(self, entry_id: str) -> dict[str, Any] | None:
         m = re.fullmatch(r"T(\d+)", entry_id.strip())
@@ -143,6 +144,11 @@ class EvidenceIndex:
             parts.append(f"Summary: {self.summary}")
         if self.facts_text:
             parts.append(f"Facts: {self.facts_text}")
+        own = sum(1 for n in self.notes if n.get("source") == "interviewer")
+        if self.notes:
+            parts.append(
+                f"Scorecard notes: {len(self.notes)} ({own} written by the interviewer); see get_scorecard_notes"
+            )
         return "\n".join(parts)
 
 
@@ -202,6 +208,7 @@ def build_evidence_index(report_input: ReportInput) -> EvidenceIndex:
         target_level=report_input.target_level,
         duration_minutes=report_input.duration_minutes,
         questions=_plan_questions(report_input.plan_data),
+        notes=list(report_input.scorecard_notes or []),
     )
 
 
@@ -251,6 +258,21 @@ EVIDENCE_TOOLS = [
 ]
 
 
+# Offered only when the session has notes, so sessions without the peer interviewer see the same tools as before.
+NOTES_TOOL = ToolSpec(
+    name="get_scorecard_notes",
+    description=(
+        "The live scorecard: notes per criterion with the quoted transcript text they refer to, drafted by the "
+        "copilot during the interview or written by the interviewer (source=interviewer)."
+    ),
+    input_schema={"type": "object", "properties": {"criterion": {"type": "string"}}},
+)
+
+
+def tools_for(index: EvidenceIndex) -> list[ToolSpec]:
+    return [*EVIDENCE_TOOLS, NOTES_TOOL] if index.notes else list(EVIDENCE_TOOLS)
+
+
 def _fmt(entry: dict[str, Any]) -> str:
     return f"{entry['id']} [{entry['elapsed']}] {entry['speaker']}: {entry['text']}"
 
@@ -288,6 +310,11 @@ def make_executor(index: EvidenceIndex):
             return json.dumps(index.contradictions) if index.contradictions else "No contradictions detected."
         if call.name == "get_hints":
             return json.dumps({"hints": index.hints, "metrics": index.hint_metrics}, default=str)
+        if call.name == "get_scorecard_notes":
+            criterion_filter = str(args.get("criterion", "") or "")
+            notes = [n for n in index.notes if not criterion_filter or n.get("criterion") == criterion_filter]
+            keep = ("criterion", "note", "quote", "quality", "source", "question_id")
+            return json.dumps([{k: n.get(k) for k in keep} for n in notes[-40:]]) if notes else "No scorecard notes."
         return f"Unknown tool {call.name!r}."
 
     return execute
@@ -414,7 +441,7 @@ async def score_criterion(
         TaskType.REPORT_CRITERION,
         CRITERION_SYSTEM_PROMPT,
         user,
-        EVIDENCE_TOOLS,
+        tools_for(index),
         execute,
         CRITERION_CONFIG,
         session_id=session_id,
@@ -437,7 +464,7 @@ async def score_criterion(
             TaskType.REPORT_CRITERION,
             CRITERION_SYSTEM_PROMPT,
             repair_messages,
-            EVIDENCE_TOOLS,
+            tools_for(index),
             CRITERION_CONFIG,
             session_id=session_id,
             tool_choice="none",

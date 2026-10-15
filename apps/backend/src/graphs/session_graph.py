@@ -66,6 +66,7 @@ from src.services.peer_interviewer import (
     COACHING_MIN_GAP_S,
     COACHING_MIN_WORDS,
     MONOLOGUE_WORDS,
+    SCORECARD_SIZE,
     STUCK_QUIET_S,
     TALK_CARD_MIN_GAP_S,
     TALK_SHARE_MIN_WORDS,
@@ -78,10 +79,13 @@ from src.services.peer_interviewer import (
     difficulty_card,
     difficulty_signal,
     draft_clarification,
+    interviewer_note,
     looks_like_a_question,
     monologue_card,
     pace_alert,
     pace_card,
+    scorecard_notes_from_analysis,
+    scorecard_payload,
     seconds_between,
     stuck_card,
     suggest_probes,
@@ -167,6 +171,17 @@ class CopilotCardUsed:
 
 
 @dataclass(frozen=True)
+class ScorecardNoteAdded:
+    """The interviewer typed a scorecard note (dashboard ``add_scorecard_note``)."""
+
+    note_id: str
+    criterion: str
+    text: str
+    question_id: str = ""
+    at: str = ""
+
+
+@dataclass(frozen=True)
 class Tick:
     """The clock (peer interviewer): pacing and stuck checks run against ``at`` even when nobody speaks."""
 
@@ -181,6 +196,7 @@ IngressEvent = (
     | RuntimeHintGenerated
     | SummaryCompressed
     | CopilotCardUsed
+    | ScorecardNoteAdded
     | Tick
 )
 
@@ -256,6 +272,7 @@ class SessionState(TypedDict, total=False):
     stuck_hint_due: bool  # per-run: this run's Tick found the candidate stuck
     coverage_counts: dict[str, int]  # evidence points per report criterion (rubric coverage map)
     difficulty_sent: list[str]  # difficulty cards already sent for the current question
+    scorecard: list[dict]  # live scorecard notes (copilot drafts and the interviewer's own), bounded
 
     # ── per-run scratch ──
     extracted: Annotated[dict[int, dict], _reset_or_merge]
@@ -305,6 +322,7 @@ def initial_state(session_id: str) -> dict[str, Any]:
         "stuck_hint_due": False,
         "coverage_counts": {},
         "difficulty_sent": [],
+        "scorecard": [],
         "analysis": None,
     }
 
@@ -462,6 +480,8 @@ def build_session_graph(
         stuck_hint_for = state.get("stuck_hint_for", "")
         stuck_hint_due = False
         difficulty_sent = list(state.get("difficulty_sent", []))
+        scorecard = list(state.get("scorecard", []))
+        scorecard_changed = False
         code_context = state.get("code_context") or {}
 
         for ev in state["events"]:
@@ -570,6 +590,14 @@ def build_session_graph(
                     )
                     stuck_hint_for = snapshot_id
                     stuck_hint_due = True
+            elif isinstance(ev, ScorecardNoteAdded) and peer:
+                note = interviewer_note(
+                    ev.note_id, ev.criterion, ev.text, ev.question_id or question["active_question_id"] or "", ev.at
+                )
+                if note is not None and all(n["id"] != note["id"] for n in scorecard):
+                    scorecard = [*scorecard, note][-SCORECARD_SIZE:]
+                    scorecard_changed = True
+                    emit(EFFECT_DASHBOARD, method="send_scorecard", payload=scorecard_payload(scorecard, ev.at))
             elif isinstance(ev, CopilotCardUsed):
                 if all(c["card_id"] != ev.card_id for c in cards_used):
                     cards_used = [
@@ -602,6 +630,7 @@ def build_session_graph(
             "stuck_hint_for": stuck_hint_for,
             "stuck_hint_due": stuck_hint_due,
             "difficulty_sent": difficulty_sent,
+            **({"scorecard": scorecard} if scorecard_changed else {}),
             "events_processed": state.get("events_processed", 0) + state.get("transport_events", 0),
             "extracted": None,
             "analysis": None,
@@ -805,6 +834,24 @@ def build_session_graph(
             ),
         )
         out: dict[str, Any] = {"coverage_counts": counts}
+        target = state.get("analyze")
+        notes = scorecard_notes_from_analysis(
+            result,
+            str(plan.get("category") or ""),
+            target.text if target else "",
+            state.get("active_question_id") or "",
+            target.id if target else "",
+        )
+        if notes:
+            known = {n["id"] for n in state.get("scorecard", [])}
+            fresh = [n for n in notes if n["id"] not in known]
+            if fresh:
+                out["scorecard"] = [*state.get("scorecard", []), *fresh][-SCORECARD_SIZE:]
+                emit(
+                    EFFECT_DASHBOARD,
+                    method="send_scorecard",
+                    payload=scorecard_payload(out["scorecard"], result.timestamp),
+                )
         key = difficulty_signal(update.get("recent_insights") or [])
         sent = list(state.get("difficulty_sent", []))
         if key is not None and key not in sent:
@@ -1254,6 +1301,7 @@ def report_snapshot(values: dict) -> dict:
             {"explanation": c.explanation, "confidence": c.confidence} for c in values["contradictions"]
         ],
         "copilot_cards_used": list(values.get("copilot_cards_used", [])),
+        "scorecard_notes": list(values.get("scorecard", [])),
     }
 
 

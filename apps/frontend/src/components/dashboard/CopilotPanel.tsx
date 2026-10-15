@@ -24,9 +24,10 @@ const RELAY_KINDS: ReadonlySet<CopilotCardKind> = new Set(['probe', 'clarificati
 
 interface CopilotPanelProps {
   onUseCard: (card: CopilotCard) => void;
+  onAddNote?: (criterion: string, text: string) => void;
 }
 
-export function CopilotPanel({ onUseCard }: CopilotPanelProps) {
+export function CopilotPanel({ onUseCard, onAddNote }: CopilotPanelProps) {
   const cards = useCopilotStore((s) => s.cards);
   const mutedKinds = useCopilotStore((s) => s.mutedKinds);
   const dismissCard = useCopilotStore((s) => s.dismissCard);
@@ -64,6 +65,7 @@ export function CopilotPanel({ onUseCard }: CopilotPanelProps) {
       )}
 
       <CoverageStrip />
+      <Scorecard onAddNote={onAddNote} />
 
       {visible.length === 0 ? (
         <p className="copilot-panel__empty">Listening. Suggestions appear here as the interview unfolds.</p>
@@ -167,6 +169,83 @@ function CoverageStrip() {
           No evidence yet for <strong>{CRITERION_LABELS[suggestion.gap] ?? suggestion.gap}</strong>. Q
           {suggestion.index + 1} covers it: {suggestion.text.length > 70 ? suggestion.text.slice(0, 70) + '…' : suggestion.text}
         </p>
+      )}
+    </div>
+  );
+}
+
+/** Notes per criterion with the quoted transcript text, plus a line for the interviewer's own notes. */
+function Scorecard({ onAddNote }: { onAddNote?: (criterion: string, text: string) => void }) {
+  const notes = useCopilotStore((s) => s.scorecard);
+  const [open, setOpen] = useState(false);
+  const [criterion, setCriterion] = useState('problem_solving');
+  const [text, setText] = useState('');
+
+  const byCriterion = useMemo(() => {
+    const groups = new Map<string, typeof notes>();
+    for (const n of notes) groups.set(n.criterion, [...(groups.get(n.criterion) ?? []), n]);
+    return [...groups.entries()];
+  }, [notes]);
+
+  const submit = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    onAddNote?.(criterion, trimmed);
+    setText('');
+  };
+
+  return (
+    <div className="scorecard" aria-label="Scorecard">
+      <button className="scorecard__toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        Scorecard {notes.length > 0 && <span className="copilot-panel__count">{notes.length}</span>}
+      </button>
+      {open && (
+        <div className="scorecard__body">
+          {byCriterion.length === 0 && <p className="copilot-panel__empty">No notes yet.</p>}
+          {byCriterion.map(([name, group]) => (
+            <div key={name} className="scorecard__group">
+              <h4>{CRITERION_LABELS[name] ?? name}</h4>
+              <ul>
+                {group.map((n) => (
+                  <li key={n.id} className={`scorecard__note scorecard__note--${n.source}`}>
+                    <span className="scorecard__text">
+                      {n.source === 'interviewer' && <span className="scorecard__source">you: </span>}
+                      {n.note}
+                      {n.quality != null && <span className="scorecard__quality"> ({n.quality}/5)</span>}
+                    </span>
+                    {n.quote && <blockquote className="scorecard__quote">“{n.quote}”</blockquote>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          {onAddNote && (
+            <form
+              className="scorecard__add"
+              onSubmit={(e) => {
+                e.preventDefault();
+                submit();
+              }}
+            >
+              <select aria-label="Note criterion" value={criterion} onChange={(e) => setCriterion(e.target.value)}>
+                {Object.entries(CRITERION_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <input
+                aria-label="Note text"
+                value={text}
+                placeholder="Add a note…"
+                onChange={(e) => setText(e.target.value)}
+              />
+              <button type="submit" className="btn btn--small btn--secondary" disabled={!text.trim()}>
+                Add
+              </button>
+            </form>
+          )}
+        </div>
       )}
     </div>
   );

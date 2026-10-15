@@ -142,6 +142,9 @@ class ReportInput:
     time_per_question: dict[str, float] | None = None
     plan_data: dict | None = None
     failover_log: list[dict] | None = None
+    # Peer interviewer (PEER_INTERVIEWER_ENABLED)
+    scorecard_notes: list[dict] | None = None  # live scorecard: copilot drafts and the interviewer's own notes
+    copilot_usage: list[dict] | None = None  # copilot cards the interviewer acted on
 
 
 @dataclass
@@ -352,6 +355,26 @@ class ReportGenerator:
                     parts.append(f"- [{c.get('confidence', 0):.0%}] {c.get('explanation', '')}")
                 else:
                     parts.append(f"- [{c.confidence:.0%}] {c.explanation}")
+
+        # Live scorecard (peer interviewer): the interviewer's own notes first, then the copilot's drafts.
+        if input_data.scorecard_notes:
+            parts.append("\n## Interviewer Scorecard Notes")
+            own = [n for n in input_data.scorecard_notes if n.get("source") == "interviewer"]
+            drafts = [n for n in input_data.scorecard_notes if n.get("source") != "interviewer"]
+            for n in own:
+                parts.append(f"- [{n.get('criterion', '')}] (interviewer) {n.get('note', '')}")
+            for n in drafts[-20:]:
+                quote = f' "{n["quote"]}"' if n.get("quote") else ""
+                parts.append(f"- [{n.get('criterion', '')}] {n.get('note', '')}{quote}")
+        if input_data.copilot_usage:
+            kinds: dict[str, int] = {}
+            for u in input_data.copilot_usage:
+                kinds[str(u.get("kind", ""))] = kinds.get(str(u.get("kind", "")), 0) + 1
+            parts.append("\n## Copilot Suggestions The Interviewer Used")
+            parts.append("- " + ", ".join(f"{k}: {v}" for k, v in sorted(kinds.items())))
+            parts.append(
+                "- Probes the interviewer relayed count as the interviewer's questions, not the candidate's initiative."
+            )
 
         # Resume Verification section (for new criterion)
         if isinstance(input_data.fact_store, FactStore):

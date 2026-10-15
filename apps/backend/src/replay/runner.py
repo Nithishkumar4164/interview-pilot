@@ -24,6 +24,7 @@ from src.replay.scenario import (
     HintRequestEvent,
     QuestionChangeEvent,
     Scenario,
+    ScorecardNoteEvent,
     TickEvent,
     TranscriptEvent,
 )
@@ -287,6 +288,16 @@ class ReplayRunner:
                     )
                 elif isinstance(ev, TickEvent):
                     worker.on_tick(scenario_clock.isoformat())
+                elif isinstance(ev, ScorecardNoteEvent):
+                    await worker.handle_scorecard_note(
+                        {
+                            "id": ev.note_id,
+                            "criterion": ev.criterion,
+                            "text": ev.text,
+                            "question_id": ev.question_id,
+                            "at": scenario_clock.isoformat(),
+                        }
+                    )
                 elif isinstance(ev, TranscriptEvent):
                     transcript = TranscriptEventSchema(
                         id=str(uuid.uuid5(_REPLAY_ID_NAMESPACE, f"{session_id}:{index}")),

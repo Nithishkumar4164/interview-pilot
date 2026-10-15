@@ -137,14 +137,46 @@ export function coverageFromPayload(p: Record<string, unknown>, fallbackTimestam
   return { criteria, gaps, timestamp: typeof p.timestamp === 'string' ? p.timestamp : fallbackTimestamp };
 }
 
+// ── Live scorecard ───────────────────────────────────────────────────
+
+export interface ScorecardNote {
+  id: string;
+  criterion: string;
+  quote: string;
+  note: string;
+  quality: number | null;
+  questionId: string;
+  source: 'copilot' | 'interviewer';
+  at: string;
+}
+
+export function scorecardFromPayload(p: Record<string, unknown>): ScorecardNote[] | null {
+  if (!Array.isArray(p.notes)) return null;
+  return p.notes
+    .filter((n): n is Record<string, unknown> => !!n && typeof n === 'object')
+    .filter((n) => typeof n.id === 'string' && typeof n.criterion === 'string')
+    .map((n) => ({
+      id: n.id as string,
+      criterion: n.criterion as string,
+      quote: typeof n.quote === 'string' ? n.quote : '',
+      note: typeof n.note === 'string' ? n.note : '',
+      quality: typeof n.quality === 'number' ? n.quality : null,
+      questionId: typeof n.question_id === 'string' ? n.question_id : '',
+      source: n.source === 'interviewer' ? 'interviewer' : 'copilot',
+      at: typeof n.at === 'string' ? n.at : '',
+    }));
+}
+
 interface CopilotState {
   cards: CopilotCard[]; // newest first
   usedIds: string[];
   mutedKinds: Set<CopilotCardKind>;
   coverage: Coverage | null;
+  scorecard: ScorecardNote[];
 
   addCard: (card: CopilotCard) => void;
   setCoverage: (coverage: Coverage) => void;
+  setScorecard: (notes: ScorecardNote[]) => void;
   dismissCard: (id: string) => void;
   markUsed: (id: string) => void;
   toggleMute: (kind: CopilotCardKind) => void;
@@ -156,8 +188,11 @@ export const useCopilotStore = create<CopilotState>((set) => ({
   usedIds: [],
   mutedKinds: loadMuted(),
   coverage: null,
+  scorecard: [],
 
   setCoverage: (coverage) => set({ coverage }),
+
+  setScorecard: (scorecard) => set({ scorecard }),
 
   addCard: (card) =>
     set((s) => {
@@ -183,5 +218,5 @@ export const useCopilotStore = create<CopilotState>((set) => ({
       return { mutedKinds: muted };
     }),
 
-  clear: () => set({ cards: [], usedIds: [], coverage: null }),
+  clear: () => set({ cards: [], usedIds: [], coverage: null, scorecard: [] }),
 }));

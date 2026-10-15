@@ -14,7 +14,7 @@ import { useAnalysisStore, mapDimensions, type CodeRatingResult } from '@/stores
 import { useHintStore, type RuntimeHintEntry } from '@/stores/hint-store';
 import { useOfflineStore } from '@/stores/offline-store';
 import { useSessionStore } from '@/stores/session-store';
-import { useCopilotStore, cardFromPayload, coverageFromPayload } from '@/stores/copilot-store';
+import { useCopilotStore, cardFromPayload, coverageFromPayload, scorecardFromPayload } from '@/stores/copilot-store';
 
 export function useWebSocket(sessionId: string | null) {
   const clientRef = useRef<DashboardWSClient | null>(null);
@@ -173,6 +173,12 @@ export function useWebSocket(sessionId: string | null) {
         case 'copilot_coverage': {
           const coverage = coverageFromPayload(message.payload as Record<string, unknown>, message.timestamp);
           if (coverage) useCopilotStore.getState().setCoverage(coverage);
+          break;
+        }
+
+        case 'scorecard': {
+          const notes = scorecardFromPayload(message.payload as Record<string, unknown>);
+          if (notes) useCopilotStore.getState().setScorecard(notes);
           break;
         }
 

@@ -206,6 +206,8 @@ class ReportService:
             hint_events_db=hint_events_list,
             time_per_question=time_per_question,
             plan_data=plan.plan_data if plan else None,
+            scorecard_notes=snapshots.get("scorecard_notes") or None,
+            copilot_usage=snapshots.get("copilot_cards_used") or None,
         )
 
         logger.info(

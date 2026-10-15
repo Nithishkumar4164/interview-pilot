@@ -532,3 +532,82 @@ def difficulty_card(card_id: str, key: str, question_plan: dict | None, timestam
         question_id=question_id,
         timestamp=timestamp,
     )
+
+
+# ── Live scorecard ─────────────────────────────────────────────────────────
+
+SCORECARD_SIZE = 60  # notes kept in state (the report gets them all through report_snapshot)
+QUOTE_CHARS = 200
+
+
+def _quote(text: str) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= QUOTE_CHARS else text[: QUOTE_CHARS - 1].rstrip() + "…"
+
+
+def primary_criterion(category: str) -> str:
+    """The report criterion an answer to a question of this plan category speaks to first."""
+    if category == "system_design":
+        return "system_design"
+    if category == "behavioral":
+        return "behavioral"
+    return "problem_solving"
+
+
+def scorecard_notes_from_analysis(
+    analysis: EnhancedAnalysisResult, category: str, utterance_text: str, question_id: str, utterance_id: str
+) -> list[dict[str, Any]]:
+    """Draft notes (with the verbatim quote) one analysis adds to the scorecard; [] for a failed analysis."""
+    if analysis.answer_quality <= 0:
+        return []
+    quote = _quote(utterance_text)
+    notes = [
+        {
+            "id": f"{utterance_id}:note",
+            "criterion": primary_criterion(category),
+            "quote": quote,
+            "note": analysis.insight,
+            "quality": analysis.answer_quality,
+            "question_id": question_id,
+            "utterance_id": utterance_id,
+            "source": "copilot",
+            "at": analysis.timestamp,
+        }
+    ]
+    if analysis.red_flags:
+        notes.append(
+            {
+                "id": f"{utterance_id}:flags",
+                "criterion": "behavioral",
+                "quote": quote,
+                "note": "Red flags: " + "; ".join(analysis.red_flags),
+                "quality": analysis.answer_quality,
+                "question_id": question_id,
+                "utterance_id": utterance_id,
+                "source": "copilot",
+                "at": analysis.timestamp,
+            }
+        )
+    return notes
+
+
+def interviewer_note(note_id: str, criterion: str, text: str, question_id: str, at: str) -> dict[str, Any] | None:
+    """A note the interviewer typed; None when it is empty or names an unknown criterion."""
+    text = text.strip()
+    if not text or criterion not in CRITERIA:
+        return None
+    return {
+        "id": note_id,
+        "criterion": criterion,
+        "quote": "",
+        "note": text,
+        "quality": None,
+        "question_id": question_id,
+        "utterance_id": "",
+        "source": "interviewer",
+        "at": at,
+    }
+
+
+def scorecard_payload(notes: list[dict[str, Any]], timestamp: str) -> dict[str, Any]:
+    return {"notes": list(notes), "timestamp": timestamp}

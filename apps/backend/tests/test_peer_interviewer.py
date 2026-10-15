@@ -506,6 +506,53 @@ async def test_a_failing_copilot_query_answers_with_the_error(checkpointer, monk
         await pipeline.close()
 
 
+# ── Edge-case whisper ──────────────────────────────────────────────────────
+
+
+async def test_edge_cases_are_suggested_once_per_code_snapshot(checkpointer, chosen) -> None:
+    from src.replay.scenario import CodeUpdateEvent, QuestionChangeEvent
+
+    original = session_graph.analyze_utterance_with_actions
+
+    async def always_edge_cases(*args, **kwargs):
+        result, _ = await original(*args, **kwargs)
+        return result, ["edge_cases"]
+
+    import pytest as _pytest
+
+    with _pytest.MonkeyPatch.context() as mp:
+        mp.setattr(session_graph, "analyze_utterance_with_actions", always_edge_cases)
+        code = "def two_sum(nums, target):\n    for i in range(len(nums)):\n        for j in range(len(nums)):\n            pass\n"
+        events = [
+            QuestionChangeEvent(question_text="Two sum", question_plan={"id": "q1", "category": "coding"}),
+            TranscriptEvent(
+                speaker_role=SpeakerRole.CANDIDATE, text="I think the brute force is done, let me test it."
+            ),  # no code yet
+            CodeUpdateEvent(code=code, delay_ms=1000),
+            TranscriptEvent(
+                speaker_role=SpeakerRole.CANDIDATE, text="Okay the nested loop version is done now.", delay_ms=1000
+            ),
+            TranscriptEvent(
+                speaker_role=SpeakerRole.CANDIDATE, text="I believe it handles every case correctly.", delay_ms=1000
+            ),  # same snapshot
+            CodeUpdateEvent(code=code + "    return []\n", delay_ms=1000),
+            TranscriptEvent(
+                speaker_role=SpeakerRole.CANDIDATE, text="Added the return, this should be complete.", delay_ms=1000
+            ),
+        ]
+        report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events), agentic=False)
+    assert report.error is None
+    calls = _calls(report, "edge_cases")
+    assert len(calls) == 2  # once per snapshot, never without code
+    assert all("def two_sum" in c["user_content"] for c in calls)
+    cards = _cards(report, "edge_cases")
+    assert len(cards) == 2 and len({c["id"] for c in cards}) == 2
+    for card in cards:
+        assert card["items"] and card["items"][0].startswith("scripted-input-")
+        assert card["probe"].startswith("Can you walk me through what your code does for scripted-input-")
+        assert card["question_id"] == "q1"
+
+
 # ── Cards the interviewer acted on ─────────────────────────────────────────
 
 

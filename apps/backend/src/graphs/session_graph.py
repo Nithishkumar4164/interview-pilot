@@ -79,6 +79,7 @@ from src.services.peer_interviewer import (
     difficulty_card,
     difficulty_signal,
     draft_clarification,
+    edge_case_line,
     interviewer_note,
     looks_like_a_question,
     monologue_card,
@@ -88,6 +89,7 @@ from src.services.peer_interviewer import (
     scorecard_payload,
     seconds_between,
     stuck_card,
+    suggest_edge_cases,
     suggest_probes,
     talk_share,
     talk_share_card,
@@ -273,6 +275,7 @@ class SessionState(TypedDict, total=False):
     coverage_counts: dict[str, int]  # evidence points per report criterion (rubric coverage map)
     difficulty_sent: list[str]  # difficulty cards already sent for the current question
     scorecard: list[dict]  # live scorecard notes (copilot drafts and the interviewer's own), bounded
+    edge_cases_for: str  # code snapshot id edge cases were last suggested for
 
     # ── per-run scratch ──
     extracted: Annotated[dict[int, dict], _reset_or_merge]
@@ -323,6 +326,7 @@ def initial_state(session_id: str) -> dict[str, Any]:
         "coverage_counts": {},
         "difficulty_sent": [],
         "scorecard": [],
+        "edge_cases_for": "",
         "analysis": None,
     }
 
@@ -400,6 +404,15 @@ class PeerUtteranceTask(TypedDict):
     context_text: str
     speaker: str
     text: str
+
+
+class EdgeCaseTask(TypedDict):
+    snapshot_id: str
+    question: str
+    question_id: str
+    code: str
+    language: str
+    bugs: list[str]
 
 
 class CoachTask(TypedDict):
@@ -1002,7 +1015,62 @@ def build_session_graph(
         # The candidate asking something is checked even if the analysis did not flag it.
         if "clarify" in chosen or looks_like_a_question(target.text):
             sends.append(Send("draft_clarification", task))
+        # Edge cases: when chosen, or when the code heuristics suspect a bug; once per code snapshot.
+        code_context = state.get("code_context") or {}
+        snapshot_id = str(code_context.get("snapshot_id") or "")
+        bugs = [str(b) for b in code_context.get("bugs") or []]
+        if (
+            ("edge_cases" in chosen or bugs)
+            and str(code_context.get("code", "")).strip()
+            and snapshot_id
+            and snapshot_id != state.get("edge_cases_for", "")
+        ):
+            sends.append(
+                Send(
+                    "suggest_edge_cases",
+                    EdgeCaseTask(
+                        snapshot_id=snapshot_id,
+                        question=state.get("current_question", ""),
+                        question_id=state.get("active_question_id") or "",
+                        code=str(code_context.get("code", "")),
+                        language=str(code_context.get("language") or "unknown"),
+                        bugs=bugs,
+                    ),
+                )
+            )
         return sends
+
+    async def suggest_edge_cases_node(state: EdgeCaseTask) -> dict:
+        update = {"edge_cases_for": state["snapshot_id"]}
+        try:
+            cases = await asyncio.wait_for(
+                retry_transient(
+                    lambda: suggest_edge_cases(
+                        failover, session_id, state["question"], state["code"], state["language"], state["bugs"]
+                    )
+                ),
+                ACTION_TIMEOUT_S,
+            )
+        except Exception as e:
+            logger.warning("peer_action_failed", action="edge_cases", session_id=session_id, error=str(e))
+            return update
+        if not cases:
+            return update
+        lines = [edge_case_line(c) for c in cases]
+        emit_card(
+            copilot_card(
+                f"{session_id}:{state['snapshot_id']}:edge_cases",
+                "edge_cases",
+                "Ask them to trace these by hand",
+                "Suspected: " + "; ".join(state["bugs"][:2])
+                if state["bugs"]
+                else "Inputs chosen against the current code.",
+                items=lines,
+                probe=f"Can you walk me through what your code does for {cases[0]['input']}?",
+                question_id=state["question_id"],
+            )
+        )
+        return update
 
     async def verify_claim_node(state: PeerUtteranceTask) -> dict:
         try:
@@ -1234,7 +1302,8 @@ def build_session_graph(
             graph.add_node("suggest_probes", suggest_probes_node, input_schema=ProbeTask)
             graph.add_node("verify_claim", verify_claim_node, input_schema=PeerUtteranceTask)
             graph.add_node("draft_clarification", draft_clarification_node, input_schema=PeerUtteranceTask)
-            actions += ["suggest_probes", "verify_claim", "draft_clarification"]
+            graph.add_node("suggest_edge_cases", suggest_edge_cases_node, input_schema=EdgeCaseTask)
+            actions += ["suggest_probes", "verify_claim", "draft_clarification", "suggest_edge_cases"]
         graph.add_node("finish", finish)
         graph.add_conditional_edges("merge_results", plan_actions, [*actions, END])
         for action in actions:

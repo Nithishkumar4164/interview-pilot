@@ -199,7 +199,9 @@ The service layer holds the business logic as plain, independently testable func
 
 | Service | Responsibility |
 |---|---|
-| `analysis_service` | 6-dimension utterance evaluation |
+| `analysis_service` | 6-dimension utterance evaluation; the follow-up actions an analysis may choose (agentic and peer) |
+| `peer_interviewer` | Peer interviewer (`PEER_INTERVIEWER_ENABLED`): prompts and parsing for suggested probes, claim checks, clarifications, interviewer coaching and edge cases; the deterministic signals (talk share, monologue, pacing, stuck, coverage, difficulty); the scorecard notes; the one copilot-card shape |
+| `copilot_query` | Ask the copilot: a tool loop over the live session's evidence (the agentic report's index, built from pipeline state) with validated transcript citations |
 | `speaker_service` | 3-layer speaker identification |
 | `transcription_service` | Deepgram WebSocket orchestration |
 | `calibration_service` | Interview difficulty and time calibration |
@@ -306,7 +308,7 @@ LLM workflows are LangGraph graphs. Nodes read state, call the service functions
 
 | Graph | Thread | Purpose |
 |---|---|---|
-| `session_graph` | `{session_id}` | Live interview: memory tiers, utterance analysis, fact extraction (in parallel), contradiction check, hint signal; optional agentic follow-ups (`AGENTIC_ROUTING_ENABLED`) |
+| `session_graph` | `{session_id}` | Live interview: memory tiers, utterance analysis, fact extraction (in parallel), contradiction check, hint signal; optional agentic follow-ups (`AGENTIC_ROUTING_ENABLED`); optional peer interviewer (`PEER_INTERVIEWER_ENABLED`, §11.1) |
 | `code_graph` | `code:{session_id}` | Live code tracking on its own queue, so editor snapshots never wait behind an utterance analysis |
 | `report_graph` | `report:{report_id}` | Post-interview report; resumes after a restart without repeating finished steps |
 | `plan_graph` | none | Interview plan; phases and hints generated in parallel |
@@ -360,11 +362,12 @@ Zustand stores are organized by feature domain. Each store is self-contained wit
 │  │ Hint history, │  │ Current plan, │  │ Identities,  │ │
 │  │ response qual.│  │ question order│  │ color assign. │ │
 │  └───────────────┘  └───────────────┘  └──────────────┘ │
-│  ┌───────────────┐                                       │
-│  │ offline-store │                                       │
-│  │ WS status,    │                                       │
-│  │ degradation   │                                       │
-│  └───────────────┘                                       │
+│  ┌───────────────┐  ┌───────────────┐                    │
+│  │ offline-store │  │ copilot-store │                    │
+│  │ WS status,    │  │ Copilot cards,│                    │
+│  │ degradation   │  │ coverage,     │                    │
+│  │               │  │ scorecard, Q&A│                    │
+│  └───────────────┘  └───────────────┘                    │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -628,6 +631,9 @@ Each task type is routed to a provider pair (primary + fallback), in `src/llm/co
 | Code analysis / code rating | Anthropic | OpenAI | `claude-sonnet-5` |
 | Report generation (and agentic synthesis) | Anthropic | OpenAI | `claude-opus-5-5` |
 | Report criterion (agentic scoring) | Anthropic | OpenAI | `claude-sonnet-5` |
+| Peer interviewer (probes, claim checks, clarifications, edge cases) | Anthropic | OpenAI | `claude-sonnet-5` |
+| Interviewer coaching | Anthropic | OpenAI | `claude-haiku-5-5` |
+| Copilot query (ask the copilot) | Anthropic | OpenAI | `claude-sonnet-5` |
 | Hint generation | Anthropic | OpenAI | `claude-sonnet-5` |
 | Summary compression | Anthropic | OpenAI | `claude-sonnet-5` |
 | Resume extraction | Anthropic | OpenAI | `claude-sonnet-5` |
@@ -701,6 +707,13 @@ Audio Frame ──► Deepgram Worker ──► Speaker Service ──► Transc
 - **Memory tiers** (working memory 10, rolling summary, fact store) live in graph state; a question change resets working memory and code tracking.
 - **Effects** (dashboard pushes, DB writes) are streamed by nodes and performed by the pipeline; DB writes carry idempotency keys.
 - **Agentic routing** (`AGENTIC_ROUTING_ENABLED`, off by default): the analysis also chooses follow-ups (LLM contradiction check, a drafted hint shown as a "Suggested hint" card, a check of what the candidate says against their code); the rule-based contradiction pass always runs.
+- **Peer interviewer** (`PEER_INTERVIEWER_ENABLED`, off by default): the copilot listens to both sides and advises the interviewer, never the candidate. It uses the same follow-up fan-out (on its own when agentic routing is off) and one dashboard channel, `send_copilot_card`, with one payload shape for every whisper; the interviewer marks a card as asked (recorded as a `CopilotCardUsed` event, exported to the report) or dismisses it, and can mute kinds.
+  - *Chosen by the analysis, per candidate answer:* `suggest_probe` (1-3 follow-up questions aimed at the gaps found; also runs when the analysis reports missed key points), `verify_claim` (urgent card for a wrong or misleading technical claim, with the correction and a self-correct question), `clarify` (a reply to a candidate's unanswered question or misreading; also runs when the utterance reads as a question), `edge_cases` (inputs to trace by hand against the current code; also when the code heuristics suspect a bug; once per snapshot).
+  - *Listening to the interviewer:* the latest substantial interviewer turn of a batch (at most one per 20 s) goes to `coach_interviewer` on the cheap `INTERVIEWER_COACHING` task type (leading question, revealed answer, unclear, stacked, interrupting). Talk-share (60%+ of the last 250+ words, one nudge per 5 min) and monologue (120+ words) signals need no model.
+  - *The clock:* the pipeline enqueues a `Tick` every 30 s. The time steward compares the current question with its budget (the dashboard sends the remaining plan on `change_question`) and alerts once at 100% and 150%; the stuck countdown (code not moving, candidate quiet 60 s) sends a card and drafts a hint proactively, once per snapshot.
+  - *After each analysis, without a model:* a rubric coverage snapshot (`send_copilot_coverage`, evidence per report criterion from the dimensions and the question's plan category; the panel names the upcoming question that fills the first gap), the adaptive-difficulty signal (three strong answers: raise the bar; two weak or two direct hint signals: step down; once per key per question), and scorecard notes (`send_scorecard`: the quote plus the insight under the criterion the question speaks to; the interviewer adds their own via `add_scorecard_note`).
+  - *Ask the copilot:* `copilot_query` is answered request/response beside the graph by a tool loop (`COPILOT_QUERY`) over the live evidence index, with citations validated against the transcript.
+  - *Into the report:* `report_snapshot` carries `scorecard_notes` and `copilot_cards_used`; the single-call prompt lists them, and the agentic evidence index offers `get_scorecard_notes` only when a session has notes.
 - **Sessions end** by closing the pipeline and the transcription service; the session's checkpoint threads are deleted once the report has its inputs.
 
 ### 11.2 Batch Persistence

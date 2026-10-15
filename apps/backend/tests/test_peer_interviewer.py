@@ -284,6 +284,66 @@ async def test_talk_share_and_monologue_signals(checkpointer) -> None:
     assert not _calls(report, "coaching") or all(c["kind"] == "coaching" for c in _calls(report, "coaching"))
 
 
+# ── Time steward and stuck countdown ───────────────────────────────────────
+
+
+async def test_time_steward_alerts_once_per_threshold_and_resets_on_question_change(checkpointer) -> None:
+    from src.replay.scenario import QuestionChangeEvent, TickEvent
+
+    q1 = QuestionChangeEvent(
+        question_text="Two sum",
+        question_plan={"id": "q1", "time_minutes": 1},
+        question_index=0,
+        remaining_questions=2,
+        remaining_minutes=25,
+    )
+    q2 = QuestionChangeEvent(
+        question_text="Reverse a list", question_plan={"id": "q2", "time_minutes": 1}, question_index=1, delay_ms=5000
+    )
+    events = [
+        q1,
+        TickEvent(delay_ms=30_000),  # 0:30 — within budget
+        TickEvent(delay_ms=31_000),  # 1:01 — over
+        TickEvent(delay_ms=10_000),  # 1:11 — already sent
+        TickEvent(delay_ms=25_000),  # 1:36 — far over
+        q2,  # 1:41 — the clock restarts
+        TickEvent(delay_ms=50_000),  # 2:31 — 0:50 into q2: nothing
+        TickEvent(delay_ms=15_000),  # 2:46 — 1:05 into q2: over
+    ]
+    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events), agentic=False)
+    assert report.error is None
+    cards = _cards(report, "pace")
+    assert [c["id"].split(":", 1)[1] for c in cards] == ["q1:pace:over", "q1:pace:far_over", "q2:pace:over"]
+    assert cards[0]["priority"] == "suggest" and cards[1]["priority"] == "urgent"
+    assert cards[0]["body"].startswith("2 questions and 25 min of plan left.")
+    assert cards[2]["body"].startswith("This is the last planned question.")
+    assert all(c["source"] == "rule" for c in cards) and not report.llm_calls
+
+
+async def test_stuck_countdown_drafts_one_hint_per_stuck_snapshot(checkpointer) -> None:
+    from src.replay.scenario import CodeUpdateEvent, QuestionChangeEvent, TickEvent
+
+    code = "def two_sum(nums, target):\n    seen = {}\n    for i, n in enumerate(nums):\n        pass\n"
+    events = [
+        QuestionChangeEvent(question_text="Two sum", question_plan={"id": "q1", "time_minutes": 30}),
+        TranscriptEvent(speaker_role=SpeakerRole.CANDIDATE, text="Let me start writing the loop.", delay_ms=1000),
+        # Five snapshots with (nearly) the same length -> CodeGraph's local heuristic says stuck.
+        *[CodeUpdateEvent(code=code + " " * (i % 2), delay_ms=5000) for i in range(5)],
+        TickEvent(delay_ms=10_000),  # 36 s of silence: not yet
+        TickEvent(delay_ms=30_000),  # 66 s: stuck -> card + drafted hint
+        TickEvent(delay_ms=30_000),  # same snapshot: nothing more
+        CodeUpdateEvent(code=code + "x", delay_ms=1000),  # a new (still stuck) snapshot
+        TickEvent(delay_ms=30_000),  # the candidate is still quiet: one more
+    ]
+    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events), agentic=False)
+    assert report.error is None
+    stuck = _cards(report, "stuck")
+    assert len(stuck) == 2 and all(c["title"].startswith("Quiet for ") for c in stuck)
+    drafted = [e.payload for e in report.events if e.method == "send_hint_suggestion"]
+    assert [d["id"].split(":", 1)[1] for d in drafted] == [f"stuck:{c['id'].split(':')[1]}:hint" for c in stuck]
+    assert drafted[0]["question_id"] == "q1" and drafted[0]["text"].startswith("scripted-hint-")
+
+
 # ── Cards the interviewer acted on ─────────────────────────────────────────
 
 

@@ -20,6 +20,7 @@ from src.graphs.session_graph import (
     QuestionChanged,
     RuntimeHintGenerated,
     SummaryCompressed,
+    Tick,
     UtteranceIn,
 )
 from src.schemas.analysis import (
@@ -64,6 +65,7 @@ CHECKPOINT_TYPES: tuple[type, ...] = (
     RuntimeHintGenerated,
     SummaryCompressed,
     CopilotCardUsed,
+    Tick,
     # code graph
     CodeSnapshotIn,
     CodeRefined,

@@ -35,6 +35,8 @@ class QuestionChangeEvent(BaseModel):
     question_text: str
     question_plan: dict = Field(default_factory=dict)
     question_index: int = 0
+    remaining_questions: int = 0
+    remaining_minutes: float = 0.0
     delay_ms: int = 0
 
 
@@ -94,6 +96,13 @@ class CopilotCardUsedEvent(BaseModel):
     delay_ms: int = 0
 
 
+class TickEvent(BaseModel):
+    """The peer interviewer's clock (``on_tick`` at the scenario time)."""
+
+    type: Literal["tick"] = "tick"
+    delay_ms: int = 0
+
+
 ScenarioEvent = Annotated[
     TranscriptEvent
     | QuestionChangeEvent
@@ -102,7 +111,8 @@ ScenarioEvent = Annotated[
     | ActiveHintEvent
     | CodeUpdateEvent
     | CodeSnapshotEvent
-    | CopilotCardUsedEvent,
+    | CopilotCardUsedEvent
+    | TickEvent,
     Field(discriminator="type"),
 ]
 

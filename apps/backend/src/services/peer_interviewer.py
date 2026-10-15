@@ -361,3 +361,64 @@ def monologue_card(card_id: str, words: int, timestamp: str) -> dict[str, Any]:
         source="rule",
         timestamp=timestamp,
     )
+
+
+# ── Time steward and stuck countdown ───────────────────────────────────────
+
+# (alert key, share of the question's time budget that triggers it); each fires once per question.
+PACE_THRESHOLDS: tuple[tuple[str, float], ...] = (("over", 1.0), ("far_over", 1.5))
+STUCK_QUIET_S = 60.0  # candidate silence (with code not moving) before the stuck countdown fires
+
+
+def pace_alert(elapsed_s: float, budget_s: float, sent: list[str]) -> str | None:
+    """The highest pace alert now due for this question that has not been sent yet, or None."""
+    if budget_s <= 0:
+        return None
+    due = None
+    for key, ratio in PACE_THRESHOLDS:
+        if elapsed_s >= budget_s * ratio and key not in sent:
+            due = key
+    return due
+
+
+def pace_card(
+    card_id: str,
+    key: str,
+    elapsed_s: float,
+    budget_s: float,
+    remaining_questions: int,
+    remaining_minutes: float,
+    question_id: str,
+    timestamp: str,
+) -> dict[str, Any]:
+    over_min = max(1, round((elapsed_s - budget_s) / 60))
+    budget_min = max(1, round(budget_s / 60))
+    plan_left = (
+        f"{remaining_questions} question{'s' if remaining_questions != 1 else ''} and "
+        f"{round(remaining_minutes)} min of plan left."
+        if remaining_questions > 0
+        else "This is the last planned question."
+    )
+    return copilot_card(
+        card_id,
+        "pace",
+        f"{over_min} min over this question's {budget_min} min budget",
+        f"{plan_left} Wrap up with what you have, or ask the short variant.",
+        priority="urgent" if key == "far_over" else "suggest",
+        source="rule",
+        question_id=question_id,
+        timestamp=timestamp,
+    )
+
+
+def stuck_card(card_id: str, quiet_s: float, question_id: str, timestamp: str) -> dict[str, Any]:
+    return copilot_card(
+        card_id,
+        "stuck",
+        f"Quiet for {round(quiet_s)} s and the code is not moving",
+        "A hint is being drafted (Smart Hints). Or ask them to talk through what they are trying now.",
+        priority="suggest",
+        source="rule",
+        question_id=question_id,
+        timestamp=timestamp,
+    )

@@ -66,6 +66,7 @@ from src.services.peer_interviewer import (
     COACHING_MIN_GAP_S,
     COACHING_MIN_WORDS,
     MONOLOGUE_WORDS,
+    STUCK_QUIET_S,
     TALK_CARD_MIN_GAP_S,
     TALK_SHARE_MIN_WORDS,
     TALK_SHARE_THRESHOLD,
@@ -75,7 +76,10 @@ from src.services.peer_interviewer import (
     draft_clarification,
     looks_like_a_question,
     monologue_card,
+    pace_alert,
+    pace_card,
     seconds_between,
+    stuck_card,
     suggest_probes,
     talk_share,
     talk_share_card,
@@ -110,6 +114,9 @@ class QuestionChanged:
     question_text: str
     question_plan: dict = field(default_factory=dict)
     question_index: int = 0
+    at: str = ""  # when the interviewer switched (the time steward's question clock)
+    remaining_questions: int = 0  # planned questions after this one
+    remaining_minutes: float = 0.0  # their time budget
 
 
 @dataclass(frozen=True)
@@ -155,6 +162,13 @@ class CopilotCardUsed:
     at: str = ""
 
 
+@dataclass(frozen=True)
+class Tick:
+    """The clock (peer interviewer): pacing and stuck checks run against ``at`` even when nobody speaks."""
+
+    at: str
+
+
 IngressEvent = (
     UtteranceIn
     | QuestionChanged
@@ -163,6 +177,7 @@ IngressEvent = (
     | RuntimeHintGenerated
     | SummaryCompressed
     | CopilotCardUsed
+    | Tick
 )
 
 # ── Effects (custom stream payloads) ──────────────────────────────────────
@@ -228,6 +243,13 @@ class SessionState(TypedDict, total=False):
     talk_window: list[list]  # [speaker, words] of the last TALK_WINDOW_SIZE final utterances
     last_coaching_at: str  # timestamp of the interviewer turn last sent for coaching
     last_talk_card_at: str  # timestamp of the last talk-share nudge
+    question_started_at: str  # the time steward's clock for the current question
+    remaining_questions: int
+    remaining_minutes: float
+    pace_alerts_sent: list[str]  # pace alert keys already sent for the current question
+    last_candidate_at: str  # timestamp of the candidate's last final utterance
+    stuck_hint_for: str  # code snapshot id the stuck countdown already drafted a hint for
+    stuck_hint_due: bool  # per-run: this run's Tick found the candidate stuck
 
     # ── per-run scratch ──
     extracted: Annotated[dict[int, dict], _reset_or_merge]
@@ -268,6 +290,13 @@ def initial_state(session_id: str) -> dict[str, Any]:
         "talk_window": [],
         "last_coaching_at": "",
         "last_talk_card_at": "",
+        "question_started_at": "",
+        "remaining_questions": 0,
+        "remaining_minutes": 0.0,
+        "pace_alerts_sent": [],
+        "last_candidate_at": "",
+        "stuck_hint_for": "",
+        "stuck_hint_due": False,
         "analysis": None,
     }
 
@@ -401,7 +430,7 @@ def build_session_graph(
         summary = state.get("rolling_summary", "")
         facts = state.get("fact_store") or FactStore()
         total = state.get("total_utterances", 0)
-        question = {
+        question: dict[str, Any] = {
             "current_question": state.get("current_question", ""),
             "question_plan": state.get("question_plan", {}),
             "question_index": state.get("question_index", 0),
@@ -415,6 +444,16 @@ def build_session_graph(
         cards_used = list(state.get("copilot_cards_used", []))
         talk_window = list(state.get("talk_window", []))
         last_talk_card_at = state.get("last_talk_card_at", "")
+        pace: dict[str, Any] = {
+            "question_started_at": state.get("question_started_at", ""),
+            "remaining_questions": state.get("remaining_questions", 0),
+            "remaining_minutes": state.get("remaining_minutes", 0.0),
+            "pace_alerts_sent": list(state.get("pace_alerts_sent", [])),
+        }
+        last_candidate_at = state.get("last_candidate_at", "")
+        stuck_hint_for = state.get("stuck_hint_for", "")
+        stuck_hint_due = False
+        code_context = state.get("code_context") or {}
 
         for ev in state["events"]:
             if isinstance(ev, UtteranceIn):
@@ -430,6 +469,10 @@ def build_session_graph(
                 if peer and ev.is_final:
                     words = word_count(ev.text)
                     talk_window = [*talk_window, [ev.speaker, words]][-TALK_WINDOW_SIZE:]
+                    if ev.speaker == "candidate":
+                        last_candidate_at = ev.timestamp
+                    if not pace["question_started_at"]:
+                        pace["question_started_at"] = ev.timestamp  # no question change yet: the clock starts now
                     if ev.speaker == "interviewer":
                         if words >= MONOLOGUE_WORDS:
                             emit_card(monologue_card(f"{session_id}:{ev.id}:monologue", words, ev.timestamp))
@@ -458,6 +501,13 @@ def build_session_graph(
                 }
                 active_hint = ""
                 recent_insights = []
+                pace = {
+                    "question_started_at": ev.at,
+                    "remaining_questions": ev.remaining_questions,
+                    "remaining_minutes": ev.remaining_minutes,
+                    "pace_alerts_sent": [],
+                }
+                stuck_hint_for = ""
             elif isinstance(ev, HintRevealed):
                 active_hint = ev.text
             elif isinstance(ev, RuntimeHintGenerated):
@@ -472,6 +522,44 @@ def build_session_graph(
             elif isinstance(ev, SummaryCompressed):
                 summary = ev.summary
                 unsummarized = unsummarized[ev.count :]
+            elif isinstance(ev, Tick) and peer:
+                # Time steward: the current question against its budget, once per threshold.
+                budget_s = float((question["question_plan"] or {}).get("time_minutes") or 0) * 60
+                if question["current_question"] and pace["question_started_at"] and budget_s > 0:
+                    elapsed = seconds_between(pace["question_started_at"], ev.at)
+                    key = pace_alert(elapsed, budget_s, pace["pace_alerts_sent"])
+                    if key is not None:
+                        qid = question["active_question_id"] or f"q{question['question_index']}"
+                        emit_card(
+                            pace_card(
+                                f"{session_id}:{qid}:pace:{key}",
+                                key,
+                                elapsed,
+                                budget_s,
+                                pace["remaining_questions"],
+                                pace["remaining_minutes"],
+                                question["active_question_id"] or "",
+                                ev.at,
+                            )
+                        )
+                        pace["pace_alerts_sent"] = [*pace["pace_alerts_sent"], key]
+                # Stuck countdown: code not moving and the candidate quiet for a while -> one hint per snapshot.
+                snapshot_id = str(code_context.get("snapshot_id") or "")
+                quiet = seconds_between(last_candidate_at, ev.at)
+                if (
+                    code_context.get("is_stuck")
+                    and snapshot_id
+                    and snapshot_id != stuck_hint_for
+                    and quiet != float("inf")
+                    and quiet >= STUCK_QUIET_S
+                ):
+                    emit_card(
+                        stuck_card(
+                            f"{session_id}:{snapshot_id}:stuck", quiet, question["active_question_id"] or "", ev.at
+                        )
+                    )
+                    stuck_hint_for = snapshot_id
+                    stuck_hint_due = True
             elif isinstance(ev, CopilotCardUsed):
                 if all(c["card_id"] != ev.card_id for c in cards_used):
                     cards_used = [
@@ -499,6 +587,10 @@ def build_session_graph(
             "copilot_cards_used": cards_used,
             "talk_window": talk_window,
             "last_talk_card_at": last_talk_card_at,
+            **pace,
+            "last_candidate_at": last_candidate_at,
+            "stuck_hint_for": stuck_hint_for,
+            "stuck_hint_due": stuck_hint_due,
             "events_processed": state.get("events_processed", 0) + state.get("transport_events", 0),
             "extracted": None,
             "analysis": None,
@@ -537,6 +629,20 @@ def build_session_graph(
             coach = coaching_candidate(state)
             if coach is not None:
                 sends.append(Send("coach_interviewer", coach))
+            if state.get("stuck_hint_due"):
+                sends.append(
+                    Send(
+                        "draft_hint",
+                        HintTask(
+                            utterance_id=f"stuck:{state.get('stuck_hint_for', '')}",
+                            question_id=state.get("active_question_id") or "",
+                            question_plan=state.get("question_plan", {}),
+                            working_memory_text=format_utterances(state.get("working_memory", [])),
+                            rolling_summary=state.get("rolling_summary", ""),
+                            recent_insights=list(state.get("recent_insights", [])),
+                        ),
+                    )
+                )
         return sends or END
 
     def coaching_candidate(state: SessionState) -> CoachTask | None:
@@ -1030,7 +1136,7 @@ def build_session_graph(
     if peer:
         graph.add_node("coach_interviewer", coach_interviewer_node, input_schema=CoachTask)
         graph.add_edge("coach_interviewer", "merge_results")
-        dispatch_targets.insert(2, "coach_interviewer")
+        dispatch_targets[2:2] = ["coach_interviewer", "draft_hint"]  # draft_hint: the stuck countdown
     graph.add_conditional_edges("apply_events", dispatch, dispatch_targets)
     graph.add_edge("extract_facts", "merge_results")
     graph.add_edge("analyze", "merge_results")

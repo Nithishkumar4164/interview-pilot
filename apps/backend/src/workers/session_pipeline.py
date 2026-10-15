@@ -19,7 +19,20 @@ class SessionPipeline(Protocol):
     # ── Inbound events ────────────────────────────────────────────────
     async def on_transcript_event(self, event: TranscriptEventSchema) -> None: ...
 
-    async def on_question_change(self, question_text: str, question_plan: dict, question_index: int = 0) -> None: ...
+    async def on_question_change(
+        self,
+        question_text: str,
+        question_plan: dict,
+        question_index: int = 0,
+        *,
+        at: str | None = None,
+        remaining_questions: int = 0,
+        remaining_minutes: float = 0.0,
+    ) -> None: ...
+
+    def on_tick(self, at: str | None = None) -> None:
+        """The peer interviewer's clock (pacing and stuck checks)."""
+        ...
 
     def set_active_hint(self, hint_text: str) -> None: ...
 
@@ -72,9 +85,14 @@ def create_session_pipeline(
     failover_manager: FailoverManager,
     get_speaker_snapshot: Callable[[], dict] | None = None,
 ) -> SessionPipeline:
+    from src.config import settings
     from src.dependencies import get_checkpointer
-    from src.workers.langgraph_session import LangGraphSessionPipeline
+    from src.workers.langgraph_session import TICK_INTERVAL_S, LangGraphSessionPipeline
 
     return LangGraphSessionPipeline(
-        session_id, failover_manager, get_checkpointer(), get_speaker_snapshot=get_speaker_snapshot
+        session_id,
+        failover_manager,
+        get_checkpointer(),
+        get_speaker_snapshot=get_speaker_snapshot,
+        tick_interval_s=TICK_INTERVAL_S if settings.peer_interviewer_enabled else 0.0,
     )

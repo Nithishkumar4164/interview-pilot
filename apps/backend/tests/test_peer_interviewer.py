@@ -154,7 +154,7 @@ async def test_both_flags_offer_both_action_sets(checkpointer, chosen) -> None:
 async def test_flag_off_keeps_the_copilot_silent(checkpointer, chosen) -> None:
     report = await _replay(checkpointer, "04_long_interview_memory.scenario.json", agentic=True, peer=False)
     assert report.error is None and chosen
-    assert not _cards(report) and not _calls(report, "probes")
+    assert not _cards(report) and not _calls(report, "probes") and not _calls(report, "coaching")
     assert all(set(actions) <= set(session_graph.AGENT_ACTIONS) for _, actions, _ in chosen)
 
 
@@ -226,6 +226,62 @@ async def test_clarification_runs_when_chosen_or_when_the_candidate_asks(checkpo
     assert [c["user_content"].rsplit("\n", 1)[-1] for c in calls] == [f"[candidate]: {t}" for t in due]
     for card in _cards(report, "clarification"):
         assert card["probe"].startswith("scripted-clarification-") and card["kind"] == "clarification"
+
+
+# ── Interviewer coaching ───────────────────────────────────────────────────
+
+LONG_TURN = (
+    "Let me set this up properly before you start. You are given an array of integers and a target value, and "
+    "I would like you to return the indices of the two numbers that add up to it; you can assume exactly one "
+    "solution exists and you may not use the same element twice."
+)
+
+
+def _words(n: int, seed: str = "word") -> str:
+    return " ".join(f"{seed}{i}" for i in range(n))
+
+
+async def test_coaching_runs_for_substantial_interviewer_turns_at_most_every_20s(checkpointer, chosen) -> None:
+    events = [
+        TranscriptEvent(speaker_role=SpeakerRole.INTERVIEWER, text=LONG_TURN),
+        TranscriptEvent(
+            speaker_role=SpeakerRole.CANDIDATE, text="Sure, I will start with the brute force.", delay_ms=2000
+        ),
+        TranscriptEvent(speaker_role=SpeakerRole.INTERVIEWER, text="Okay, go on.", delay_ms=3000),  # too short
+        TranscriptEvent(
+            speaker_role=SpeakerRole.INTERVIEWER, text=LONG_TURN + " Also think about duplicates.", delay_ms=5000
+        ),
+        TranscriptEvent(
+            speaker_role=SpeakerRole.INTERVIEWER, text=LONG_TURN + " And negative numbers.", delay_ms=15000
+        ),
+    ]
+    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events))
+    assert report.error is None
+    coached = [c["user_content"].rsplit("\n", 1)[-1] for c in _calls(report, "coaching")]
+    # Turn 1 at t=0; turn 4 at t=10 s is inside the 20 s gap; turn 5 at t=25 s is coached.
+    assert coached == [f"[interviewer]: {LONG_TURN}", f"[interviewer]: {LONG_TURN} And negative numbers."]
+    for card in _cards(report, "coaching"):
+        assert card["priority"] == "info" and card["source"] == "llm" and card["title"].startswith("scripted-coaching-")
+
+
+async def test_talk_share_and_monologue_signals(checkpointer) -> None:
+    events = [
+        TranscriptEvent(speaker_role=SpeakerRole.INTERVIEWER, text=_words(130, "intro")),  # monologue
+        TranscriptEvent(speaker_role=SpeakerRole.CANDIDATE, text=_words(20, "ans"), delay_ms=1000),
+        TranscriptEvent(speaker_role=SpeakerRole.INTERVIEWER, text=_words(100, "more"), delay_ms=1000),
+        TranscriptEvent(speaker_role=SpeakerRole.CANDIDATE, text=_words(20, "reply"), delay_ms=1000),
+        TranscriptEvent(speaker_role=SpeakerRole.INTERVIEWER, text=_words(100, "again"), delay_ms=1000),
+        TranscriptEvent(
+            speaker_role=SpeakerRole.INTERVIEWER, text=_words(100, "still"), delay_ms=1000
+        ),  # inside 5 min gap
+    ]
+    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events), agentic=False)
+    assert report.error is None
+    rule_cards = [c for c in _cards(report, "coaching") if c["source"] == "rule"]
+    assert [c["id"].rsplit(":", 1)[-1] for c in rule_cards] == ["monologue", "talk_share"]
+    assert rule_cards[1]["title"] == "You have spoken 92% of the last 250 words"  # fires once the window has 250 words
+    # Signals need no LLM.
+    assert not _calls(report, "coaching") or all(c["kind"] == "coaching" for c in _calls(report, "coaching"))
 
 
 # ── Cards the interviewer acted on ─────────────────────────────────────────

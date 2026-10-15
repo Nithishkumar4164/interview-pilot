@@ -274,6 +274,8 @@ def classify(context: AnalysisContext) -> str:
         return "claim_check"
     if sp.startswith("Draft a clarification"):
         return "clarification"
+    if sp.startswith("Coach the interviewer"):
+        return "coaching"
     if context.task_type == TaskType.REAL_TIME_ANALYSIS:
         return "utterance_analysis"
     if context.task_type == TaskType.CODE_RATING:
@@ -429,6 +431,21 @@ def _clarification(h: int) -> dict:
     }
 
 
+def _coaching(h: int) -> dict:
+    if h % 2:
+        return {"issues": []}
+    kind = _pick(("leading_question", "revealed_answer", "unclear_question", "stacked_questions", "interrupting"), h, 7)
+    return {
+        "issues": [
+            {
+                "kind": kind,
+                "note": f"scripted-coaching-{h % 1_000:03d}",
+                "suggestion": f"scripted-rephrase-{h % 1_000:03d}",
+            }
+        ]
+    }
+
+
 def _probes(h: int) -> dict:
     n = h % 4  # 0..3 probes
     return {
@@ -477,6 +494,8 @@ def respond(kind: str, context: AnalysisContext) -> str:
         return json.dumps(_claim_check(h))
     if kind == "clarification":
         return json.dumps(_clarification(h))
+    if kind == "coaching":
+        return json.dumps(_coaching(h))
     if kind == "code_inspection":
         return json.dumps(_code_inspection(h))
     if kind == "report_synthesis":

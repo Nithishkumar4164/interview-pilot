@@ -268,6 +268,8 @@ def classify(context: AnalysisContext) -> str:
         return "code_inspection"
     if sp.startswith("You write the final assessment"):
         return "report_synthesis"
+    if sp.startswith("Suggest follow-up questions"):
+        return "probes"
     if context.task_type == TaskType.REAL_TIME_ANALYSIS:
         return "utterance_analysis"
     if context.task_type == TaskType.CODE_RATING:
@@ -393,12 +395,27 @@ def _code_analysis(h: int) -> dict:
     }
 
 
-_AGENT_ACTIONS = ("check_contradiction", "draft_hint", "inspect_code")
+_OFFERED_ACTION = re.compile(r'^  "(\w+)" - ', re.MULTILINE)
 
 
-def _next_actions(h: int) -> list[str]:
-    """Hash-chosen follow-ups: each action independently, about half the time."""
-    return [a for i, a in enumerate(_AGENT_ACTIONS) if (h >> (13 + i)) & 1]
+def _next_actions(h: int, system_prompt: str) -> list[str]:
+    """Hash-chosen follow-ups among the actions the prompt offers: each independently, about half the time."""
+    offered = _OFFERED_ACTION.findall(system_prompt)
+    return [a for i, a in enumerate(offered) if (h >> (13 + i)) & 1]
+
+
+def _probes(h: int) -> dict:
+    n = h % 4  # 0..3 probes
+    return {
+        "probes": [
+            {
+                "question": f"scripted-probe-{h % 1_000:03d}-{i}",
+                "targets": f"scripted-target-{(h >> 3) % 100:02d}",
+                "why": "scripted",
+            }
+            for i in range(n)
+        ]
+    }
 
 
 def _code_inspection(h: int) -> dict:
@@ -427,8 +444,10 @@ def respond(kind: str, context: AnalysisContext) -> str:
     if kind == "utterance_analysis":
         data = _utterance_analysis(h)
         if '"next_actions"' in context.system_prompt:
-            data["next_actions"] = _next_actions(h)
+            data["next_actions"] = _next_actions(h, context.system_prompt)
         return json.dumps(data)
+    if kind == "probes":
+        return json.dumps(_probes(h))
     if kind == "code_inspection":
         return json.dumps(_code_inspection(h))
     if kind == "report_synthesis":

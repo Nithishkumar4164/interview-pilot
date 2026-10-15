@@ -14,6 +14,7 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from src.graphs.code_graph import CodeRefined, CodeSnapshotIn
 from src.graphs.session_graph import (
+    CopilotCardUsed,
     HintAcknowledged,
     HintRevealed,
     QuestionChanged,
@@ -62,6 +63,7 @@ CHECKPOINT_TYPES: tuple[type, ...] = (
     HintAcknowledged,
     RuntimeHintGenerated,
     SummaryCompressed,
+    CopilotCardUsed,
     # code graph
     CodeSnapshotIn,
     CodeRefined,

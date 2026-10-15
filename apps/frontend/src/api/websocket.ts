@@ -20,7 +20,12 @@ export type WSMessageType =
   | 'speaker_transcript_assigned'
   | 'sv_transcripts'
   | 'context_reloaded'
-  | 'code_rating';
+  | 'code_rating'
+  // peer interviewer
+  | 'copilot_card'
+  | 'copilot_coverage'
+  | 'scorecard'
+  | 'copilot_reply';
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;

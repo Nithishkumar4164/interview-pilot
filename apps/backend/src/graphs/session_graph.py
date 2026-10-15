@@ -43,7 +43,12 @@ from src.llm.failover import FailoverManager
 from src.llm.retry import retry_transient
 from src.schemas.analysis import EnhancedAnalysisResult
 from src.schemas.hint import RuntimeHintRequest
-from src.services.analysis_service import analyze_utterance, analyze_utterance_with_actions
+from src.services.analysis_service import (
+    AGENT_ACTIONS,
+    PEER_ACTIONS,
+    analyze_utterance,
+    analyze_utterance_with_actions,
+)
 from src.services.code_analysis_service import inspect_code_against_statement
 from src.services.contradiction_service import Contradiction, check_contradictions
 from src.services.memory_service import (
@@ -57,6 +62,7 @@ from src.services.memory_service import (
     format_utterances,
     should_extract_facts,
 )
+from src.services.peer_interviewer import copilot_card, suggest_probes
 from src.services.runtime_hint_service import assemble_hint_context, generate_runtime_hint, resolve_directness
 from src.utils.logging import get_logger
 
@@ -64,6 +70,7 @@ logger = get_logger("graphs.session")
 
 RECENT_ANALYSES = 5  # analyses kept for to_dict and as runtime-hint insights
 REPORT_DIGEST_SIZE = 50  # report_snapshot's analysis_results window
+COPILOT_USAGE_SIZE = 50  # copilot cards the interviewer acted on, kept for the report
 
 # ── Ingress events ────────────────────────────────────────────────────────
 
@@ -115,8 +122,28 @@ class SummaryCompressed:
     count: int
 
 
+@dataclass(frozen=True)
+class CopilotCardUsed:
+    """The interviewer acted on a copilot card (asked the probe, relayed the clarification, ...).
+
+    Kept so the report can tell copilot-prompted moves from the interviewer's own.
+    """
+
+    card_id: str
+    kind: str
+    text: str
+    question_id: str = ""
+    at: str = ""
+
+
 IngressEvent = (
-    UtteranceIn | QuestionChanged | HintRevealed | HintAcknowledged | RuntimeHintGenerated | SummaryCompressed
+    UtteranceIn
+    | QuestionChanged
+    | HintRevealed
+    | HintAcknowledged
+    | RuntimeHintGenerated
+    | SummaryCompressed
+    | CopilotCardUsed
 )
 
 # ── Effects (custom stream payloads) ──────────────────────────────────────
@@ -177,6 +204,9 @@ class SessionState(TypedDict, total=False):
     hint_generation_count: dict[str, int]
     last_runtime_hint: str | None
 
+    # ── peer interviewer ──
+    copilot_cards_used: list[dict]  # {"card_id", "kind", "text", "question_id", "at"}, bounded
+
     # ── per-run scratch ──
     extracted: Annotated[dict[int, dict], _reset_or_merge]
     analysis: EnhancedAnalysisResult | None
@@ -212,6 +242,7 @@ def initial_state(session_id: str) -> dict[str, Any]:
         "claims_by_utterance": {},
         "hint_generation_count": {},
         "last_runtime_hint": None,
+        "copilot_cards_used": [],
         "analysis": None,
     }
 
@@ -270,6 +301,16 @@ class InspectTask(TypedDict):
     language: str
 
 
+class ProbeTask(TypedDict):
+    utterance_id: str
+    question_id: str
+    question_plan: dict
+    context_text: str
+    analysis: EnhancedAnalysisResult | None
+    speaker: str
+    text: str
+
+
 ACTION_TIMEOUT_S = 20.0
 
 
@@ -286,16 +327,29 @@ class AnalyzeTask(TypedDict):
     active_hint: str
 
 
-def build_session_graph(failover: FailoverManager, session_id: str, agentic: bool = False) -> StateGraph:
+def build_session_graph(
+    failover: FailoverManager, session_id: str, agentic: bool = False, peer: bool = False
+) -> StateGraph:
     """The graph for one session (``session_id`` scopes LLM calls and effect keys).
 
     ``agentic`` (AGENTIC_ROUTING_ENABLED): the analysis also chooses follow-ups,
     run in parallel after it (see ``plan_actions``). Off, the follow-up is the
     fixed contradiction check of today.
+
+    ``peer`` (PEER_INTERVIEWER_ENABLED): the copilot acts as a peer interviewer.
+    The analysis may also choose the peer actions (suggested probes, ...),
+    run in the same fan-out, and their results reach the dashboard as
+    copilot cards. Peer mode uses the fan-out shape even when ``agentic`` is
+    off; the agentic actions are offered only when ``agentic`` is on.
     """
+    follow_ups = agentic or peer
+    offered: tuple[str, ...] = (*(AGENT_ACTIONS if agentic else ()), *(PEER_ACTIONS if peer else ()))
 
     def emit(kind: str, **data: Any) -> None:
         get_stream_writer()({"effect": kind, **data})
+
+    def emit_card(card: dict) -> None:
+        emit(EFFECT_DASHBOARD, method="send_copilot_card", payload=card)
 
     def apply_events(state: SessionState) -> dict:
         working = list(state.get("working_memory", []))
@@ -314,6 +368,7 @@ def build_session_graph(failover: FailoverManager, session_id: str, agentic: boo
         hint_counts = dict(state.get("hint_generation_count", {}))
         last_hint = state.get("last_runtime_hint")
         in_flight = state.get("memory_in_flight", 0)
+        cards_used = list(state.get("copilot_cards_used", []))
 
         for ev in state["events"]:
             if isinstance(ev, UtteranceIn):
@@ -357,6 +412,18 @@ def build_session_graph(failover: FailoverManager, session_id: str, agentic: boo
             elif isinstance(ev, SummaryCompressed):
                 summary = ev.summary
                 unsummarized = unsummarized[ev.count :]
+            elif isinstance(ev, CopilotCardUsed):
+                if all(c["card_id"] != ev.card_id for c in cards_used):
+                    cards_used = [
+                        *cards_used,
+                        {
+                            "card_id": ev.card_id,
+                            "kind": ev.kind,
+                            "text": ev.text,
+                            "question_id": ev.question_id or question["active_question_id"] or "",
+                            "at": ev.at,
+                        },
+                    ][-COPILOT_USAGE_SIZE:]
 
         return {
             "working_memory": working,
@@ -369,6 +436,7 @@ def build_session_graph(failover: FailoverManager, session_id: str, agentic: boo
             "recent_insights": recent_insights,
             "hint_generation_count": hint_counts,
             "last_runtime_hint": last_hint,
+            "copilot_cards_used": cards_used,
             "events_processed": state.get("events_processed", 0) + state.get("transport_events", 0),
             "extracted": None,
             "analysis": None,
@@ -412,7 +480,7 @@ def build_session_graph(failover: FailoverManager, session_id: str, agentic: boo
     async def analyze(state: AnalyzeTask) -> dict:
         target = state["target"]
         actions: list[str] = []
-        if agentic:
+        if offered:
             result, actions = await analyze_utterance_with_actions(
                 failover,
                 session_id,
@@ -421,6 +489,7 @@ def build_session_graph(failover: FailoverManager, session_id: str, agentic: boo
                 state["active_hint"],
                 target.speaker,
                 target.text,
+                actions=offered,
             )
         else:
             result = await analyze_utterance(
@@ -586,7 +655,79 @@ def build_session_graph(failover: FailoverManager, session_id: str, agentic: boo
                     ),
                 )
             )
+        if peer:
+            sends.extend(peer_sends(state, target, result, chosen))
         return sends
+
+    # ── Peer interviewer follow-ups ────────────────────────────────────
+
+    def peer_context(state: SessionState) -> str:
+        return assemble_context(
+            state.get("working_memory", []),
+            state.get("rolling_summary", ""),
+            state.get("fact_store") or FactStore(),
+            question_text=state.get("current_question", ""),
+            hint_text=state.get("active_hint", ""),
+        )
+
+    def peer_sends(
+        state: SessionState, target: UtteranceIn, result: EnhancedAnalysisResult, chosen: set[str]
+    ) -> list[Send]:
+        """The peer actions to run for this analysis: chosen by it, or due on the evidence it produced."""
+        sends: list[Send] = []
+        dims = result.dimensions
+        # A probe is due when the analysis asked for one, or when it found gaps worth asking about.
+        gaps = bool(dims and dims.depth_completeness.key_points_missed)
+        if "suggest_probe" in chosen or gaps:
+            sends.append(
+                Send(
+                    "suggest_probes",
+                    ProbeTask(
+                        utterance_id=target.id,
+                        question_id=state.get("active_question_id") or "",
+                        question_plan=state.get("question_plan", {}),
+                        context_text=peer_context(state),
+                        analysis=result,
+                        speaker=target.speaker,
+                        text=target.text,
+                    ),
+                )
+            )
+        return sends
+
+    async def suggest_probes_node(state: ProbeTask) -> dict:
+        try:
+            probes = await asyncio.wait_for(
+                retry_transient(
+                    lambda: suggest_probes(
+                        failover,
+                        session_id,
+                        state["context_text"],
+                        state["question_plan"] or None,
+                        state["analysis"],
+                        state["speaker"],
+                        state["text"],
+                    )
+                ),
+                ACTION_TIMEOUT_S,
+            )
+        except Exception as e:
+            logger.warning("peer_action_failed", action="suggest_probe", session_id=session_id, error=str(e))
+            return {}
+        if not probes:
+            return {}
+        emit_card(
+            copilot_card(
+                f"{session_id}:{state['utterance_id']}:probe",
+                "probe",
+                "Suggested follow-ups",
+                probes[0]["targets"] or "Worth digging into",
+                items=[p["question"] for p in probes],
+                probe=probes[0]["question"],
+                question_id=state["question_id"],
+            )
+        )
+        return {}
 
     async def check_contradiction(state: ContradictionTask) -> dict:
         try:
@@ -682,9 +823,8 @@ def build_session_graph(failover: FailoverManager, session_id: str, agentic: boo
         return {}
 
     def finish(state: SessionState) -> dict:
-        result = state["analysis"]
-        assert result is not None
-        if result.hint_signal != "none":
+        result = state.get("analysis")
+        if result is not None and result.hint_signal != "none":
             emit(
                 EFFECT_DASHBOARD,
                 method="send_hint",
@@ -706,15 +846,17 @@ def build_session_graph(failover: FailoverManager, session_id: str, agentic: boo
     graph.add_conditional_edges("apply_events", dispatch, ["extract_facts", "analyze", END])
     graph.add_edge("extract_facts", "merge_results")
     graph.add_edge("analyze", "merge_results")
-    if agentic:
+    if follow_ups:
+        actions = ["check_contradiction", "draft_hint", "inspect_code"]
         graph.add_node("check_contradiction", check_contradiction, input_schema=ContradictionTask)
         graph.add_node("draft_hint", draft_hint, input_schema=HintTask)
         graph.add_node("inspect_code", inspect_code, input_schema=InspectTask)
+        if peer:
+            graph.add_node("suggest_probes", suggest_probes_node, input_schema=ProbeTask)
+            actions += ["suggest_probes"]
         graph.add_node("finish", finish)
-        graph.add_conditional_edges(
-            "merge_results", plan_actions, ["check_contradiction", "draft_hint", "inspect_code", END]
-        )
-        for action in ("check_contradiction", "draft_hint", "inspect_code"):
+        graph.add_conditional_edges("merge_results", plan_actions, [*actions, END])
+        for action in actions:
             graph.add_edge(action, "finish")
         graph.add_edge("finish", END)
     else:
@@ -777,6 +919,7 @@ def report_snapshot(values: dict) -> dict:
         "contradictions": [
             {"explanation": c.explanation, "confidence": c.confidence} for c in values["contradictions"]
         ],
+        "copilot_cards_used": list(values.get("copilot_cards_used", [])),
     }
 
 

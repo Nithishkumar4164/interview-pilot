@@ -81,4 +81,27 @@ DEFAULT_TASK_MAPPINGS: dict[TaskType, TaskProviderMapping] = {
         fallback_provider="openai",
         fallback_model="gpt-4o",
     ),
+    # Peer interviewer: short structured calls on the live path (Sonnet); coaching
+    # judgments on interviewer turns run on the cheapest model since they are frequent.
+    TaskType.PEER_INTERVIEWER: TaskProviderMapping(
+        task_type=TaskType.PEER_INTERVIEWER,
+        primary_provider="anthropic",
+        primary_model="claude-sonnet-5",
+        fallback_provider="openai",
+        fallback_model="gpt-4o",
+    ),
+    TaskType.INTERVIEWER_COACHING: TaskProviderMapping(
+        task_type=TaskType.INTERVIEWER_COACHING,
+        primary_provider="anthropic",
+        primary_model="claude-haiku-5-5",
+        fallback_provider="openai",
+        fallback_model="gpt-4o-mini",
+    ),
+    TaskType.COPILOT_QUERY: TaskProviderMapping(
+        task_type=TaskType.COPILOT_QUERY,
+        primary_provider="anthropic",
+        primary_model="claude-sonnet-5",
+        fallback_provider="openai",
+        fallback_model="gpt-4o",
+    ),
 }

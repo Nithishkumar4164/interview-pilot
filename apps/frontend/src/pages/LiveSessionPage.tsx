@@ -29,6 +29,8 @@ import { ScoreRings } from '@/components/dashboard/ScoreRings';
 import { FlagsPanel } from '@/components/dashboard/FlagsPanel';
 import { flagsFromPayload } from '@/lib/flags';
 import { InterviewPlanPanel } from '@/components/dashboard/InterviewPlanPanel';
+import { CopilotPanel } from '@/components/dashboard/CopilotPanel';
+import { useCopilotStore } from '@/stores/copilot-store';
 import * as api from '@/api/client';
 
 interface OverlayEntry {
@@ -167,6 +169,7 @@ export function LiveSessionPage() {
       useHintStore.getState().clear();
       useOfflineStore.getState().reset();
       useSpeakerStore.getState().clear();
+      useCopilotStore.getState().clear();
       videoStream?.getTracks().forEach(t => t.stop());
     };
   }, [reset]);
@@ -536,6 +539,17 @@ export function LiveSessionPage() {
           </div>
 
           <div className="live-session__right">
+            <CopilotPanel
+              onUseCard={(card) =>
+                send({
+                  type: 'use_copilot_card',
+                  id: card.id,
+                  kind: card.kind,
+                  text: card.probe || card.items[0] || card.title,
+                  question_id: card.questionId,
+                })
+              }
+            />
             <SpeakersPanel />
             <ScoreRings />
             <FlagsPanel />

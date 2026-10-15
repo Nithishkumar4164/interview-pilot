@@ -16,6 +16,10 @@ class TaskType(str, Enum):
     RESUME_EXTRACTION = "resume_extraction"
     QUESTION_GENERATION = "question_generation"
     REPORT_CRITERION = "report_criterion"
+    # Peer interviewer (PEER_INTERVIEWER_ENABLED): probes, claim checks, clarifications, edge cases
+    PEER_INTERVIEWER = "peer_interviewer"
+    INTERVIEWER_COACHING = "interviewer_coaching"  # judgments on the interviewer's own questions (cheap model)
+    COPILOT_QUERY = "copilot_query"  # the interviewer asks the copilot a question (tool loop over live evidence)
 
 
 class ProviderHealthStatus(str, Enum):

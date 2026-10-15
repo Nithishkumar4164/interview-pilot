@@ -57,6 +57,7 @@ from src.graphs.session_graph import (
     EFFECT_COMPRESS_AFTER_IN_FLIGHT,
     EFFECT_DASHBOARD,
     EFFECT_PERSIST,
+    CopilotCardUsed,
     HintAcknowledged,
     HintRevealed,
     IngressEvent,
@@ -221,6 +222,7 @@ class LangGraphSessionPipeline:
         durability: Durability = "async",
         interim_throttle_s: float = INTERIM_THROTTLE_S,
         agentic: bool | None = None,
+        peer: bool | None = None,
     ) -> None:
         self.session_id = session_id
         self._failover = failover_manager
@@ -230,11 +232,14 @@ class LangGraphSessionPipeline:
         self._clock = clock
         self._durability: Durability = durability
         self._interim_throttle_s = interim_throttle_s
-        if agentic is None:
-            from src.config import settings
+        from src.config import settings
 
+        if agentic is None:
             agentic = settings.agentic_routing_enabled
-        self._graph = build_session_graph(failover_manager, session_id, agentic=agentic)
+        if peer is None:
+            peer = settings.peer_interviewer_enabled
+        self._peer = peer
+        self._graph = build_session_graph(failover_manager, session_id, agentic=agentic, peer=peer)
         self._app: CompiledStateGraph | None = None
         self._config: RunnableConfig = {"configurable": {"thread_id": thread_id_for(session_id)}}
 
@@ -347,6 +352,21 @@ class LangGraphSessionPipeline:
                 hint_id=data.get("hint_id", ""),
                 question_id=data.get("question_id", ""),
                 quality=data.get("quality", "none"),
+            )
+        )
+
+    async def handle_copilot_card_used(self, data: dict) -> None:
+        """The interviewer acted on a copilot card (peer interviewer); recorded for the report."""
+        card_id = str(data.get("id", "")).strip()
+        if not card_id:
+            return
+        self._enqueue(
+            CopilotCardUsed(
+                card_id=card_id,
+                kind=str(data.get("kind", "")),
+                text=str(data.get("text", "")),
+                question_id=str(data.get("question_id", "")),
+                at=str(data.get("at") or datetime.now(UTC).isoformat()),
             )
         )
 

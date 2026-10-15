@@ -19,6 +19,7 @@ from src.replay.scenario import (
     ActiveHintEvent,
     CodeSnapshotEvent,
     CodeUpdateEvent,
+    CopilotCardUsedEvent,
     HintAckEvent,
     HintRequestEvent,
     QuestionChangeEvent,
@@ -55,6 +56,7 @@ REPLAY_LATENCY_MS: dict[str, float] = {
     "code_rating": 20,
     "code_analysis": 40,
     "code_inspection": 20,
+    "probes": 20,
     "utterance_analysis": 30,
     "summary": 60,
 }
@@ -313,6 +315,16 @@ class ReplayRunner:
                     await worker.on_code_snapshot(ev.code, ev.language, ev.source)
                 elif isinstance(ev, ActiveHintEvent):
                     worker.set_active_hint(ev.text)
+                elif isinstance(ev, CopilotCardUsedEvent):
+                    await worker.handle_copilot_card_used(
+                        {
+                            "id": ev.card_id,
+                            "kind": ev.kind,
+                            "text": ev.text,
+                            "question_id": ev.question_id,
+                            "at": scenario_clock.isoformat(),
+                        }
+                    )
 
                 if not self.real_time:
                     await asyncio.wait_for(worker.wait_idle(), timeout=30.0)

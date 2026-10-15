@@ -6,14 +6,18 @@
  * can then tell copilot-prompted moves from the interviewer's own);
  * "Dismiss" just drops it. Kinds can be muted from the panel header.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ALL_CARD_KINDS,
   CARD_KIND_LABELS,
+  CRITERION_CATEGORIES,
+  CRITERION_LABELS,
   useCopilotStore,
   type CopilotCard,
   type CopilotCardKind,
 } from '@/stores/copilot-store';
+import { useSessionStore, getAllPlanQuestions } from '@/stores/session-store';
+import { usePlanStore } from '@/stores/plan-store';
 
 /** Cards whose primary action is relaying something to the candidate. */
 const RELAY_KINDS: ReadonlySet<CopilotCardKind> = new Set(['probe', 'clarification', 'claim_check', 'edge_cases']);
@@ -58,6 +62,8 @@ export function CopilotPanel({ onUseCard }: CopilotPanelProps) {
           ))}
         </div>
       )}
+
+      <CoverageStrip />
 
       {visible.length === 0 ? (
         <p className="copilot-panel__empty">Listening. Suggestions appear here as the interview unfolds.</p>
@@ -114,5 +120,54 @@ export function CopilotPanel({ onUseCard }: CopilotPanelProps) {
         </ul>
       )}
     </section>
+  );
+}
+
+/**
+ * Evidence gathered per report criterion, and the next planned question that
+ * would fill the biggest gap (by plan category).
+ */
+function CoverageStrip() {
+  const coverage = useCopilotStore((s) => s.coverage);
+  const plan = usePlanStore((s) => s.plan);
+  const currentQuestionIndex = useSessionStore((s) => s.currentQuestionIndex);
+
+  const suggestion = useMemo(() => {
+    if (!coverage || coverage.gaps.length === 0) return null;
+    const upcoming = getAllPlanQuestions()
+      .map((q, index) => ({ q, index }))
+      .filter(({ index }) => index > currentQuestionIndex);
+    for (const gap of coverage.gaps) {
+      const categories = CRITERION_CATEGORIES[gap] ?? [];
+      const hit = upcoming.find(({ q }) => categories.includes(q.category));
+      if (hit) return { gap, index: hit.index, text: hit.q.text };
+    }
+    return null;
+    // getAllPlanQuestions reads the plan store; recompute when the plan changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coverage, currentQuestionIndex, plan]);
+
+  if (!coverage) return null;
+
+  return (
+    <div className="coverage-strip" aria-label="Rubric coverage">
+      <ul className="coverage-strip__chips">
+        {Object.entries(coverage.criteria).map(([name, c]) => (
+          <li
+            key={name}
+            className={`coverage-chip coverage-chip--${c.status}`}
+            title={`${CRITERION_LABELS[name] ?? name}: ${c.evidence} evidence point${c.evidence === 1 ? '' : 's'}`}
+          >
+            {CRITERION_LABELS[name] ?? name}
+          </li>
+        ))}
+      </ul>
+      {suggestion && (
+        <p className="coverage-strip__suggestion">
+          No evidence yet for <strong>{CRITERION_LABELS[suggestion.gap] ?? suggestion.gap}</strong>. Q
+          {suggestion.index + 1} covers it: {suggestion.text.length > 70 ? suggestion.text.slice(0, 70) + '…' : suggestion.text}
+        </p>
+      )}
+    </div>
   );
 }

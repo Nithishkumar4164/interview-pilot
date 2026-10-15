@@ -4441,3 +4441,42 @@ ul, ol {
   gap: var(--space-2);
   margin-top: var(--space-1);
 }
+
+.coverage-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.coverage-strip__chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.coverage-chip {
+  font-size: 0.7rem;
+  padding: 1px 8px;
+  border-radius: var(--radius-full, 999px);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.coverage-chip--thin {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+.coverage-chip--solid {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.coverage-strip__suggestion {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}

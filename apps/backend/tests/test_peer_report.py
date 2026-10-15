@@ -94,3 +94,70 @@ async def test_agentic_report_offers_the_notes_tool_only_when_there_are_notes() 
         await execute(ToolCall(id="3", name="get_scorecard_notes", arguments={"criterion": "system_design"}))
         == "No scorecard notes."
     )
+
+
+def test_live_evidence_index_numbers_finals_and_carries_the_scorecard() -> None:
+    from src.services.contradiction_service import Contradiction
+    from src.services.copilot_query import live_evidence_index
+    from src.services.memory_service import FactStore
+
+    values = {
+        "fact_store": FactStore(claimed_experience=["three years of Kafka"]),
+        "analysis_digest": [
+            {
+                "answer_quality": 4,
+                "on_track": True,
+                "insight": "solid",
+                "red_flags": [],
+                "hint_signal": "none",
+                "suggestion": "x",
+            }
+        ],
+        "contradictions": [
+            Contradiction(
+                claim="a",
+                new_statement="b",
+                explanation="c",
+                confidence=0.9,
+                suggested_probe="d",
+                detection_method="rule",
+            )
+        ],
+        "rolling_summary": "So far so good.",
+        "current_question": "Two sum",
+        "scorecard": NOTES,
+    }
+    history = [
+        {
+            "id": "1",
+            "speaker_role": "interviewer",
+            "text": "Hi there",
+            "is_final": True,
+            "timestamp": "2026-01-01T00:00:00+00:00",
+        },
+        {
+            "id": "2",
+            "speaker_role": "candidate",
+            "text": "partial",
+            "is_final": False,
+            "timestamp": "2026-01-01T00:00:01+00:00",
+        },
+        {
+            "id": "3",
+            "speaker_role": "candidate",
+            "text": "Hello, ready.",
+            "is_final": True,
+            "timestamp": "2026-01-01T00:01:05+00:00",
+        },
+    ]
+    index = live_evidence_index(values, history, {"history": [], "last_result": None, "snapshot_count": 0})
+    assert [(e["id"], e["speaker"], e["elapsed"]) for e in index.entries] == [
+        ("T1", "interviewer", "00:00:00"),
+        ("T2", "candidate", "00:01:05"),
+    ]
+    assert index.analyses == [
+        {"answer_quality": 4, "on_track": True, "insight": "solid", "red_flags": [], "hint_signal": "none"}
+    ]
+    assert index.contradictions[0]["explanation"] == "c" and index.questions == ["Two sum"]
+    assert "three years of Kafka" in index.facts_text and len(index.notes) == 2
+    assert "Scorecard notes: 2" in index.overview()

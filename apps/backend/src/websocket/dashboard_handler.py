@@ -251,6 +251,12 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                         except Exception as e:
                             logger.error("copilot_card_used_error", session_id=session_id, error=str(e))
 
+                elif msg_type == "copilot_query":
+                    worker = _active_workers.get(session_id)
+                    if worker:
+                        reply = await worker.handle_copilot_query(message)
+                        await dashboard_manager.send_copilot_reply(session_id, reply)
+
                 elif msg_type == "add_scorecard_note":
                     worker = _active_workers.get(session_id)
                     if worker:

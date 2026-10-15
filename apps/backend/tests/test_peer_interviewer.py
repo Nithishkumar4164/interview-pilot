@@ -456,6 +456,56 @@ async def test_scorecard_collects_copilot_drafts_and_interviewer_notes(checkpoin
         await checkpointer.delete_threads(thread_id_for(scenario.meta.id), code_thread_id(scenario.meta.id))
 
 
+# ── Ask the copilot ────────────────────────────────────────────────────────
+
+
+async def test_copilot_answers_from_the_live_transcript_with_real_citations(checkpointer) -> None:
+    from src.replay.scenario import CopilotQueryEvent
+
+    events = [
+        TranscriptEvent(speaker_role=SpeakerRole.INTERVIEWER, text="Tell me about your Kafka experience."),
+        TranscriptEvent(
+            speaker_role=SpeakerRole.CANDIDATE,
+            text="I ran Kafka clusters for three years and built the consumer services for analytics.",
+            delay_ms=1000,
+        ),
+        CopilotQueryEvent(query_id="ask-1", question="What did they say about Kafka earlier?", delay_ms=1000),
+        CopilotQueryEvent(query_id="ask-2", question="   ", delay_ms=1000),
+    ]
+    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events), agentic=False)
+    assert report.error is None
+    answered, empty = report.copilot_replies
+    assert answered["id"] == "ask-1" and answered["answer"].startswith("scripted-answer-")
+    (citation,) = answered["citations"]
+    assert citation["entry_id"] == "T1" and citation["speaker"] == "interviewer"
+    assert citation["quote"] == "Tell me about your Kafka"
+    assert empty["error"] == "empty" and empty["citations"] == []
+    # The question drove a transcript search in the tool loop.
+    turns = [c for c in report.llm_calls if c["kind"] == "copilot_query"]
+    assert len(turns) == 2 and "search_transcript" in turns[0]["user_content"]
+    assert "What did they say about Kafka earlier?" in turns[0]["user_content"]
+
+
+async def test_a_failing_copilot_query_answers_with_the_error(checkpointer, monkeypatch) -> None:
+    from src.replay.runner import build_scripted_failover_manager
+    from src.workers import langgraph_session
+
+    async def broken(*args, **kwargs):
+        raise RuntimeError("tool loop exploded")
+
+    monkeypatch.setattr(langgraph_session, "answer_copilot_query", broken)
+    session_id = f"peer-{uuid.uuid4()}"
+    pipeline = LangGraphSessionPipeline(
+        session_id, build_scripted_failover_manager(), checkpointer, min_analysis_interval_s=0, peer=True
+    )
+    try:
+        reply = await pipeline.handle_copilot_query({"id": "q", "question": "Is quickselect O(n) worst case?"})
+        assert reply["id"] == "q" and reply["error"] == "tool loop exploded"
+        assert reply["answer"].startswith("Copilot unavailable:") and reply["citations"] == []
+    finally:
+        await pipeline.close()
+
+
 # ── Cards the interviewer acted on ─────────────────────────────────────────
 
 

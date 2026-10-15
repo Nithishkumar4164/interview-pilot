@@ -25,9 +25,10 @@ const RELAY_KINDS: ReadonlySet<CopilotCardKind> = new Set(['probe', 'clarificati
 interface CopilotPanelProps {
   onUseCard: (card: CopilotCard) => void;
   onAddNote?: (criterion: string, text: string) => void;
+  onAsk?: (id: string, question: string) => void;
 }
 
-export function CopilotPanel({ onUseCard, onAddNote }: CopilotPanelProps) {
+export function CopilotPanel({ onUseCard, onAddNote, onAsk }: CopilotPanelProps) {
   const cards = useCopilotStore((s) => s.cards);
   const mutedKinds = useCopilotStore((s) => s.mutedKinds);
   const dismissCard = useCopilotStore((s) => s.dismissCard);
@@ -66,6 +67,7 @@ export function CopilotPanel({ onUseCard, onAddNote }: CopilotPanelProps) {
 
       <CoverageStrip />
       <Scorecard onAddNote={onAddNote} />
+      {onAsk && <AskCopilot onAsk={onAsk} />}
 
       {visible.length === 0 ? (
         <p className="copilot-panel__empty">Listening. Suggestions appear here as the interview unfolds.</p>
@@ -247,6 +249,65 @@ function Scorecard({ onAddNote }: { onAddNote?: (criterion: string, text: string
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** A one-line question to the copilot, answered from the live session with transcript citations. */
+function AskCopilot({ onAsk }: { onAsk: (id: string, question: string) => void }) {
+  const replies = useCopilotStore((s) => s.replies);
+  const askCopilot = useCopilotStore((s) => s.askCopilot);
+  const [question, setQuestion] = useState('');
+  const pending = replies.some((r) => r.pending);
+
+  const submit = () => {
+    const trimmed = question.trim();
+    if (!trimmed || pending) return;
+    const id = crypto.randomUUID();
+    askCopilot(id, trimmed);
+    onAsk(id, trimmed);
+    setQuestion('');
+  };
+
+  return (
+    <div className="ask-copilot" aria-label="Ask the copilot">
+      {replies.length > 0 && (
+        <ul className="ask-copilot__thread">
+          {replies.slice(-3).map((r) => (
+            <li key={r.id} className={`ask-copilot__reply ${r.error ? 'ask-copilot__reply--error' : ''}`}>
+              <p className="ask-copilot__question">{r.question}</p>
+              <p className="ask-copilot__answer">{r.pending ? 'Thinking…' : r.answer}</p>
+              {r.citations.length > 0 && (
+                <p className="ask-copilot__citations">
+                  {r.citations.map((c) => (
+                    <span key={c.entryId} title={c.quote}>
+                      {c.entryId} {c.elapsed} {c.speaker}
+                    </span>
+                  ))}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        className="ask-copilot__form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <input
+          aria-label="Ask the copilot"
+          value={question}
+          placeholder="Ask the copilot… e.g. what did they say about Kafka?"
+          onChange={(e) => setQuestion(e.target.value)}
+          disabled={pending}
+        />
+        <button type="submit" className="btn btn--small btn--primary" disabled={pending || !question.trim()}>
+          Ask
+        </button>
+      </form>
     </div>
   );
 }

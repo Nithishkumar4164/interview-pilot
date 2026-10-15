@@ -546,6 +546,7 @@ export function LiveSessionPage() {
 
           <div className="live-session__right">
             <CopilotPanel
+              onAsk={(id, question) => send({ type: 'copilot_query', id, question })}
               onAddNote={(criterion, text) => {
                 const q = getAllPlanQuestions()[useSessionStore.getState().currentQuestionIndex];
                 send({ type: 'add_scorecard_note', criterion, text, question_id: q?.id ?? '' });

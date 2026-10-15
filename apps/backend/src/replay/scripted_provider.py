@@ -270,6 +270,10 @@ def classify(context: AnalysisContext) -> str:
         return "report_synthesis"
     if sp.startswith("Suggest follow-up questions"):
         return "probes"
+    if sp.startswith("Verify a technical claim"):
+        return "claim_check"
+    if sp.startswith("Draft a clarification"):
+        return "clarification"
     if context.task_type == TaskType.REAL_TIME_ANALYSIS:
         return "utterance_analysis"
     if context.task_type == TaskType.CODE_RATING:
@@ -404,6 +408,27 @@ def _next_actions(h: int, system_prompt: str) -> list[str]:
     return [a for i, a in enumerate(offered) if (h >> (13 + i)) & 1]
 
 
+def _claim_check(h: int) -> dict:
+    verdict = _pick(("correct", "incorrect", "misleading", "unverifiable"), h, 5)
+    wrong = verdict in ("incorrect", "misleading")
+    return {
+        "claim": f"scripted-claim-{h % 1_000:03d}",
+        "verdict": verdict,
+        "confidence": 0.9 if wrong else 0.3,
+        "correction": f"scripted-correction-{h % 1_000:03d}" if wrong else "",
+        "self_correct_probe": f"scripted-self-correct-{h % 1_000:03d}" if wrong else "",
+    }
+
+
+def _clarification(h: int) -> dict:
+    needs = h % 2 == 0
+    return {
+        "needs_clarification": needs,
+        "what_is_unclear": f"scripted-unclear-{h % 1_000:03d}" if needs else "",
+        "reply": f"scripted-clarification-{h % 1_000:03d}" if needs else "",
+    }
+
+
 def _probes(h: int) -> dict:
     n = h % 4  # 0..3 probes
     return {
@@ -448,6 +473,10 @@ def respond(kind: str, context: AnalysisContext) -> str:
         return json.dumps(data)
     if kind == "probes":
         return json.dumps(_probes(h))
+    if kind == "claim_check":
+        return json.dumps(_claim_check(h))
+    if kind == "clarification":
+        return json.dumps(_clarification(h))
     if kind == "code_inspection":
         return json.dumps(_code_inspection(h))
     if kind == "report_synthesis":

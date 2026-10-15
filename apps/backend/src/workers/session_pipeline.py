@@ -55,6 +55,10 @@ class SessionPipeline(Protocol):
 
     async def handle_code_rating(self, data: dict) -> dict: ...
 
+    async def handle_copilot_query(self, data: dict) -> dict:
+        """Ask the copilot (peer interviewer): the reply payload for ``send_copilot_reply``."""
+        ...
+
     # ── Reads ─────────────────────────────────────────────────────────
     def get_recent_transcripts(self, limit: int = 50) -> list[dict]: ...
 

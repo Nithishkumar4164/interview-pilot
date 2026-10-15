@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { CopilotPanel } from '@/components/dashboard/CopilotPanel';
 import { cardFromPayload, useCopilotStore, type CopilotCard } from '@/stores/copilot-store';
 
@@ -149,5 +149,40 @@ describe('live scorecard', () => {
     fireEvent.change(screen.getByLabelText('Note text'), { target: { value: '  Clear walkthrough ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
     expect(onAdd).toHaveBeenCalledWith('communication', 'Clear walkthrough');
+  });
+});
+
+import { replyFromPayload } from '@/stores/copilot-store';
+
+describe('ask the copilot', () => {
+  beforeEach(() => useCopilotStore.getState().clear());
+
+  it('sends the question, shows it pending, and resolves the reply with citations', () => {
+    const onAsk = vi.fn();
+    render(<CopilotPanel onUseCard={vi.fn()} onAsk={onAsk} />);
+    fireEvent.change(screen.getByLabelText('Ask the copilot', { selector: 'input' }), { target: { value: ' What did they say about Kafka? ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    expect(onAsk).toHaveBeenCalledTimes(1);
+    const [id, question] = onAsk.mock.calls[0];
+    expect(question).toBe('What did they say about Kafka?');
+    expect(screen.getByText('Thinking…')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ask' })).toBeDisabled();
+
+    const reply = replyFromPayload({
+      id,
+      answer: 'They ran Kafka clusters for three years.',
+      citations: [{ entry_id: 'T2', elapsed: '00:00:05', speaker: 'candidate', quote: 'I ran Kafka clusters' }],
+    });
+    act(() => useCopilotStore.getState().resolveReply(reply!));
+    expect(screen.getByText('They ran Kafka clusters for three years.')).toBeTruthy();
+    expect(screen.getByTitle('I ran Kafka clusters').textContent).toBe('T2 00:00:05 candidate');
+    expect(screen.getByRole('button', { name: 'Ask' })).toBeDisabled(); // empty input again
+  });
+
+  it('shows an error reply and ignores payloads without an id', () => {
+    useCopilotStore.getState().askCopilot('q1', 'Is quickselect O(n)?');
+    useCopilotStore.getState().resolveReply(replyFromPayload({ id: 'q1', answer: 'Copilot unavailable: boom', error: 'boom' })!);
+    expect(useCopilotStore.getState().replies[0]).toMatchObject({ pending: false, error: 'boom' });
+    expect(replyFromPayload({ answer: 'x' })).toBeNull();
   });
 });

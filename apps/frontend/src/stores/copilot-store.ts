@@ -167,16 +167,62 @@ export function scorecardFromPayload(p: Record<string, unknown>): ScorecardNote[
     }));
 }
 
+// ── Ask the copilot ──────────────────────────────────────────────────
+
+export interface CopilotCitation {
+  entryId: string;
+  elapsed: string;
+  speaker: string;
+  quote: string;
+}
+
+export interface CopilotReply {
+  id: string;
+  question: string;
+  answer: string;
+  citations: CopilotCitation[];
+  error: string | null;
+  pending: boolean;
+  askedAt: string;
+}
+
+export function replyFromPayload(p: Record<string, unknown>): Partial<CopilotReply> & { id: string } | null {
+  if (typeof p.id !== 'string' || !p.id) return null;
+  const citations = Array.isArray(p.citations)
+    ? p.citations
+        .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
+        .map((c) => ({
+          entryId: typeof c.entry_id === 'string' ? c.entry_id : '',
+          elapsed: typeof c.elapsed === 'string' ? c.elapsed : '',
+          speaker: typeof c.speaker === 'string' ? c.speaker : '',
+          quote: typeof c.quote === 'string' ? c.quote : '',
+        }))
+    : [];
+  return {
+    id: p.id,
+    question: typeof p.question === 'string' ? p.question : undefined,
+    answer: typeof p.answer === 'string' ? p.answer : '',
+    citations,
+    error: typeof p.error === 'string' ? p.error : null,
+    pending: false,
+  };
+}
+
+const MAX_REPLIES = 20;
+
 interface CopilotState {
   cards: CopilotCard[]; // newest first
   usedIds: string[];
   mutedKinds: Set<CopilotCardKind>;
   coverage: Coverage | null;
   scorecard: ScorecardNote[];
+  replies: CopilotReply[]; // oldest first
 
   addCard: (card: CopilotCard) => void;
   setCoverage: (coverage: Coverage) => void;
   setScorecard: (notes: ScorecardNote[]) => void;
+  askCopilot: (id: string, question: string) => void;
+  resolveReply: (reply: Partial<CopilotReply> & { id: string }) => void;
   dismissCard: (id: string) => void;
   markUsed: (id: string) => void;
   toggleMute: (kind: CopilotCardKind) => void;
@@ -189,6 +235,35 @@ export const useCopilotStore = create<CopilotState>((set) => ({
   mutedKinds: loadMuted(),
   coverage: null,
   scorecard: [],
+  replies: [],
+
+  askCopilot: (id, question) =>
+    set((s) => ({
+      replies: [
+        ...s.replies,
+        { id, question, answer: '', citations: [], error: null, pending: true, askedAt: new Date().toISOString() },
+      ].slice(-MAX_REPLIES),
+    })),
+
+  resolveReply: (reply) =>
+    set((s) => {
+      const known = s.replies.some((r) => r.id === reply.id);
+      const merged = known
+        ? s.replies.map((r) => (r.id === reply.id ? { ...r, ...reply, question: reply.question ?? r.question } : r))
+        : [
+            ...s.replies,
+            {
+              id: reply.id,
+              question: reply.question ?? '',
+              answer: reply.answer ?? '',
+              citations: reply.citations ?? [],
+              error: reply.error ?? null,
+              pending: false,
+              askedAt: new Date().toISOString(),
+            },
+          ];
+      return { replies: merged.slice(-MAX_REPLIES) };
+    }),
 
   setCoverage: (coverage) => set({ coverage }),
 
@@ -218,5 +293,5 @@ export const useCopilotStore = create<CopilotState>((set) => ({
       return { mutedKinds: muted };
     }),
 
-  clear: () => set({ cards: [], usedIds: [], coverage: null, scorecard: [] }),
+  clear: () => set({ cards: [], usedIds: [], coverage: null, scorecard: [], replies: [] }),
 }));

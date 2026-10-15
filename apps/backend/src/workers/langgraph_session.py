@@ -80,6 +80,7 @@ from src.schemas.hint import RuntimeHintRequest
 from src.schemas.transcript import TranscriptEventSchema
 from src.services.analysis_service import rate_code
 from src.services.code_analysis_service import code_report_fields, llm_analyze_code
+from src.services.copilot_query import answer_copilot_query, live_evidence_index
 from src.services.memory_service import compress_summary, format_utterances
 from src.services.persistence_service import safe_enqueue
 from src.services.runtime_hint_service import assemble_hint_context, generate_runtime_hint, resolve_directness
@@ -466,6 +467,27 @@ class LangGraphSessionPipeline:
             latency_ms=response.latency_ms,
         )
         return response.model_dump()
+
+    async def handle_copilot_query(self, data: dict) -> dict:
+        """Ask the copilot (peer interviewer): answer the interviewer's typed question from live evidence.
+
+        Never raises: a failed call answers with the error so the dashboard can show it.
+        """
+        await self._ensure_loaded()
+        query_id = str(data.get("id") or uuid.uuid4())
+        question = str(data.get("question", "")).strip()
+        reply = {"id": query_id, "question": question, "at": datetime.now(UTC).isoformat()}
+        if not question:
+            return {**reply, "answer": "Type a question first.", "citations": [], "error": "empty"}
+        index = live_evidence_index(
+            self._values, self._transcript_history, self._code.values, target_level=str(data.get("target_level", ""))
+        )
+        try:
+            answer = await answer_copilot_query(self._failover, self.session_id, question, index)
+        except Exception as e:
+            logger.error("copilot_query_failed", session_id=self.session_id, error=str(e))
+            return {**reply, "answer": f"Copilot unavailable: {e}", "citations": [], "error": str(e)}
+        return {**reply, **answer}
 
     async def handle_code_rating(self, data: dict) -> dict:
         await self._ensure_loaded()

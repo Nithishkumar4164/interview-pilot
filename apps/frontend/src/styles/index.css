@@ -4556,3 +4556,60 @@ ul, ol {
 .scorecard__add input {
   flex: 1;
 }
+
+.ask-copilot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-2);
+}
+
+.ask-copilot__thread {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: 0.8rem;
+}
+
+.ask-copilot__question {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.ask-copilot__answer {
+  margin: 2px 0 0;
+}
+
+.ask-copilot__reply--error .ask-copilot__answer {
+  color: var(--color-danger);
+}
+
+.ask-copilot__citations {
+  margin: 2px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.ask-copilot__form {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.ask-copilot__form input {
+  flex: 1;
+  min-width: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 6px);
+  padding: 4px 8px;
+  font-size: 0.8rem;
+}

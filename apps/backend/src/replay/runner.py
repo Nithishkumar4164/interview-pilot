@@ -20,6 +20,7 @@ from src.replay.scenario import (
     CodeSnapshotEvent,
     CodeUpdateEvent,
     CopilotCardUsedEvent,
+    CopilotQueryEvent,
     HintAckEvent,
     HintRequestEvent,
     QuestionChangeEvent,
@@ -144,6 +145,7 @@ class ReplayReport:
     events: list[CapturedEvent]
     hint_responses: list[dict] = field(default_factory=list)
     code_ratings: list[dict] = field(default_factory=list)
+    copilot_replies: list[dict] = field(default_factory=list)
     llm_calls: list[dict] = field(default_factory=list)
     final_state: dict = field(default_factory=dict)
     persisted: list[PersistedWrite] = field(default_factory=list)
@@ -168,6 +170,7 @@ class ReplayReport:
             ],
             "hint_responses": self.hint_responses,
             "code_ratings": self.code_ratings,
+            "copilot_replies": self.copilot_replies,
             "llm_calls": self.llm_calls,
             "final_state": self.final_state,
             "persisted": [asdict(w) for w in self.persisted],
@@ -223,6 +226,7 @@ class ReplayRunner:
 
         hint_responses: list[dict] = []
         code_ratings: list[dict] = []
+        copilot_replies: list[dict] = []
         error: str | None = None
         recorder = LLMCallRecorder()
         scenario_clock = REPLAY_EPOCH
@@ -236,7 +240,9 @@ class ReplayRunner:
                 )
                 worker = self.pipeline_factory(session_id, fm, timing)
                 try:
-                    error = await self._drive(worker, session_id, scenario_clock, hint_responses, code_ratings)
+                    error = await self._drive(
+                        worker, session_id, scenario_clock, hint_responses, code_ratings, copilot_replies
+                    )
                     final_state = worker.to_dict()
                     session_state = {k: v for k, v in worker.state_snapshot().items() if k != "captured_at"}
                 finally:
@@ -255,6 +261,7 @@ class ReplayRunner:
             events=list(collector.events),
             hint_responses=hint_responses,
             code_ratings=code_ratings,
+            copilot_replies=copilot_replies,
             llm_calls=recorder.to_list(),
             final_state=final_state,
             persisted=list(collector.persisted),
@@ -269,6 +276,7 @@ class ReplayRunner:
         scenario_clock: datetime,
         hint_responses: list[dict],
         code_ratings: list[dict],
+        copilot_replies: list[dict] | None = None,
     ) -> str | None:
         error: str | None = None
         try:
@@ -288,6 +296,10 @@ class ReplayRunner:
                     )
                 elif isinstance(ev, TickEvent):
                     worker.on_tick(scenario_clock.isoformat())
+                elif isinstance(ev, CopilotQueryEvent):
+                    reply = await worker.handle_copilot_query({"id": ev.query_id, "question": ev.question})
+                    if copilot_replies is not None:
+                        copilot_replies.append(reply)
                 elif isinstance(ev, ScorecardNoteEvent):
                     await worker.handle_scorecard_note(
                         {

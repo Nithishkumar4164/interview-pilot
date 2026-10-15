@@ -179,7 +179,10 @@ def classify_tool_system(system: str) -> str:
 
 
 # (system prompt prefix, kind)
-TOOL_KINDS: list[tuple[str, str]] = [("You score one criterion", "report_criterion")]
+TOOL_KINDS: list[tuple[str, str]] = [
+    ("You score one criterion", "report_criterion"),
+    ("You are the interviewer's copilot", "copilot_query"),
+]
 
 _ENTRY_LINE = re.compile(r"^(T\d+) \[[^\]]*\] [a-z]+: (.+)$", re.MULTILINE)
 
@@ -215,6 +218,35 @@ def _criterion_answer(system: str, messages: list[ChatMessage], h: int) -> str:
                 {"entry_id": e, "quote": " ".join(seen[e].split()[:6]), "why": f"scripted-why-{h % 1_000:03d}"}
                 for e in picks
             ],
+        }
+    )
+
+
+def _copilot_policy(messages: list[ChatMessage], tools: list[ToolSpec], h: int) -> list[ToolCall]:
+    """Search the transcript for the question's words, then answer."""
+    if any(m.role == "tool" for m in messages):
+        return []
+    asked = re.search(r"The interviewer asks: (.+)$", messages[0].content, re.MULTILINE)
+    return [
+        ToolCall(
+            id=f"call-0-{h % 10_000:04d}",
+            name="search_transcript",
+            arguments={"query": asked.group(1) if asked else "answer"},
+        )
+    ]
+
+
+def _copilot_answer(system: str, messages: list[ChatMessage], h: int) -> str:
+    seen: dict[str, str] = {}
+    for m in messages:
+        if m.role == "tool":
+            for entry_id, text in _ENTRY_LINE.findall(m.content):
+                seen.setdefault(entry_id, text)
+    first = sorted(seen, key=lambda e: int(e[1:]))[:1]
+    return json.dumps(
+        {
+            "answer": f"scripted-answer-{h % 10_000:04d}",
+            "citations": [{"entry_id": e, "quote": " ".join(seen[e].split()[:5])} for e in first],
         }
     )
 
@@ -514,8 +546,12 @@ def respond(kind: str, context: AnalysisContext) -> str:
 
 
 # kind -> final answer of a tool conversation
-TOOL_ANSWERS: dict[str, Callable[[str, list[ChatMessage], int], str]] = {"report_criterion": _criterion_answer}
+TOOL_ANSWERS: dict[str, Callable[[str, list[ChatMessage], int], str]] = {
+    "report_criterion": _criterion_answer,
+    "copilot_query": _copilot_answer,
+}
 TOOL_POLICIES["report_criterion"] = _criterion_policy
+TOOL_POLICIES["copilot_query"] = _copilot_policy
 
 
 def respond_tools(kind: str, system: str, messages: list[ChatMessage], h: int) -> str:

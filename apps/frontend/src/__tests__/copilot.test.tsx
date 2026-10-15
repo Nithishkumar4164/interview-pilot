@@ -75,3 +75,50 @@ describe('copilot cards', () => {
     expect(screen.getByRole('note', { name: 'Follow-up' })).toBeTruthy();
   });
 });
+
+import { coverageFromPayload } from '@/stores/copilot-store';
+import { usePlanStore } from '@/stores/plan-store';
+import { useSessionStore } from '@/stores/session-store';
+
+describe('rubric coverage', () => {
+  beforeEach(() => {
+    useCopilotStore.getState().clear();
+    useSessionStore.getState().reset();
+  });
+
+  it('maps the backend snapshot', () => {
+    const coverage = coverageFromPayload(
+      { criteria: { problem_solving: { evidence: 3, status: 'solid' }, behavioral: { evidence: 0, status: 'none' } }, gaps: ['behavioral'] },
+      't',
+    );
+    expect(coverage).toEqual({
+      criteria: { problem_solving: { evidence: 3, status: 'solid' }, behavioral: { evidence: 0, status: 'none' } },
+      gaps: ['behavioral'],
+      timestamp: 't',
+    });
+    expect(coverageFromPayload({}, 't')).toBeNull();
+  });
+
+  it('shows chips and points at the upcoming question that fills the gap', () => {
+    const q = (id: string, category: string) => ({
+      id, text: `Question ${id}`, category, difficulty: 2, time_minutes: 10, alternates: [], hints: [],
+      brute_force_approach: null, optimal_approaches: null, common_pitfalls: null,
+    });
+    usePlanStore.getState().setPlan({
+      id: 'p', session_id: 's', version: 1, is_active: true, total_minutes: 30, created_at: '',
+      phases: [
+        { phase: 'coding', start_minute: 0, duration_minutes: 20, questions: [q('a', 'coding'), q('b', 'coding')] },
+        { phase: 'behavioral', start_minute: 20, duration_minutes: 10, questions: [q('c', 'behavioral')] },
+      ],
+    });
+    useSessionStore.getState().setCurrentQuestion(0, 3, 'Question a');
+    useCopilotStore.getState().setCoverage({
+      criteria: { problem_solving: { evidence: 2, status: 'thin' }, behavioral: { evidence: 0, status: 'none' } },
+      gaps: ['behavioral'],
+      timestamp: 't',
+    });
+    renderPanel();
+    expect(screen.getByTitle('Problem solving: 2 evidence points').className).toContain('coverage-chip--thin');
+    expect(screen.getByLabelText('Rubric coverage').textContent).toContain('Q3 covers it: Question c');
+  });
+});

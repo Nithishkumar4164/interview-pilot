@@ -88,12 +88,63 @@ export function cardFromPayload(p: Record<string, unknown>, fallbackTimestamp: s
   };
 }
 
+// ── Rubric coverage ──────────────────────────────────────────────────
+
+export type CoverageStatus = 'none' | 'thin' | 'solid';
+
+export interface CriterionCoverage {
+  evidence: number;
+  status: CoverageStatus;
+}
+
+export const CRITERION_LABELS: Record<string, string> = {
+  problem_solving: 'Problem solving',
+  code_quality: 'Code quality',
+  communication: 'Communication',
+  hint_responsiveness: 'Hint response',
+  system_design: 'System design',
+  resume_verification: 'Resume check',
+  behavioral: 'Behavioral',
+};
+
+/** Plan categories whose questions produce evidence for a criterion (mirrors the backend map). */
+export const CRITERION_CATEGORIES: Record<string, string[]> = {
+  problem_solving: ['coding', 'aptitude', 'system_design'],
+  code_quality: ['coding'],
+  communication: [],
+  hint_responsiveness: [],
+  system_design: ['system_design'],
+  resume_verification: ['behavioral'],
+  behavioral: ['behavioral'],
+};
+
+export interface Coverage {
+  criteria: Record<string, CriterionCoverage>;
+  gaps: string[];
+  timestamp: string;
+}
+
+export function coverageFromPayload(p: Record<string, unknown>, fallbackTimestamp: string): Coverage | null {
+  const raw = p.criteria;
+  if (!raw || typeof raw !== 'object') return null;
+  const criteria: Record<string, CriterionCoverage> = {};
+  for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+    const v = (value ?? {}) as Record<string, unknown>;
+    const status = v.status === 'solid' || v.status === 'thin' ? v.status : 'none';
+    criteria[name] = { evidence: typeof v.evidence === 'number' ? v.evidence : 0, status };
+  }
+  const gaps = Array.isArray(p.gaps) ? p.gaps.filter((g): g is string => typeof g === 'string') : [];
+  return { criteria, gaps, timestamp: typeof p.timestamp === 'string' ? p.timestamp : fallbackTimestamp };
+}
+
 interface CopilotState {
   cards: CopilotCard[]; // newest first
   usedIds: string[];
   mutedKinds: Set<CopilotCardKind>;
+  coverage: Coverage | null;
 
   addCard: (card: CopilotCard) => void;
+  setCoverage: (coverage: Coverage) => void;
   dismissCard: (id: string) => void;
   markUsed: (id: string) => void;
   toggleMute: (kind: CopilotCardKind) => void;
@@ -104,6 +155,9 @@ export const useCopilotStore = create<CopilotState>((set) => ({
   cards: [],
   usedIds: [],
   mutedKinds: loadMuted(),
+  coverage: null,
+
+  setCoverage: (coverage) => set({ coverage }),
 
   addCard: (card) =>
     set((s) => {
@@ -129,5 +183,5 @@ export const useCopilotStore = create<CopilotState>((set) => ({
       return { mutedKinds: muted };
     }),
 
-  clear: () => set({ cards: [], usedIds: [] }),
+  clear: () => set({ cards: [], usedIds: [], coverage: null }),
 }));

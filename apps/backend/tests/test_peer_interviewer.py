@@ -344,6 +344,71 @@ async def test_stuck_countdown_drafts_one_hint_per_stuck_snapshot(checkpointer) 
     assert drafted[0]["question_id"] == "q1" and drafted[0]["text"].startswith("scripted-hint-")
 
 
+# ── Coverage map and adaptive difficulty ───────────────────────────────────
+
+
+async def test_coverage_snapshots_follow_the_analyses(checkpointer, chosen) -> None:
+    from src.replay.scenario import QuestionChangeEvent
+
+    events = [
+        QuestionChangeEvent(question_text="Two sum", question_plan={"id": "q1", "category": "coding"}),
+        TranscriptEvent(
+            speaker_role=SpeakerRole.CANDIDATE, text="I would use a hash map to look up complements in one pass."
+        ),
+        QuestionChangeEvent(
+            question_text="Design a URL shortener",
+            question_plan={"id": "q2", "category": "system_design"},
+            delay_ms=1000,
+        ),
+        TranscriptEvent(
+            speaker_role=SpeakerRole.CANDIDATE,
+            text="I would start with the write path and a key generation service.",
+            delay_ms=1000,
+        ),
+    ]
+    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events), agentic=False)
+    assert report.error is None
+    snapshots = [e.payload for e in report.events if e.method == "send_copilot_coverage"]
+    assert len(snapshots) == len(chosen) == 2
+    first, second = snapshots
+    assert first["criteria"]["problem_solving"]["evidence"] == 1 and "system_design" in first["gaps"]
+    assert second["criteria"]["problem_solving"]["evidence"] == 2
+    assert second["criteria"]["system_design"] == {"evidence": 1, "status": "thin"}
+    assert "system_design" not in second["gaps"]
+    assert first["criteria"]["code_quality"]["evidence"] == 0  # no code was written
+
+
+@pytest.mark.parametrize(("quality", "key"), [(5, "cruising"), (1, "struggling")])
+async def test_difficulty_card_once_per_question(checkpointer, monkeypatch, quality, key) -> None:
+    from src.replay.scenario import QuestionChangeEvent
+
+    original = session_graph.analyze_utterance_with_actions
+
+    async def forced(*args, **kwargs):
+        result, actions = await original(*args, **kwargs)
+        result.answer_quality, result.on_track = quality, True
+        return result, []
+
+    monkeypatch.setattr(session_graph, "analyze_utterance_with_actions", forced)
+    answers = [
+        TranscriptEvent(
+            speaker_role=SpeakerRole.CANDIDATE, text=f"Answer number {i} explains the approach in some detail."
+        )
+        for i in range(4)
+    ]
+    events = [
+        QuestionChangeEvent(question_text="Q1", question_plan={"id": "q1", "alternates": ["Variant A"]}),
+        *answers,
+        QuestionChangeEvent(question_text="Q2", question_plan={"id": "q2"}, delay_ms=1000),
+        *answers,
+    ]
+    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events), agentic=False)
+    assert report.error is None
+    cards = _cards(report, "difficulty")
+    assert [c["id"].split(":", 1)[1] for c in cards] == [f"q1:difficulty:{key}", f"q2:difficulty:{key}"]
+    assert cards[0]["items"] == ["Variant A"] and cards[1]["items"] == []
+
+
 # ── Cards the interviewer acted on ─────────────────────────────────────────
 
 

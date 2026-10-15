@@ -73,6 +73,10 @@ from src.services.peer_interviewer import (
     TALK_WINDOW_SIZE,
     coach_interviewer,
     copilot_card,
+    coverage_increments,
+    coverage_payload,
+    difficulty_card,
+    difficulty_signal,
     draft_clarification,
     looks_like_a_question,
     monologue_card,
@@ -250,6 +254,8 @@ class SessionState(TypedDict, total=False):
     last_candidate_at: str  # timestamp of the candidate's last final utterance
     stuck_hint_for: str  # code snapshot id the stuck countdown already drafted a hint for
     stuck_hint_due: bool  # per-run: this run's Tick found the candidate stuck
+    coverage_counts: dict[str, int]  # evidence points per report criterion (rubric coverage map)
+    difficulty_sent: list[str]  # difficulty cards already sent for the current question
 
     # ── per-run scratch ──
     extracted: Annotated[dict[int, dict], _reset_or_merge]
@@ -297,6 +303,8 @@ def initial_state(session_id: str) -> dict[str, Any]:
         "last_candidate_at": "",
         "stuck_hint_for": "",
         "stuck_hint_due": False,
+        "coverage_counts": {},
+        "difficulty_sent": [],
         "analysis": None,
     }
 
@@ -453,6 +461,7 @@ def build_session_graph(
         last_candidate_at = state.get("last_candidate_at", "")
         stuck_hint_for = state.get("stuck_hint_for", "")
         stuck_hint_due = False
+        difficulty_sent = list(state.get("difficulty_sent", []))
         code_context = state.get("code_context") or {}
 
         for ev in state["events"]:
@@ -508,6 +517,7 @@ def build_session_graph(
                     "pace_alerts_sent": [],
                 }
                 stuck_hint_for = ""
+                difficulty_sent = []
             elif isinstance(ev, HintRevealed):
                 active_hint = ev.text
             elif isinstance(ev, RuntimeHintGenerated):
@@ -591,6 +601,7 @@ def build_session_graph(
             "last_candidate_at": last_candidate_at,
             "stuck_hint_for": stuck_hint_for,
             "stuck_hint_due": stuck_hint_due,
+            "difficulty_sent": difficulty_sent,
             "events_processed": state.get("events_processed", 0) + state.get("transport_events", 0),
             "extracted": None,
             "analysis": None,
@@ -773,7 +784,34 @@ def build_session_graph(
                     -REPORT_DIGEST_SIZE:
                 ],
             }
+            if peer:
+                update |= peer_after_analysis(state, result, update)
         return update
+
+    def peer_after_analysis(state: SessionState, result: EnhancedAnalysisResult, update: dict) -> dict:
+        """Rubric coverage and the difficulty signal, from the analysis just recorded (no LLM)."""
+        plan = state.get("question_plan") or {}
+        counts = dict(state.get("coverage_counts", {}))
+        for criterion in coverage_increments(
+            result, str(plan.get("category") or ""), bool((state.get("code_context") or {}).get("code"))
+        ):
+            counts[criterion] = counts.get(criterion, 0) + 1
+        facts = update.get("fact_store") or state.get("fact_store") or FactStore()
+        emit(
+            EFFECT_DASHBOARD,
+            method="send_copilot_coverage",
+            payload=coverage_payload(
+                counts, len(facts.claimed_experience), len(state.get("contradictions", [])), result.timestamp
+            ),
+        )
+        out: dict[str, Any] = {"coverage_counts": counts}
+        key = difficulty_signal(update.get("recent_insights") or [])
+        sent = list(state.get("difficulty_sent", []))
+        if key is not None and key not in sent:
+            qid = state.get("active_question_id") or f"q{state.get('question_index', 0)}"
+            emit_card(difficulty_card(f"{session_id}:{qid}:difficulty:{key}", key, plan, result.timestamp))
+            out["difficulty_sent"] = [*sent, key]
+        return out
 
     def after_merge(state: SessionState) -> str:
         return "follow_up" if state.get("analysis") is not None else END

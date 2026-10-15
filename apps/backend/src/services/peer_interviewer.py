@@ -422,3 +422,113 @@ def stuck_card(card_id: str, quiet_s: float, question_id: str, timestamp: str) -
         question_id=question_id,
         timestamp=timestamp,
     )
+
+
+# ── Rubric coverage map ────────────────────────────────────────────────────
+
+# The report's criteria (report_generator.ALL_CRITERIA) and the plan categories that produce evidence for them.
+CRITERIA = (
+    "problem_solving",
+    "code_quality",
+    "communication",
+    "hint_responsiveness",
+    "system_design",
+    "resume_verification",
+    "behavioral",
+)
+CRITERION_CATEGORIES: dict[str, tuple[str, ...]] = {
+    "problem_solving": ("coding", "aptitude", "system_design"),
+    "code_quality": ("coding",),
+    "communication": (),
+    "hint_responsiveness": (),
+    "system_design": ("system_design",),
+    "resume_verification": ("behavioral",),
+    "behavioral": ("behavioral",),
+}
+COVERAGE_SOLID = 3  # evidence points from which a criterion counts as covered
+
+
+def coverage_increments(analysis: EnhancedAnalysisResult, category: str, has_code: bool) -> list[str]:
+    """Which criteria one analysis adds evidence to."""
+    if analysis.answer_quality <= 0:
+        return []  # a failed analysis is not evidence
+    hit = ["problem_solving"]
+    dims = analysis.dimensions
+    if dims is not None:
+        hit.append("communication")
+        if dims.hint_reception is not None:
+            hit.append("hint_responsiveness")
+        if dims.behavioral_signal.signals_detected or dims.behavioral_signal.flags:
+            hit.append("behavioral")
+    if category == "behavioral" and "behavioral" not in hit:
+        hit.append("behavioral")
+    if category == "system_design":
+        hit.append("system_design")
+    if category == "coding" and has_code:
+        hit.append("code_quality")
+    return hit
+
+
+def coverage_payload(counts: dict[str, int], claims: int, contradictions: int, timestamp: str) -> dict[str, Any]:
+    """The coverage snapshot the dashboard shows: evidence per criterion and the gaps."""
+    merged = {**{c: 0 for c in CRITERIA}, **counts}
+    merged["resume_verification"] = merged.get("resume_verification", 0) + claims + contradictions
+
+    def status(n: int) -> str:
+        return "none" if n == 0 else "thin" if n < COVERAGE_SOLID else "solid"
+
+    criteria = {c: {"evidence": merged[c], "status": status(merged[c])} for c in CRITERIA}
+    return {
+        "criteria": criteria,
+        "gaps": [c for c in CRITERIA if criteria[c]["status"] == "none"],
+        "timestamp": timestamp,
+    }
+
+
+# ── Adaptive difficulty ────────────────────────────────────────────────────
+
+DIFFICULTY_WINDOW = 3  # consecutive analyses on the current question that decide
+
+
+def difficulty_signal(recent: list[EnhancedAnalysisResult]) -> str | None:
+    """'cruising', 'struggling' or None from the last analyses of the current question."""
+    scored = [a for a in recent if a.answer_quality > 0][-DIFFICULTY_WINDOW:]
+    if len(scored) < DIFFICULTY_WINDOW:
+        return None
+    if all(a.answer_quality >= 4 and a.on_track for a in scored):
+        return "cruising"
+    weak = sum(1 for a in scored if a.answer_quality <= 2)
+    direct = sum(1 for a in scored if a.hint_signal == "direct")
+    if weak >= 2 or direct >= 2:
+        return "struggling"
+    return None
+
+
+def difficulty_card(card_id: str, key: str, question_plan: dict | None, timestamp: str) -> dict[str, Any]:
+    alternates = [str(a) for a in ((question_plan or {}).get("alternates") or []) if str(a).strip()][:2]
+    question_id = str((question_plan or {}).get("id") or "")
+    if key == "cruising":
+        return copilot_card(
+            card_id,
+            "difficulty",
+            "Candidate is cruising: raise the bar",
+            "Three strong answers in a row on this question. Add a constraint (streaming input, memory limit, "
+            "concurrency) or move to the harder variant.",
+            items=alternates,
+            priority="suggest",
+            source="rule",
+            question_id=question_id,
+            timestamp=timestamp,
+        )
+    return copilot_card(
+        card_id,
+        "difficulty",
+        "Candidate is struggling: step down",
+        "Several weak answers on this question. Give the next hint level, narrow the task, "
+        "or switch to the easier variant.",
+        items=alternates,
+        priority="suggest",
+        source="rule",
+        question_id=question_id,
+        timestamp=timestamp,
+    )

@@ -253,3 +253,111 @@ def looks_like_a_question(text: str) -> bool:
     """A candidate utterance that is asking the interviewer something (cheap trigger for the clarification check)."""
     stripped = text.strip()
     return "?" in stripped or stripped.lower().startswith(("can i assume", "should i", "do you want", "is it okay if"))
+
+
+# ── Interviewer coaching ───────────────────────────────────────────────────
+
+COACHING_SYSTEM_PROMPT = """Coach the interviewer of a live technical interview. Return JSON.
+
+You see the interviewer's latest turn and the conversation before it. Point out only clear problems with how
+the question was asked, never with the candidate:
+  leading_question   - the question suggests the answer or the approach ("so you'd use a hash map, right?");
+  revealed_answer    - the interviewer gave away a key step of the expected solution;
+  unclear_question   - the question is ambiguous or missing constraints the candidate needs;
+  stacked_questions  - several questions at once, so the candidate can only answer one;
+  interrupting       - the interviewer cut off an answer that was still developing.
+Most turns are fine: return an empty list unless you are confident.
+
+Respond in JSON:
+{
+  "issues": [
+    {"kind": "<one of the kinds above>", "note": "<what happened, one sentence>", "suggestion": "<how to rephrase or recover, one sentence>"}
+  ]
+}"""
+
+COACHING_KINDS = ("leading_question", "revealed_answer", "unclear_question", "stacked_questions", "interrupting")
+COACHING_MIN_WORDS = 12  # shorter interviewer turns ("okay", "go on") are not worth a call
+COACHING_MIN_GAP_S = 20.0  # at most one coaching call per 20 s of interview time
+
+
+async def coach_interviewer(
+    failover: FailoverManager, session_id: str, context_text: str, question: str, text: str
+) -> list[dict[str, str]]:
+    """Problems with the interviewer's latest turn (usually none). LLM errors propagate."""
+    user_content = (
+        f"{context_text}"
+        + (f"\n\n## Planned Question\n{question}" if question else "")
+        + f"\n\n## Interviewer's Latest Turn\n[interviewer]: {text}"
+    )
+    result = await failover.analyze(
+        AnalysisContext(
+            system_prompt=COACHING_SYSTEM_PROMPT, user_content=user_content, task_type=TaskType.INTERVIEWER_COACHING
+        ),
+        LLMConfig(max_tokens=300, temperature=0.1, response_format="json"),
+        session_id=session_id,
+    )
+    issues: list[dict[str, str]] = []
+    for item in _parsed(result.content, result.parsed).get("issues") or []:
+        if not isinstance(item, dict) or item.get("kind") not in COACHING_KINDS:
+            continue
+        note = str(item.get("note", "")).strip()
+        if note:
+            issues.append({"kind": str(item["kind"]), "note": note, "suggestion": str(item.get("suggestion", ""))})
+    return issues[:3]
+
+
+# ── Deterministic coaching signals ─────────────────────────────────────────
+
+TALK_WINDOW_SIZE = 40  # utterances the talk-share window covers
+TALK_SHARE_MIN_WORDS = 250  # no judgment on talk share before this many words were spoken in the window
+TALK_SHARE_THRESHOLD = 0.6  # interviewer share of words that earns a nudge
+TALK_CARD_MIN_GAP_S = 300.0  # at most one talk-share nudge per 5 minutes
+MONOLOGUE_WORDS = 120  # one interviewer turn this long is a monologue
+
+
+def word_count(text: str) -> int:
+    return len(text.split())
+
+
+def talk_share(window: list[list]) -> tuple[float, int]:
+    """(interviewer share of words, total words) over ``window`` rows of ``[speaker, words]``."""
+    total = sum(int(w) for _, w in window)
+    if total == 0:
+        return 0.0, 0
+    interviewer = sum(int(w) for s, w in window if s == "interviewer")
+    return interviewer / total, total
+
+
+def seconds_between(earlier: str, later: str) -> float:
+    """Interview time between two ISO timestamps; infinite when either is missing or unparsable."""
+    try:
+        a = datetime.fromisoformat(earlier.replace("Z", "+00:00"))
+        b = datetime.fromisoformat(later.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return float("inf")
+    return (b - a).total_seconds()
+
+
+def talk_share_card(card_id: str, share: float, total: int, timestamp: str) -> dict[str, Any]:
+    pct = round(share * 100)
+    return copilot_card(
+        card_id,
+        "coaching",
+        f"You have spoken {pct}% of the last {total} words",
+        "Candidates reveal most when they do the talking. Hand the floor back with an open question.",
+        priority="info",
+        source="rule",
+        timestamp=timestamp,
+    )
+
+
+def monologue_card(card_id: str, words: int, timestamp: str) -> dict[str, Any]:
+    return copilot_card(
+        card_id,
+        "coaching",
+        f"That was a long turn ({words} words)",
+        "Check the candidate followed: ask them to restate the task in their own words before they start.",
+        priority="info",
+        source="rule",
+        timestamp=timestamp,
+    )

@@ -63,11 +63,24 @@ from src.services.memory_service import (
     should_extract_facts,
 )
 from src.services.peer_interviewer import (
+    COACHING_MIN_GAP_S,
+    COACHING_MIN_WORDS,
+    MONOLOGUE_WORDS,
+    TALK_CARD_MIN_GAP_S,
+    TALK_SHARE_MIN_WORDS,
+    TALK_SHARE_THRESHOLD,
+    TALK_WINDOW_SIZE,
+    coach_interviewer,
     copilot_card,
     draft_clarification,
     looks_like_a_question,
+    monologue_card,
+    seconds_between,
     suggest_probes,
+    talk_share,
+    talk_share_card,
     verify_claim,
+    word_count,
 )
 from src.services.runtime_hint_service import assemble_hint_context, generate_runtime_hint, resolve_directness
 from src.utils.logging import get_logger
@@ -212,6 +225,9 @@ class SessionState(TypedDict, total=False):
 
     # ── peer interviewer ──
     copilot_cards_used: list[dict]  # {"card_id", "kind", "text", "question_id", "at"}, bounded
+    talk_window: list[list]  # [speaker, words] of the last TALK_WINDOW_SIZE final utterances
+    last_coaching_at: str  # timestamp of the interviewer turn last sent for coaching
+    last_talk_card_at: str  # timestamp of the last talk-share nudge
 
     # ── per-run scratch ──
     extracted: Annotated[dict[int, dict], _reset_or_merge]
@@ -249,6 +265,9 @@ def initial_state(session_id: str) -> dict[str, Any]:
         "hint_generation_count": {},
         "last_runtime_hint": None,
         "copilot_cards_used": [],
+        "talk_window": [],
+        "last_coaching_at": "",
+        "last_talk_card_at": "",
         "analysis": None,
     }
 
@@ -328,6 +347,14 @@ class PeerUtteranceTask(TypedDict):
     text: str
 
 
+class CoachTask(TypedDict):
+    utterance_id: str
+    timestamp: str
+    question: str
+    context_text: str
+    text: str
+
+
 ACTION_TIMEOUT_S = 20.0
 
 
@@ -386,6 +413,8 @@ def build_session_graph(
         last_hint = state.get("last_runtime_hint")
         in_flight = state.get("memory_in_flight", 0)
         cards_used = list(state.get("copilot_cards_used", []))
+        talk_window = list(state.get("talk_window", []))
+        last_talk_card_at = state.get("last_talk_card_at", "")
 
         for ev in state["events"]:
             if isinstance(ev, UtteranceIn):
@@ -398,6 +427,20 @@ def build_session_graph(
                 if in_flight == 0 and len(unsummarized) >= SUMMARY_TRIGGER_COUNT:
                     emit(EFFECT_COMPRESS, upto=len(unsummarized))
                     in_flight = len(unsummarized)
+                if peer and ev.is_final:
+                    words = word_count(ev.text)
+                    talk_window = [*talk_window, [ev.speaker, words]][-TALK_WINDOW_SIZE:]
+                    if ev.speaker == "interviewer":
+                        if words >= MONOLOGUE_WORDS:
+                            emit_card(monologue_card(f"{session_id}:{ev.id}:monologue", words, ev.timestamp))
+                        share, spoken = talk_share(talk_window)
+                        if (
+                            spoken >= TALK_SHARE_MIN_WORDS
+                            and share >= TALK_SHARE_THRESHOLD
+                            and seconds_between(last_talk_card_at, ev.timestamp) >= TALK_CARD_MIN_GAP_S
+                        ):
+                            emit_card(talk_share_card(f"{session_id}:{ev.id}:talk_share", share, spoken, ev.timestamp))
+                            last_talk_card_at = ev.timestamp
             elif isinstance(ev, QuestionChanged):
                 # Tier 1 is per-question; tiers 2 and 3 carry over. The leftover
                 # buffer is compressed now, or once a running compression lands.
@@ -454,6 +497,8 @@ def build_session_graph(
             "hint_generation_count": hint_counts,
             "last_runtime_hint": last_hint,
             "copilot_cards_used": cards_used,
+            "talk_window": talk_window,
+            "last_talk_card_at": last_talk_card_at,
             "events_processed": state.get("events_processed", 0) + state.get("transport_events", 0),
             "extracted": None,
             "analysis": None,
@@ -488,7 +533,62 @@ def build_session_graph(
                     ),
                 )
             )
+        if peer:
+            coach = coaching_candidate(state)
+            if coach is not None:
+                sends.append(Send("coach_interviewer", coach))
         return sends or END
+
+    def coaching_candidate(state: SessionState) -> CoachTask | None:
+        """The latest substantial interviewer turn of this batch, if the coaching gap has passed."""
+        turns = [
+            ev
+            for ev in state["events"]
+            if isinstance(ev, UtteranceIn)
+            and ev.is_final
+            and ev.speaker == "interviewer"
+            and word_count(ev.text) >= COACHING_MIN_WORDS
+        ]
+        if not turns:
+            return None
+        latest = turns[-1]
+        if seconds_between(state.get("last_coaching_at", ""), latest.timestamp) < COACHING_MIN_GAP_S:
+            return None
+        return CoachTask(
+            utterance_id=latest.id,
+            timestamp=latest.timestamp,
+            question=state.get("current_question", ""),
+            context_text=peer_context(state),
+            text=latest.text,
+        )
+
+    async def coach_interviewer_node(state: CoachTask) -> dict:
+        update = {"last_coaching_at": state["timestamp"]}
+        try:
+            issues = await asyncio.wait_for(
+                retry_transient(
+                    lambda: coach_interviewer(
+                        failover, session_id, state["context_text"], state["question"], state["text"]
+                    )
+                ),
+                ACTION_TIMEOUT_S,
+            )
+        except Exception as e:
+            logger.warning("peer_action_failed", action="coach_interviewer", session_id=session_id, error=str(e))
+            return update
+        if issues:
+            emit_card(
+                copilot_card(
+                    f"{session_id}:{state['utterance_id']}:coaching",
+                    "coaching",
+                    issues[0]["note"],
+                    issues[0]["kind"].replace("_", " ").capitalize(),
+                    items=[i["suggestion"] for i in issues if i["suggestion"]],
+                    priority="info",
+                    timestamp=state["timestamp"],
+                )
+            )
+        return update
 
     async def extract_facts_node(state: ExtractTask) -> dict:
         extracted = await extract_facts(failover, session_id, state["speaker"], state["text"])
@@ -926,7 +1026,12 @@ def build_session_graph(
     graph.add_node("analyze", analyze, input_schema=AnalyzeTask)
     graph.add_node("merge_results", merge_results)
     graph.add_edge(START, "apply_events")
-    graph.add_conditional_edges("apply_events", dispatch, ["extract_facts", "analyze", END])
+    dispatch_targets = ["extract_facts", "analyze", END]
+    if peer:
+        graph.add_node("coach_interviewer", coach_interviewer_node, input_schema=CoachTask)
+        graph.add_edge("coach_interviewer", "merge_results")
+        dispatch_targets.insert(2, "coach_interviewer")
+    graph.add_conditional_edges("apply_events", dispatch, dispatch_targets)
     graph.add_edge("extract_facts", "merge_results")
     graph.add_edge("analyze", "merge_results")
     if follow_ups:

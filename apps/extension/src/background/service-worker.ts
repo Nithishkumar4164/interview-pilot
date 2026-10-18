@@ -360,6 +360,37 @@ async function updateBufferStats(): Promise<void> {
   }
 }
 
+// ── Start Capture (popup button or keyboard shortcut) ────────────────────
+//
+// Chrome hands out a tab stream only after the user invokes the extension
+// on that tab (popup, shortcut), so tab audio can't start on pairing alone.
+
+function getTabStreamId(tabId: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }, (id) => {
+      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+      else resolve(id);
+    });
+  });
+}
+
+/** Start whichever of tab audio and microphone isn't running yet. */
+async function startCapture(tabId: number, streamId?: string): Promise<void> {
+  if (state.connectionState !== 'connected') {
+    console.warn('[InterviewPilot] Not connected; pair with a session before starting capture');
+    return;
+  }
+  const tabStreamId = state.tabCaptureActive ? null : (streamId ?? (await getTabStreamId(tabId)));
+  await ensureOffscreen();
+  if (tabStreamId) sendToOffscreen({ type: 'offscreen:start-tab-capture', streamId: tabStreamId });
+  if (!state.micCaptureActive) sendToOffscreen({ type: 'offscreen:start-mic-capture' });
+}
+
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command !== 'start-capture' || !tab?.id) return;
+  startCapture(tab.id).catch((err) => console.error('[InterviewPilot] Failed to start capture:', err));
+});
+
 // ── Offscreen Document Lifecycle ──────────────────────────────────────────
 
 async function ensureOffscreen(): Promise<void> {
@@ -523,6 +554,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .clearAll()
         .then(() => updateBufferStats())
         .then(() => sendResponse({ status: 'cleared' }));
+      return true;
+
+    case 'start-capture':
+      startCapture(message.tabId, message.streamId).catch((err) =>
+        console.error('[InterviewPilot] Failed to start capture:', err),
+      );
+      sendResponse({ status: 'ok' });
       return true;
 
     case 'start-tab-capture':

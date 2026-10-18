@@ -13,6 +13,7 @@ import { WSClient, createAudioFrame, type ConnectionState } from '../networking/
 import { ChunkQueue, type QueuedChunk } from '../networking/chunk-queue';
 import { OfflineBuffer } from '../storage/offline-buffer';
 import { canonicalMeetingUrl, meetingCode } from '../meeting/meet-link';
+import { CAPTURE_BANNER_ID, injectCaptureBanner, removeCaptureBanner } from '../meeting/capture-banner';
 import { parsePairingToken, type Pairing } from '../auth/pairing';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -234,11 +235,20 @@ function clearBadge(tabId: number): void {
   chrome.action.setTitle({ tabId, title: 'InterviewPilot' }).catch(() => {});
 }
 
-/** On the Meet tab's icon: REC while capturing, otherwise a prompt to start. */
+/** On the Meet tab: REC on the icon while capturing; otherwise a prompt to start, on the icon and as a banner in the page. */
 async function updateMeetingBadge(): Promise<void> {
   const tab = await getMeetingTab();
   if (!tab) return;
   const capturing = state.tabCaptureActive;
+  chrome.scripting
+    .executeScript({
+      target: { tabId: tab.tabId },
+      func: capturing ? removeCaptureBanner : injectCaptureBanner,
+      args: [CAPTURE_BANNER_ID],
+    })
+    .catch(() => {
+      // Not loaded yet (a just-opened tab): the tab's load completing shows it.
+    });
   try {
     await chrome.action.setBadgeText({ tabId: tab.tabId, text: capturing ? 'REC' : '!' });
     await chrome.action.setBadgeBackgroundColor({ tabId: tab.tabId, color: capturing ? '#ef4444' : '#f59e0b' });
@@ -818,5 +828,13 @@ function enableSidePanel(tabId: number): void {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url?.match(/^https:\/\/meet\.google\.com\//) && state.sessionId) {
     enableSidePanel(tabId);
+  }
+  // The session's Meet tab finished loading: (re)show the start-capture prompt.
+  if (changeInfo.status === 'complete') {
+    getMeetingTab()
+      .then((meeting) => {
+        if (meeting?.tabId === tabId) return updateMeetingBadge();
+      })
+      .catch(() => {});
   }
 });

@@ -1,0 +1,94 @@
+{
+ "scene": "s9",
+ "order": 1,
+ "name": "Classic report prompt",
+ "wires": [
+  {
+   "cap": "Report prompt (what the model reads)",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Report context"
+    },
+    {
+     "t": "text",
+     "hl": "notes",
+     "label": "Scorecard section",
+     "text": "**## Interviewer Scorecard Notes**"
+    },
+    {
+     "t": "text",
+     "text": "- [communication] (interviewer) explained the trade-off clearly once prompted"
+    },
+    {
+     "t": "text",
+     "text": "- [problem_solving] 3/5 Correct but not optimal; did not reach the heap approach. \"I'd keep a hash map of counts…\""
+    },
+    {
+     "t": "text",
+     "hl": "usage",
+     "label": "Usage section",
+     "text": "**## Copilot Suggestions The Interviewer Used**"
+    },
+    {
+     "t": "text",
+     "text": "- clarification: 1, edge_cases: 1, probe: 2"
+    },
+    {
+     "t": "text",
+     "text": "- Probes the interviewer relayed count as the interviewer's questions, not the candidate's initiative."
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "p",
+  "r",
+  "l"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "p",
+   "to": "r",
+   "l": "report_snapshot()",
+   "t": "MOD",
+   "what": "The session's derived inputs now include `copilot_cards_used` and `scorecard_notes`, straight from graph state.",
+   "code": "{ ..., \"copilot_cards_used\": [ { \"card_id\": \"...:u-41:probe\", \"kind\": \"probe\", ... } ],\n  \"scorecard_notes\": [ { \"id\": \"u-41:note\", \"criterion\": \"problem_solving\", ... }, { \"id\": \"n-9\", \"source\": \"interviewer\", ... } ] }"
+  },
+  {
+   "id": "m2",
+   "f": "r",
+   "to": "r",
+   "l": "load_inputs → ReportInput",
+   "t": "MOD",
+   "what": "`ReportInput` gains `scorecard_notes` and `copilot_usage`. Older snapshots without the keys load as empty lists."
+  },
+  {
+   "id": "m3",
+   "f": "r",
+   "to": "r",
+   "l": "_build_context: two new sections",
+   "t": "MOD",
+   "hl": "notes",
+   "what": "All interviewer notes, then the last 20 copilot drafts with their quotes. Then usage counts per kind and the sentence that relayed probes are the interviewer's questions, so the model does not credit the candidate with raising them."
+  },
+  {
+   "id": "m4",
+   "f": "r",
+   "to": "l",
+   "l": "generate report (existing prompt)",
+   "t": "OLD",
+   "hl": "usage",
+   "what": "Same report task; the context is just longer."
+  },
+  {
+   "id": "m5",
+   "f": "l",
+   "to": "r",
+   "l": "report",
+   "res": true,
+   "what": "Scores, key moments and recommendation as before."
+  }
+ ]
+}

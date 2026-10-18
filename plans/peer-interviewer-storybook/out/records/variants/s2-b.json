@@ -1,0 +1,142 @@
+{
+ "scene": "s2",
+ "order": 2,
+ "name": "Wrong claim: claim check (urgent)",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "rows",
+     "hl": "card",
+     "label": "Claim check card",
+     "items": [
+      {
+       "no": "Claim check",
+       "meta": "Claim looks incorrect: heap insertion is O(1)",
+       "amt": "",
+       "due": "10:16",
+       "st": "over",
+       "stl": "urgent",
+       "cb": "none"
+      }
+     ]
+    },
+    {
+     "t": "text",
+     "text": "Insertion into a binary heap is O(log n); the overall pass is O(n log k), not linear."
+    },
+    {
+     "t": "msg",
+     "kind": "note",
+     "text": "Ask: \"Walk me through what happens inside the heap when you insert a new word.\""
+    },
+    {
+     "t": "btn",
+     "text": "Mark as asked",
+     "kind": "primary",
+     "sm": true
+    },
+    {
+     "t": "btn",
+     "text": "Dismiss",
+     "kind": "ghost",
+     "sm": true
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "k",
+  "p",
+  "g",
+  "l",
+  "w",
+  "d"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "k",
+   "to": "p",
+   "l": "final transcript line u-44",
+   "t": "OLD",
+   "what": "The candidate states a complexity as fact.",
+   "code": "{ \"id\": \"u-44\", \"speaker_role\": \"candidate\", \"text\": \"Heap insertion is O(1), so the whole thing is linear.\" }"
+  },
+  {
+   "id": "m2",
+   "f": "p",
+   "to": "g",
+   "l": "run: UtteranceIn → apply_events",
+   "t": "MOD",
+   "what": "Same ingress as the normal path."
+  },
+  {
+   "id": "m3",
+   "f": "g",
+   "to": "l",
+   "l": "analyze (offered actions listed)",
+   "t": "MOD",
+   "what": "The analysis sees a checkable claim and names `verify_claim`."
+  },
+  {
+   "id": "m4",
+   "f": "l",
+   "to": "g",
+   "l": "analysis: next_actions [verify_claim]",
+   "res": true,
+   "code": "{ \"answer_quality\": 2, \"next_actions\": [\"verify_claim\"] }",
+   "what": "The claim check is the one peer action with no deterministic trigger: it runs only when the analysis asks for it (see suggestion 5)."
+  },
+  {
+   "id": "m5",
+   "f": "g",
+   "to": "g",
+   "l": "peer_sends → Send(verify_claim)",
+   "t": "NEW",
+   "what": "In parallel with the contradiction check and any probe."
+  },
+  {
+   "id": "m6",
+   "f": "g",
+   "to": "l",
+   "l": "verify_claim (Sonnet, temperature 0.1)",
+   "t": "NEW",
+   "what": "Strict about what was claimed, generous about wording. Opinions and plans come back `unverifiable`.",
+   "code": "system: \"Verify a technical claim made in a live interview. Return JSON. ...\"\nuser:   <context> <question plan>\n        ## Statement To Verify\n        [candidate]: Heap insertion is O(1), so the whole thing is linear."
+  },
+  {
+   "id": "m7",
+   "f": "l",
+   "to": "g",
+   "l": "verdict incorrect, confidence 0.92",
+   "res": true,
+   "code": "{ \"claim\": \"heap insertion is O(1)\", \"verdict\": \"incorrect\", \"confidence\": 0.92,\n  \"correction\": \"Insertion into a binary heap is O(log n); the overall pass is O(n log k), not linear.\",\n  \"self_correct_probe\": \"Walk me through what happens inside the heap when you insert a new word.\" }",
+   "what": "A card is made only for `incorrect` or `misleading` with confidence ≥ 0.6. Anything else returns None and nothing is shown."
+  },
+  {
+   "id": "m8",
+   "f": "g",
+   "to": "w",
+   "l": "send_copilot_card (claim_check, urgent)",
+   "t": "NEW",
+   "hl": "card",
+   "what": "The only card kind that defaults to `urgent`. Its `probe` is the self-correct question, so Mark as asked relays that, not the correction.",
+   "code": "{ \"id\": \"sess-7f3a:u-44:claim_check\", \"kind\": \"claim_check\", \"priority\": \"urgent\",\n  \"title\": \"Claim looks incorrect: heap insertion is O(1)\",\n  \"body\": \"Insertion into a binary heap is O(log n); ...\",\n  \"probe\": \"Walk me through what happens inside the heap when you insert a new word.\", ... }"
+  },
+  {
+   "id": "m9",
+   "f": "w",
+   "to": "d",
+   "l": "copilot_card",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Drawn with the urgent border at the top of the list."
+  }
+ ]
+}

@@ -1,0 +1,11 @@
+{
+ "order": 3,
+ "call": "ws ← scorecard",
+ "owner": "Session graph → Dashboard",
+ "gives": "All scorecard notes (copilot drafts with quotes, interviewer notes)",
+ "tag": "NEW",
+ "steps": [
+  5,
+  6
+ ]
+}

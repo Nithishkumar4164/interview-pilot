@@ -1,0 +1,10 @@
+{
+ "order": 5,
+ "q": "Which model should the Sonnet peer calls (probes, claims, clarifications, edge cases) use?",
+ "options": [
+  "Sonnet (today)",
+  "Haiku, like coaching",
+  "Opus for claim checks only"
+ ],
+ "affects": "Steps 2 and 8"
+}

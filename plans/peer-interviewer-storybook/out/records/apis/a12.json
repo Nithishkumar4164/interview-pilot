@@ -1,0 +1,11 @@
+{
+ "order": 12,
+ "call": "TaskType.PEER_INTERVIEWER",
+ "owner": "LLM config → Sonnet",
+ "gives": "Probes, claim checks, clarifications, edge cases",
+ "tag": "NEW",
+ "steps": [
+  2,
+  8
+ ]
+}

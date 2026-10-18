@@ -1,0 +1,10 @@
+{
+ "order": 2,
+ "call": "ws ← copilot_coverage",
+ "owner": "Session graph → Dashboard",
+ "gives": "Evidence count and status per report criterion, plus the gaps",
+ "tag": "NEW",
+ "steps": [
+  5
+ ]
+}

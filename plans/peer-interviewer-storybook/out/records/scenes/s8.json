@@ -1,0 +1,8 @@
+{
+ "n": 8,
+ "short": "Edge cases",
+ "title": "Edge cases from the code",
+ "lede": "When the code graph suspects a bug, or the analysis asks, the copilot proposes inputs to trace by hand. Once per code snapshot.",
+ "also": [],
+ "stack": false
+}

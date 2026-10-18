@@ -1,0 +1,10 @@
+{
+ "n": 4,
+ "short": "Clock",
+ "title": "The clock ticks",
+ "lede": "Every 30 seconds a Tick runs through the graph even when nobody speaks. It checks the question against its budget and the candidate against silence.",
+ "also": [
+  3
+ ],
+ "stack": false
+}

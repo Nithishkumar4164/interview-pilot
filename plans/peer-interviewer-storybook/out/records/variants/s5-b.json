@@ -1,0 +1,93 @@
+{
+ "scene": "s5",
+ "order": 2,
+ "name": "Cruising: raise the bar",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "rows",
+     "hl": "card",
+     "label": "Difficulty card",
+     "items": [
+      {
+       "no": "Difficulty · signal",
+       "meta": "Candidate is cruising: raise the bar",
+       "amt": "",
+       "due": "10:26",
+       "st": "ok",
+       "stl": "suggest",
+       "cb": "none"
+      }
+     ]
+    },
+    {
+     "t": "text",
+     "text": "Three strong answers in a row on this question. Add a constraint (streaming input, memory limit, concurrency) or move to the harder variant."
+    },
+    {
+     "t": "text",
+     "text": "• Top-K with a fixed memory cap (Misra–Gries)"
+    },
+    {
+     "t": "text",
+     "text": "• Top-K over a sliding window"
+    },
+    {
+     "t": "btn",
+     "text": "Done",
+     "kind": "off",
+     "sm": true
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "g",
+  "w",
+  "d"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "g",
+   "to": "g",
+   "l": "recent_insights: last 3 all ≥ 4 and on track",
+   "t": "NEW",
+   "what": "`recent_insights` is per question (reset on `QuestionChanged`). The signal looks at the last three scored analyses."
+  },
+  {
+   "id": "m2",
+   "f": "g",
+   "to": "g",
+   "l": "difficulty_signal → cruising",
+   "t": "NEW",
+   "what": "Sent once per key per question (`difficulty_sent`). Three more strong answers do not repeat it.",
+   "code": "difficulty_signal(recent)  # all quality >= 4 and on_track -> \"cruising\""
+  },
+  {
+   "id": "m3",
+   "f": "g",
+   "to": "w",
+   "l": "send_copilot_card (difficulty)",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Items are the question plan's `alternates` (up to two), which the dashboard now includes in `change_question`.",
+   "code": "{ \"id\": \"sess-7f3a:q2:difficulty:cruising\", \"kind\": \"difficulty\",\n  \"title\": \"Candidate is cruising: raise the bar\",\n  \"items\": [\"Top-K with a fixed memory cap (Misra–Gries)\", \"Top-K over a sliding window\"],\n  \"source\": \"rule\", \"question_id\": \"q2\" }"
+  },
+  {
+   "id": "m4",
+   "f": "w",
+   "to": "d",
+   "l": "copilot_card",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Shown as Difficulty with the signal badge."
+  }
+ ]
+}

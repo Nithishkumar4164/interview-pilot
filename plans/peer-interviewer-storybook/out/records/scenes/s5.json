@@ -1,0 +1,8 @@
+{
+ "n": 5,
+ "short": "Evidence",
+ "title": "Coverage, scorecard and difficulty",
+ "lede": "No extra model calls. Each analysis adds evidence to the rubric map and a quoted note to the scorecard, and may trip the difficulty signal.",
+ "also": [],
+ "stack": false
+}

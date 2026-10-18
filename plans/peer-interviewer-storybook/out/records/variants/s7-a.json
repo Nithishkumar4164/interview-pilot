@@ -1,0 +1,144 @@
+{
+ "scene": "s7",
+ "order": 1,
+ "name": "Answered with citations",
+ "wires": [
+  {
+   "cap": "Copilot panel · Ask the copilot",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Ask the copilot"
+    },
+    {
+     "t": "text",
+     "text": "**What did they say about memory limits?**"
+    },
+    {
+     "t": "text",
+     "hl": "reply",
+     "label": "Reply",
+     "text": "They asked whether the distinct words fit in memory and, once told yes, kept a plain dict of counts; they have not discussed what happens if the vocabulary does not fit."
+    },
+    {
+     "t": "muted",
+     "text": "T14 04:12 candidate · T15 04:20 interviewer"
+    },
+    {
+     "t": "input",
+     "hl": "input",
+     "label": "Question input",
+     "text": "Ask the copilot… e.g. what did they say about Kafka?",
+     "filled": false
+    },
+    {
+     "t": "btn",
+     "text": "Ask",
+     "kind": "off",
+     "sm": true
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "i",
+  "d",
+  "w",
+  "p",
+  "l"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "i",
+   "to": "d",
+   "l": "types a question, taps Ask",
+   "hl": "input",
+   "what": "One question at a time: while a reply is pending the input is disabled."
+  },
+  {
+   "id": "m2",
+   "f": "d",
+   "to": "d",
+   "l": "askCopilot: pending reply in the thread",
+   "what": "A client-made uuid identifies the exchange. The thread shows *Thinking…* under the question."
+  },
+  {
+   "id": "m3",
+   "f": "d",
+   "to": "w",
+   "l": "copilot_query",
+   "t": "NEW",
+   "code": "{ \"type\": \"copilot_query\", \"id\": \"b1e4…\", \"question\": \"What did they say about memory limits?\" }",
+   "what": "On the dashboard websocket."
+  },
+  {
+   "id": "m4",
+   "f": "w",
+   "to": "p",
+   "l": "handle_copilot_query (awaited inline)",
+   "t": "NEW",
+   "what": "The handler awaits the answer in the websocket loop, the same way `rate_code` and `request_runtime_hint` do today. Other messages from this tab queue behind it. See suggestion 4."
+  },
+  {
+   "id": "m5",
+   "f": "p",
+   "to": "p",
+   "l": "live_evidence_index from live values",
+   "t": "NEW",
+   "what": "The report's `EvidenceIndex`, built from memory instead of the database: final transcript lines numbered T1…Tn with elapsed times, the analysis digest, the code timeline, contradictions, hint interactions, facts, the rolling summary and the scorecard notes. The question text is capped at 500 characters."
+  },
+  {
+   "id": "m6",
+   "f": "p",
+   "to": "l",
+   "l": "run_tool_loop (COPILOT_QUERY, ≤ 4 steps)",
+   "t": "MOD",
+   "what": "The shared tool loop with the report's read-only tools: `search_transcript`, `read_transcript`, `get_analyses`, `get_code_timeline`, `get_contradictions`, `get_hints`, and `get_scorecard_notes` only when notes exist. Sonnet, 1500 tokens, temperature 0.2.",
+   "code": "system: \"You are the interviewer's copilot in a live interview. ...\"\nuser:   <index overview>\n        Current question: Top-K frequent words in a stream\n        The interviewer asks: What did they say about memory limits?"
+  },
+  {
+   "id": "m7",
+   "f": "l",
+   "to": "p",
+   "l": "search_transcript(\"memory\") → T14, T15",
+   "res": true,
+   "what": "Tools run in-process against the index; no database and no network."
+  },
+  {
+   "id": "m8",
+   "f": "l",
+   "to": "p",
+   "l": "{ answer, citations }",
+   "res": true,
+   "code": "{ \"answer\": \"They asked whether the distinct words fit in memory and, once told yes, kept a plain dict of counts; ...\",\n  \"citations\": [ { \"entry_id\": \"T14\", \"quote\": \"Can I assume the words fit in memory?\" },\n                 { \"entry_id\": \"T15\", \"quote\": \"assume the distinct words fit\" } ] }",
+   "what": "After the fourth step the loop tells the model to stop using tools and answer. If the JSON is missing, the raw text is the answer."
+  },
+  {
+   "id": "m9",
+   "f": "p",
+   "to": "p",
+   "l": "validate citations against the transcript",
+   "t": "NEW",
+   "what": "A citation whose entry id does not exist is dropped. One whose quote is not found in that entry keeps the pointer and loses the quote. At most six."
+  },
+  {
+   "id": "m10",
+   "f": "p",
+   "to": "w",
+   "l": "reply payload",
+   "t": "NEW",
+   "code": "{ \"id\": \"b1e4…\", \"question\": \"What did they say about memory limits?\", \"at\": \"...\",\n  \"answer\": \"They asked whether ...\",\n  \"citations\": [ { \"entry_id\": \"T14\", \"elapsed\": \"04:12\", \"speaker\": \"candidate\", \"quote\": \"Can I assume the words fit in memory?\" }, ... ],\n  \"turns\": 3, \"tool_calls\": 2 }",
+   "what": "Returned to the handler, which broadcasts it."
+  },
+  {
+   "id": "m11",
+   "f": "w",
+   "to": "d",
+   "l": "copilot_reply",
+   "t": "NEW",
+   "hl": "reply",
+   "what": "Matched to the pending exchange by id. The thread keeps the last 20 replies and shows the last three. Hovering a citation shows the quote."
+  }
+ ]
+}

@@ -1,0 +1,10 @@
+{
+ "order": 1,
+ "n": 1,
+ "where": "Step 1",
+ "title": "Hide the Copilot panel when the flag is off",
+ "paras": [
+  "The frontend has no way to know whether the backend is in peer mode. Today every live session shows a Copilot panel that says **Listening.** and never changes, which reads as broken.",
+  "Give the dashboard a signal: either a `features` block on the session state (GET /state) or a `copilot_ready` message when the dashboard websocket connects. Render the panel only when it says so. Until then, the panel could at least say *Copilot is off for this session* instead of *Listening*."
+ ]
+}

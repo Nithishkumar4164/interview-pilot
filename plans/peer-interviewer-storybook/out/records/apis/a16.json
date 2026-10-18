@@ -1,0 +1,11 @@
+{
+ "order": 16,
+ "call": "get_scorecard_notes",
+ "owner": "report_agentic",
+ "gives": "Scorecard notes by criterion; offered only when notes exist",
+ "tag": "NEW",
+ "steps": [
+  7,
+  9
+ ]
+}

@@ -1,0 +1,11 @@
+{
+ "order": 8,
+ "call": "ws → change_question",
+ "owner": "Dashboard → Pipeline",
+ "gives": "Now also carries alternates, remaining_questions, remaining_minutes",
+ "tag": "MOD",
+ "steps": [
+  4,
+  5
+ ]
+}

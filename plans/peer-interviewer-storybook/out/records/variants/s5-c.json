@@ -1,0 +1,87 @@
+{
+ "scene": "s5",
+ "order": 3,
+ "name": "Struggling: step down",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "rows",
+     "hl": "card",
+     "label": "Difficulty card",
+     "items": [
+      {
+       "no": "Difficulty · signal",
+       "meta": "Candidate is struggling: step down",
+       "amt": "",
+       "due": "10:26",
+       "st": "over",
+       "stl": "suggest",
+       "cb": "none"
+      }
+     ]
+    },
+    {
+     "t": "text",
+     "text": "Several weak answers on this question. Give the next hint level, narrow the task, or switch to the easier variant."
+    },
+    {
+     "t": "text",
+     "text": "• Top-K with a fixed memory cap (Misra–Gries)"
+    },
+    {
+     "t": "btn",
+     "text": "Done",
+     "kind": "off",
+     "sm": true
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "g",
+  "w",
+  "d"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "g",
+   "to": "g",
+   "l": "recent_insights: 2 of 3 weak, or 2 direct hints",
+   "t": "NEW",
+   "what": "Weak is quality ≤ 2. A `hint_signal` of `direct` on two of the three also counts, so a candidate who keeps asking outright is caught even with middling scores."
+  },
+  {
+   "id": "m2",
+   "f": "g",
+   "to": "g",
+   "l": "difficulty_signal → struggling",
+   "t": "NEW",
+   "what": "Both keys can fire on one question, each once."
+  },
+  {
+   "id": "m3",
+   "f": "g",
+   "to": "w",
+   "l": "send_copilot_card (difficulty)",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Same shape, the step-down text, the same alternates list."
+  },
+  {
+   "id": "m4",
+   "f": "w",
+   "to": "d",
+   "l": "copilot_card",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Shown as Difficulty."
+  }
+ ]
+}

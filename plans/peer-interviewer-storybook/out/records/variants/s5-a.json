@@ -1,0 +1,113 @@
+{
+ "scene": "s5",
+ "order": 1,
+ "name": "Evidence lands",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "chips",
+     "hl": "coverage",
+     "label": "Coverage chips",
+     "on": -1,
+     "items": [
+      "Problem solving · solid",
+      "Code quality · thin",
+      "Communication · thin",
+      "Hint response · none",
+      "System design · none",
+      "Resume check · none",
+      "Behavioral · none"
+     ]
+    },
+    {
+     "t": "text",
+     "text": "No evidence yet for **Hint response**. Q3 covers it: Design a rate limiter for a public API…"
+    },
+    {
+     "t": "rows",
+     "hl": "scorecard",
+     "label": "Scorecard toggle",
+     "items": [
+      {
+       "no": "Scorecard",
+       "meta": "4 notes",
+       "amt": "",
+       "due": "",
+       "st": "grey",
+       "stl": "collapsed",
+       "cb": "none"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "g",
+  "w",
+  "d"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "g",
+   "to": "g",
+   "l": "merge_results → peer_after_analysis",
+   "t": "NEW",
+   "what": "Runs when an analysis is recorded, before `plan_actions` fans out. Pure bookkeeping; no model call."
+  },
+  {
+   "id": "m2",
+   "f": "g",
+   "to": "g",
+   "l": "coverage_increments: +3 criteria",
+   "t": "NEW",
+   "what": "For a quality-3 answer on a coding question with code in the editor: `problem_solving`, `communication` (dimensions present) and `code_quality` (coding + code). `hint_responsiveness` needs a hint-reception dimension; `behavioral` needs signals or flags or a behavioral question; `system_design` that category. A failed analysis (quality 0) adds nothing.",
+   "code": "coverage_counts = { \"problem_solving\": 3, \"communication\": 2, \"code_quality\": 1 }"
+  },
+  {
+   "id": "m3",
+   "f": "g",
+   "to": "w",
+   "l": "send_copilot_coverage",
+   "t": "NEW",
+   "hl": "coverage",
+   "what": "`resume_verification` is topped up with claimed-experience facts and contradictions found so far. Status: 0 none, 1 to 2 thin, 3 or more solid.",
+   "code": "{ \"criteria\": { \"problem_solving\": { \"evidence\": 3, \"status\": \"solid\" },\n                \"code_quality\": { \"evidence\": 1, \"status\": \"thin\" },\n                \"communication\": { \"evidence\": 2, \"status\": \"thin\" },\n                \"hint_responsiveness\": { \"evidence\": 0, \"status\": \"none\" }, ... },\n  \"gaps\": [\"hint_responsiveness\", \"system_design\", \"resume_verification\", \"behavioral\"],\n  \"timestamp\": \"2026-10-16T10:14:08Z\" }"
+  },
+  {
+   "id": "m4",
+   "f": "w",
+   "to": "d",
+   "l": "copilot_coverage",
+   "t": "NEW",
+   "hl": "coverage",
+   "what": "The strip colours a chip per criterion. For the first gap it looks through the plan's later questions for one whose category feeds that criterion and names it. `hint_responsiveness` has no category, so in practice the next named gap is usually system design or behavioral."
+  },
+  {
+   "id": "m5",
+   "f": "g",
+   "to": "w",
+   "l": "send_scorecard (all notes)",
+   "t": "NEW",
+   "hl": "scorecard",
+   "what": "One draft note per analysed answer with a 200-character quote, plus a red-flags note when the analysis raised any. Notes are keyed `u-41:note` and `u-41:flags`; a re-run never duplicates them. The list is capped at 60 in state.",
+   "code": "{ \"notes\": [ { \"id\": \"u-41:note\", \"criterion\": \"problem_solving\", \"quality\": 3,\n    \"quote\": \"I'd keep a hash map of counts and then sort it by count; that's O(n log n) ...\",\n    \"note\": \"Correct but not optimal; did not reach the heap approach.\",\n    \"question_id\": \"q2\", \"utterance_id\": \"u-41\", \"source\": \"copilot\", \"at\": \"...\" }, ... ],\n  \"timestamp\": \"2026-10-16T10:14:08Z\" }"
+  },
+  {
+   "id": "m6",
+   "f": "w",
+   "to": "d",
+   "l": "scorecard",
+   "t": "NEW",
+   "hl": "scorecard",
+   "what": "Replaces the panel's scorecard wholesale. Collapsed by default with a count; open, it groups notes by criterion with the quotes."
+  }
+ ]
+}

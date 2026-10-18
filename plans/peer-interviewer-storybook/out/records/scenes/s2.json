@@ -1,0 +1,10 @@
+{
+ "n": 2,
+ "short": "Answer",
+ "title": "The candidate answers",
+ "lede": "A final transcript line runs through the graph. The analysis runs as before and may now name peer follow-ups; those run in parallel and arrive as cards.",
+ "also": [
+  5
+ ],
+ "stack": false
+}

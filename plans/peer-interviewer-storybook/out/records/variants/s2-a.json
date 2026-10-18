@@ -1,0 +1,155 @@
+{
+ "scene": "s2",
+ "order": 1,
+ "name": "Gaps found: suggested follow-ups",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "rows",
+     "hl": "card",
+     "label": "Follow-up card",
+     "items": [
+      {
+       "no": "Follow-up",
+       "meta": "Expected outline not covered: a heap for top-K",
+       "amt": "",
+       "due": "10:14",
+       "st": "proc",
+       "stl": "suggest",
+       "cb": "none"
+      }
+     ]
+    },
+    {
+     "t": "text",
+     "text": "1. You sort the whole map at the end. Is there a way to avoid sorting all n words when k is small?"
+    },
+    {
+     "t": "text",
+     "text": "2. What happens to your memory use if the stream is much larger than the distinct vocabulary?"
+    },
+    {
+     "t": "text",
+     "text": "3. How would you break ties between words with the same count?"
+    },
+    {
+     "t": "btn",
+     "text": "Mark as asked",
+     "kind": "primary",
+     "sm": true
+    },
+    {
+     "t": "btn",
+     "text": "Dismiss",
+     "kind": "ghost",
+     "sm": true
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "k",
+  "p",
+  "g",
+  "l",
+  "w",
+  "d"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "k",
+   "to": "p",
+   "l": "final transcript line u-41",
+   "t": "OLD",
+   "what": "The candidate's answer arrives as a final transcript event, as today.",
+   "code": "{ \"id\": \"u-41\", \"speaker_role\": \"candidate\", \"is_final\": true,\n  \"timestamp\": \"2026-10-16T10:14:05Z\",\n  \"text\": \"I'd keep a hash map of counts and then sort it by count; that's O(n log n) and it's fine for this size.\" }"
+  },
+  {
+   "id": "m2",
+   "f": "p",
+   "to": "g",
+   "l": "run: UtteranceIn → apply_events",
+   "t": "MOD",
+   "what": "The batch runs through the graph. New in peer mode: the talk window gets `[candidate, 23]` and `last_candidate_at` becomes 10:14:05Z, for the talk-share and stuck checks later."
+  },
+  {
+   "id": "m3",
+   "f": "g",
+   "to": "g",
+   "l": "dispatch → Send(analyze)",
+   "t": "OLD",
+   "what": "The utterance was chosen for analysis by the ingress, as before."
+  },
+  {
+   "id": "m4",
+   "f": "g",
+   "to": "l",
+   "l": "analyze (offered actions listed)",
+   "t": "MOD",
+   "what": "The same analysis prompt plus a short list of follow-ups it may name: `suggest_probe`, `verify_claim`, `clarify`, `edge_cases` (and the agentic ones when that flag is on). Without any offered actions the prompt text is unchanged.",
+   "code": "Also include \"next_actions\": a list (often empty) of follow-ups worth running now, chosen only from:\n  suggest_probe - ...\n  verify_claim - ...\n  clarify - ...\n  edge_cases - ...\nReturn \"next_actions\": [] when none apply."
+  },
+  {
+   "id": "m5",
+   "f": "l",
+   "to": "g",
+   "l": "analysis: quality 3, heap missed",
+   "res": true,
+   "what": "The analysis scores the answer and lists what the expected outline wanted but did not hear.",
+   "code": "{ \"answer_quality\": 3, \"on_track\": true,\n  \"dimensions\": { \"depth_completeness\": { \"key_points_missed\": [\"heap of size k\"] } },\n  \"next_actions\": [] }"
+  },
+  {
+   "id": "m6",
+   "f": "g",
+   "to": "g",
+   "l": "merge_results → plan_actions → peer_sends",
+   "t": "NEW",
+   "what": "Decides which peer nodes run for this analysis. A probe is due when the analysis chose it **or** `key_points_missed` is non-empty (it is here, so the empty `next_actions` does not matter). A clarification runs when chosen or the text looks like a question. A claim check runs only when chosen."
+  },
+  {
+   "id": "m7",
+   "f": "g",
+   "to": "l",
+   "l": "suggest_probes (Sonnet, PEER_INTERVIEWER)",
+   "t": "NEW",
+   "what": "One call, max 500 tokens, temperature 0.4, JSON. It gets the conversation context, the question plan, a summary of the analysis (quality, missed and covered points, weakest dimension) and the utterance.",
+   "code": "system: \"Suggest follow-up questions for a live interview. Return JSON. ...\"\nuser:   <context> <question plan>\n        ## Analysis Of This Answer\n        Quality 3/5, on track: ... Missed: heap of size k ...\n        ## Latest Utterance\n        [candidate]: I'd keep a hash map ..."
+  },
+  {
+   "id": "m8",
+   "f": "l",
+   "to": "g",
+   "l": "{ probes: [3] }",
+   "res": true,
+   "what": "Up to three questions in the interviewer's voice. Items without a question are dropped; more than three are cut.",
+   "code": "{ \"probes\": [\n  { \"question\": \"You sort the whole map at the end. Is there a way to avoid sorting all n words when k is small?\", \"targets\": \"Expected outline not covered: a heap for top-K\", \"why\": \"the core optimisation\" },\n  { \"question\": \"What happens to your memory use if the stream is much larger than the distinct vocabulary?\", ... },\n  { \"question\": \"How would you break ties between words with the same count?\", ... } ] }"
+  },
+  {
+   "id": "m9",
+   "f": "g",
+   "to": "w",
+   "l": "send_copilot_card (probe)",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Emitted as a dashboard effect from the node; the pipeline performs it after the run step. The card id is `sess-7f3a:u-41:probe`, so a resumed run re-sending it is harmless.",
+   "code": "{ \"id\": \"sess-7f3a:u-41:probe\", \"kind\": \"probe\", \"priority\": \"suggest\",\n  \"title\": \"Suggested follow-ups\",\n  \"body\": \"Expected outline not covered: a heap for top-K\",\n  \"items\": [\"You sort the whole map ...\", \"What happens to your memory ...\", \"How would you break ties ...\"],\n  \"probe\": \"You sort the whole map ...\",\n  \"question_id\": \"q2\", \"source\": \"llm\", \"timestamp\": \"2026-10-16T10:14:09Z\" }"
+  },
+  {
+   "id": "m10",
+   "f": "w",
+   "to": "d",
+   "l": "copilot_card",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Broadcast to every dashboard tab of the session. The store keeps the 20 newest cards, one per id, and ignores ids the interviewer already used.",
+   "code": "{ \"type\": \"copilot_card\", \"session_id\": \"sess-7f3a\", \"payload\": { ...card } }"
+  }
+ ]
+}

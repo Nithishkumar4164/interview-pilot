@@ -1,0 +1,14 @@
+{
+ "order": 1,
+ "call": "ws ← copilot_card",
+ "owner": "Session graph → Dashboard",
+ "gives": "One card: id, kind, priority, title, body, items, probe, question_id, source, timestamp",
+ "tag": "NEW",
+ "steps": [
+  2,
+  3,
+  4,
+  5,
+  8
+ ]
+}

@@ -1,0 +1,7 @@
+{
+ "eyebrow": "Interview Pilot · peer interviewer",
+ "title": "Peer interviewer storybook",
+ "intro": "Nine moments in a live interview with PEER_INTERVIEWER_ENABLED on. Each step shows the Copilot panel the interviewer sees and, next to it, every call made behind it: the websocket message, the graph node, the model call. The candidate never sees any of this.",
+ "rolloutTitle": "Flag off first, then one session at a time",
+ "rolloutLede": "Everything ships dark. The order below is the order to turn it on in."
+}

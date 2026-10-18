@@ -1,0 +1,86 @@
+{
+ "scene": "s1",
+ "order": 1,
+ "name": "Flag on",
+ "wires": [
+  {
+   "cap": "Copilot panel, right column",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "btn",
+     "text": "Mute…",
+     "kind": "ghost",
+     "sm": true
+    },
+    {
+     "t": "empty",
+     "hl": "empty",
+     "label": "Empty state",
+     "title": "Listening.",
+     "text": "Suggestions appear here as the interview unfolds."
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "i",
+  "d",
+  "w",
+  "p",
+  "g"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "i",
+   "to": "d",
+   "l": "opens the live session",
+   "what": "The interviewer opens the live session page. The Copilot panel is the first thing in the right column, above Speakers and Scores."
+  },
+  {
+   "id": "m2",
+   "f": "d",
+   "to": "w",
+   "l": "ws /ws/dashboard/{session}",
+   "t": "OLD",
+   "what": "The existing dashboard websocket. The panel listens on it for four new message types: `copilot_card`, `copilot_coverage`, `scorecard`, `copilot_reply`."
+  },
+  {
+   "id": "m3",
+   "f": "w",
+   "to": "p",
+   "l": "create_session_pipeline(...)",
+   "t": "MOD",
+   "what": "The production factory reads `settings.peer_interviewer_enabled` (env `INTERVIEW_PILOT_PEER_INTERVIEWER_ENABLED`). When on, it passes a 30 s tick interval; otherwise 0.",
+   "code": "LangGraphSessionPipeline(\n  session_id, failover, checkpointer,\n  tick_interval_s=30.0 if settings.peer_interviewer_enabled else 0.0,\n)"
+  },
+  {
+   "id": "m4",
+   "f": "p",
+   "to": "g",
+   "l": "build_session_graph(peer=True)",
+   "t": "MOD",
+   "what": "The graph gains nodes `coach_interviewer`, `suggest_probes`, `verify_claim`, `draft_clarification`, `suggest_edge_cases`, and the analysis prompt now lists the four peer actions it may choose. Peer mode uses the fan-out shape even when `AGENTIC_ROUTING_ENABLED` is off."
+  },
+  {
+   "id": "m5",
+   "f": "p",
+   "to": "p",
+   "l": "starts the clock (every 30 s)",
+   "t": "NEW",
+   "what": "An asyncio task named `session-ticks:{session}` sleeps 30 s and enqueues `Tick(at=now)` while the pipeline runs. It is started with the consumer and cancelled on close."
+  },
+  {
+   "id": "m6",
+   "f": "d",
+   "to": "d",
+   "l": "renders the panel: Listening.",
+   "hl": "empty",
+   "what": "Nothing has arrived yet. Coverage, scorecard and the ask box appear once their first payload lands."
+  }
+ ]
+}

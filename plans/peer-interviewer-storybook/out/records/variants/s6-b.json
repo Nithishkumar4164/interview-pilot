@@ -1,0 +1,107 @@
+{
+ "scene": "s6",
+ "order": 2,
+ "name": "Add a scorecard note",
+ "wires": [
+  {
+   "cap": "Copilot panel · Scorecard open",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Scorecard"
+    },
+    {
+     "t": "text",
+     "text": "**Communication**"
+    },
+    {
+     "t": "text",
+     "hl": "note",
+     "label": "Interviewer note",
+     "text": "you: explained the trade-off clearly once prompted"
+    },
+    {
+     "t": "text",
+     "text": "**Problem solving**"
+    },
+    {
+     "t": "text",
+     "text": "Correct but not optimal; did not reach the heap approach. (3/5)"
+    },
+    {
+     "t": "input",
+     "hl": "input",
+     "label": "Note input",
+     "text": "Add a note…",
+     "filled": false
+    },
+    {
+     "t": "btn",
+     "text": "Add",
+     "kind": "off",
+     "sm": true
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "i",
+  "d",
+  "w",
+  "p",
+  "g"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "i",
+   "to": "d",
+   "l": "picks Communication, types, taps Add",
+   "hl": "input",
+   "what": "A criterion dropdown and one line of text under the scorecard."
+  },
+  {
+   "id": "m2",
+   "f": "d",
+   "to": "w",
+   "l": "add_scorecard_note",
+   "t": "NEW",
+   "what": "The dashboard attaches the current plan question's id.",
+   "code": "{ \"type\": \"add_scorecard_note\", \"criterion\": \"communication\",\n  \"text\": \"explained the trade-off clearly once prompted\", \"question_id\": \"q2\" }"
+  },
+  {
+   "id": "m3",
+   "f": "w",
+   "to": "p",
+   "l": "handle_scorecard_note",
+   "t": "NEW",
+   "what": "Enqueues `ScorecardNoteAdded` with a fresh uuid as the note id."
+  },
+  {
+   "id": "m4",
+   "f": "p",
+   "to": "g",
+   "l": "ScorecardNoteAdded → interviewer_note",
+   "t": "NEW",
+   "what": "Empty text or a criterion outside the seven report criteria is dropped silently. Otherwise the note joins the scorecard with `source: \"interviewer\"`, no quote and no quality."
+  },
+  {
+   "id": "m5",
+   "f": "g",
+   "to": "w",
+   "l": "send_scorecard (all notes)",
+   "t": "NEW",
+   "hl": "note",
+   "what": "The whole scorecard is re-sent, so every tab of the session sees the note."
+  },
+  {
+   "id": "m6",
+   "f": "w",
+   "to": "d",
+   "l": "scorecard",
+   "t": "NEW",
+   "hl": "note",
+   "what": "The note appears under its criterion prefixed *you:*. There is no optimistic insert: the note shows only once the round trip completes."
+  }
+ ]
+}

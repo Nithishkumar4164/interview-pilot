@@ -1,0 +1,82 @@
+{
+ "scene": "s1",
+ "order": 2,
+ "name": "Flag off (today's default)",
+ "wires": [
+  {
+   "cap": "Copilot panel, right column",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "btn",
+     "text": "Mute…",
+     "kind": "ghost",
+     "sm": true
+    },
+    {
+     "t": "empty",
+     "hl": "empty",
+     "label": "Empty state",
+     "title": "Listening.",
+     "text": "Suggestions appear here as the interview unfolds."
+    },
+    {
+     "t": "msg",
+     "kind": "warn",
+     "text": "Stays like this for the whole session: nothing will ever arrive."
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "i",
+  "d",
+  "w",
+  "p",
+  "g"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "i",
+   "to": "d",
+   "l": "opens the live session",
+   "what": "Same page, same panel."
+  },
+  {
+   "id": "m2",
+   "f": "d",
+   "to": "w",
+   "l": "ws /ws/dashboard/{session}",
+   "t": "OLD",
+   "what": "Same websocket."
+  },
+  {
+   "id": "m3",
+   "f": "w",
+   "to": "p",
+   "l": "create_session_pipeline(tick 0)",
+   "t": "MOD",
+   "what": "The flag is off, so no clock is started."
+  },
+  {
+   "id": "m4",
+   "f": "p",
+   "to": "g",
+   "l": "build_session_graph(peer=False)",
+   "t": "OLD",
+   "what": "No peer nodes. With `AGENTIC_ROUTING_ENABLED` also off the graph is exactly today's: analyze, then the fixed contradiction follow-up. The analysis prompt is byte-identical to before this feature."
+  },
+  {
+   "id": "m5",
+   "f": "d",
+   "to": "d",
+   "l": "panel still says Listening.",
+   "hl": "empty",
+   "what": "The frontend has no signal for the flag (checked: no flag read anywhere under `apps/frontend/src`). The panel renders on every session and waits for cards that never come. See suggestion 1."
+  }
+ ]
+}

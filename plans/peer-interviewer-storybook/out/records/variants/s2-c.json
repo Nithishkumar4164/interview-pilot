@@ -1,0 +1,140 @@
+{
+ "scene": "s2",
+ "order": 3,
+ "name": "Candidate asks: clarification draft",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "rows",
+     "hl": "card",
+     "label": "Clarification card",
+     "items": [
+      {
+       "no": "Clarify",
+       "meta": "Candidate needs a clarification",
+       "amt": "",
+       "due": "10:18",
+       "st": "proc",
+       "stl": "suggest",
+       "cb": "none"
+      }
+     ]
+    },
+    {
+     "t": "text",
+     "text": "Whether the whole word set fits in memory."
+    },
+    {
+     "t": "msg",
+     "kind": "note",
+     "text": "Say: \"Yes, assume the distinct words fit in memory; the stream itself does not.\""
+    },
+    {
+     "t": "btn",
+     "text": "Mark as asked",
+     "kind": "primary",
+     "sm": true
+    },
+    {
+     "t": "btn",
+     "text": "Dismiss",
+     "kind": "ghost",
+     "sm": true
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "k",
+  "p",
+  "g",
+  "l",
+  "w",
+  "d"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "k",
+   "to": "p",
+   "l": "final transcript line u-47",
+   "t": "OLD",
+   "code": "{ \"id\": \"u-47\", \"speaker_role\": \"candidate\", \"text\": \"Can I assume the words fit in memory?\" }",
+   "what": "A question to the interviewer."
+  },
+  {
+   "id": "m2",
+   "f": "p",
+   "to": "g",
+   "l": "run: UtteranceIn → apply_events",
+   "t": "MOD",
+   "what": "Same ingress."
+  },
+  {
+   "id": "m3",
+   "f": "g",
+   "to": "l",
+   "l": "analyze (offered actions listed)",
+   "t": "MOD",
+   "what": "The analysis runs as usual; here it chose nothing."
+  },
+  {
+   "id": "m4",
+   "f": "l",
+   "to": "g",
+   "l": "analysis: next_actions []",
+   "res": true,
+   "what": "Not needed: the cheap trigger below fires anyway."
+  },
+  {
+   "id": "m5",
+   "f": "g",
+   "to": "g",
+   "l": "peer_sends: looks_like_a_question → clarify",
+   "t": "NEW",
+   "what": "`looks_like_a_question` is true for a `?` or an opening like *can i assume*, *should i*, *do you want*, *is it okay if*. The clarification check runs even when the analysis did not ask for it."
+  },
+  {
+   "id": "m6",
+   "f": "g",
+   "to": "l",
+   "l": "draft_clarification (Sonnet, temperature 0.2)",
+   "t": "NEW",
+   "what": "Asked to decide whether something needs clearing up right now, and to draft a reply that clarifies the problem statement only, never the solution.",
+   "code": "system: \"Draft a clarification for a live interview. Return JSON. ...\"\nuser:   <context> <question plan>\n        ## Latest Utterance\n        [candidate]: Can I assume the words fit in memory?"
+  },
+  {
+   "id": "m7",
+   "f": "l",
+   "to": "g",
+   "l": "needs_clarification true + reply",
+   "res": true,
+   "code": "{ \"needs_clarification\": true,\n  \"what_is_unclear\": \"Whether the whole word set fits in memory.\",\n  \"reply\": \"Yes, assume the distinct words fit in memory; the stream itself does not.\" }",
+   "what": "`needs_clarification: false` or an empty reply means no card."
+  },
+  {
+   "id": "m8",
+   "f": "g",
+   "to": "w",
+   "l": "send_copilot_card (clarification)",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Body is what is unclear; `probe` is the reply to say aloud."
+  },
+  {
+   "id": "m9",
+   "f": "w",
+   "to": "d",
+   "l": "copilot_card",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Mark as asked sends the reply text back as the used card."
+  }
+ ]
+}

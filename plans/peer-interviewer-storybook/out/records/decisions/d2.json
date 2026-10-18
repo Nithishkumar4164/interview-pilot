@@ -1,0 +1,9 @@
+{
+ "order": 2,
+ "q": "Should muted kinds also skip their model calls on the backend?",
+ "options": [
+  "Yes, send mutes to the graph",
+  "No, muting stays a display filter"
+ ],
+ "affects": "Steps 3 and 6"
+}

@@ -1,0 +1,10 @@
+{
+ "order": 3,
+ "n": 3,
+ "where": "Step 4",
+ "title": "Skip the run when a tick has nothing to check",
+ "paras": [
+  "Each `Tick` runs the graph and writes a checkpoint, every 30 s, whether or not anything is due. That is about 120 extra runs and checkpoint writes per hour per live session, most of them no-ops, on the same Postgres the session already leans on.",
+  "The pipeline knows the state's `question_started_at`, the budget, `last_candidate_at` and the code context before it enqueues. Compute the next time anything *could* fire (next pace threshold, or 60 s after the last candidate line while `is_stuck`) and enqueue a Tick only then. The graph logic stays as it is; only the cadence changes."
+ ]
+}

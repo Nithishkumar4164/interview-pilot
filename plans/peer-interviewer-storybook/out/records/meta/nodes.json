@@ -1,0 +1,45 @@
+{
+ "nodes": [
+  {
+   "name": "Interviewer",
+   "role": "browser",
+   "note": "reads cards, marks them used, types notes and questions"
+  },
+  {
+   "name": "Dashboard",
+   "role": "React + Zustand",
+   "note": "CopilotPanel and copilot-store; mutes stay in the browser"
+  },
+  {
+   "name": "WS handler",
+   "role": "FastAPI websocket",
+   "note": "one loop per tab; broadcasts to every tab of the session"
+  },
+  {
+   "name": "Pipeline",
+   "role": "LangGraphSessionPipeline",
+   "note": "batches events, runs the graph, performs its effects, keeps the 30 s clock"
+  },
+  {
+   "name": "Session graph",
+   "role": "LangGraph",
+   "note": "apply_events → fan-out → merge_results → actions; peer nodes added when the flag is on"
+  },
+  {
+   "name": "LLM",
+   "role": "FailoverManager",
+   "note": "Sonnet for peer calls, Haiku for coaching, tool loop for questions",
+   "plus": true
+  },
+  {
+   "name": "Code graph",
+   "role": "separate graph",
+   "note": "its latest values (code, snapshot id, is_stuck, bugs) ride into every session run"
+  },
+  {
+   "name": "Report",
+   "role": "after the session",
+   "note": "gets the scorecard and the cards that were used"
+  }
+ ]
+}

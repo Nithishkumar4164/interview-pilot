@@ -1,0 +1,10 @@
+{
+ "order": 3,
+ "q": "How should the clock run?",
+ "options": [
+  "Every 30 s with a checkpoint each (today)",
+  "Only at the next time something could fire",
+  "Every 30 s, but no run when nothing is due"
+ ],
+ "affects": "Step 4"
+}

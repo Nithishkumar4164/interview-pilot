@@ -1,0 +1,10 @@
+{
+ "order": 5,
+ "call": "ws → use_copilot_card",
+ "owner": "Dashboard → Pipeline",
+ "gives": "Records that the interviewer relayed a card (graph state, then the report)",
+ "tag": "NEW",
+ "steps": [
+  6
+ ]
+}

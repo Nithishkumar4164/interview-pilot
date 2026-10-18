@@ -1,0 +1,89 @@
+{
+ "scene": "s6",
+ "order": 3,
+ "name": "Dismiss or mute",
+ "wires": [
+  {
+   "cap": "Copilot panel · Mute… open",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "radio",
+     "hl": "mutes",
+     "label": "Muted kinds",
+     "on": 3,
+     "items": [
+      {
+       "label": "Follow-up",
+       "side": ""
+      },
+      {
+       "label": "Claim check",
+       "side": ""
+      },
+      {
+       "label": "Clarify",
+       "side": ""
+      },
+      {
+       "label": "Coaching",
+       "side": "muted"
+      },
+      {
+       "label": "Pacing",
+       "side": ""
+      },
+      {
+       "label": "Stuck",
+       "side": ""
+      },
+      {
+       "label": "Difficulty",
+       "side": ""
+      },
+      {
+       "label": "Edge cases",
+       "side": ""
+      }
+     ]
+    },
+    {
+     "t": "muted",
+     "text": "Muted kinds are hidden on this browser only."
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "i",
+  "d",
+  "w"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "i",
+   "to": "d",
+   "l": "taps Dismiss on a card",
+   "what": "The card is dropped from the store. Nothing is sent; the backend never learns the card was unwanted."
+  },
+  {
+   "id": "m2",
+   "f": "i",
+   "to": "d",
+   "l": "ticks Coaching under Mute…",
+   "hl": "mutes",
+   "what": "The kind is added to `mutedKinds`, saved in `localStorage` under `copilot_muted_kinds`. Cards of that kind still arrive and are still stored; they are filtered out of the list."
+  },
+  {
+   "id": "m3",
+   "f": "d",
+   "to": "w",
+   "l": "(nothing sent)",
+   "what": "Muting is per browser. The graph keeps calling Haiku for coaching every 20 s of interviewer talk and keeps computing the talk-share nudge. See suggestion 2."
+  }
+ ]
+}

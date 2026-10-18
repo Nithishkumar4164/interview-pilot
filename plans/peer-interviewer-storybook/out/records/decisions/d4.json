@@ -1,0 +1,10 @@
+{
+ "order": 4,
+ "q": "Should Ask the copilot run as a background task instead of inline in the websocket loop?",
+ "options": [
+  "Yes, and the two older inline handlers too",
+  "Yes, only this one",
+  "No, keep the existing pattern"
+ ],
+ "affects": "Step 7"
+}

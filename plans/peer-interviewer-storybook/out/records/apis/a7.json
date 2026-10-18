@@ -1,0 +1,10 @@
+{
+ "order": 7,
+ "call": "ws → copilot_query",
+ "owner": "Dashboard → Pipeline",
+ "gives": "Asks the copilot a free-text question",
+ "tag": "NEW",
+ "steps": [
+  7
+ ]
+}

@@ -1,0 +1,5 @@
+{
+ "order": 4,
+ "title": "Flag on in staging",
+ "text": "Run a replay scenario with ticks. Watch peer_action_failed in the logs, checkpoint volume per session, and websocket latency while a question is being answered."
+}

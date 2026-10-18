@@ -1,0 +1,54 @@
+{
+ "scene": "s8",
+ "order": 2,
+ "name": "Same snapshot: skipped",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "empty",
+     "hl": "empty",
+     "label": "Empty state",
+     "title": "No new card",
+     "text": "The earlier edge-case card is still there, or was dealt with."
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "c",
+  "g",
+  "l"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "c",
+   "to": "g",
+   "l": "code_context: still snapshot sn-21",
+   "t": "OLD",
+   "what": "The candidate has not typed since."
+  },
+  {
+   "id": "m2",
+   "f": "g",
+   "to": "g",
+   "l": "peer_sends: sn-21 == edge_cases_for → no Send",
+   "t": "NEW",
+   "what": "Even if the analysis chose `edge_cases` again. The next snapshot id reopens it."
+  },
+  {
+   "id": "m3",
+   "f": "g",
+   "to": "l",
+   "l": "(no call)",
+   "hl": "empty",
+   "what": "One model call per snapshot, at most."
+  }
+ ]
+}

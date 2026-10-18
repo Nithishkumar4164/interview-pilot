@@ -1,0 +1,10 @@
+{
+ "order": 17,
+ "call": "draft_hint node · send_hint_suggestion",
+ "owner": "Session graph (Smart Hints)",
+ "gives": "The stuck countdown reuses the hint drafter as is",
+ "tag": "OLD",
+ "steps": [
+  4
+ ]
+}

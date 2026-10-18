@@ -1,0 +1,23 @@
+{
+ "brand": "Interview Pilot",
+ "font": "\"Inter\", system-ui, -apple-system, sans-serif",
+ "colors": {
+  "primary": "#6366f1",
+  "on-primary": "#ffffff",
+  "ink": "#e4e6ed",
+  "sub": "#9399b0",
+  "line": "#2e3347",
+  "bg": "#0f1117",
+  "grey": "#242836",
+  "lav": "#232849",
+  "lime": "#1f2e22",
+  "mint": "#1b2f33",
+  "good": "#22c55e",
+  "bad": "#ef4444",
+  "bad-bg": "#3a1d1d",
+  "warn": "#f59e0b",
+  "warn-bg": "#3a2e14",
+  "amber": "#f59e0b",
+  "amber-bg": "#3a2e14"
+ }
+}

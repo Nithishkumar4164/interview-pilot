@@ -1,0 +1,5 @@
+{
+ "order": 2,
+ "title": "Model ids",
+ "text": "Confirm claude-haiku-5-5 (coaching) and the Sonnet id (peer calls, questions) resolve on the account; tests/test_live_models.py is the place."
+}

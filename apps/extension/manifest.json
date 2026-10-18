@@ -29,6 +29,12 @@
   "action": {
     "default_popup": "dist/src/popup/index.html"
   },
+  "commands": {
+    "start-capture": {
+      "suggested_key": { "default": "Alt+Shift+I" },
+      "description": "Start tab audio and microphone capture on this tab"
+    }
+  },
   "content_scripts": [
     {
       "matches": [

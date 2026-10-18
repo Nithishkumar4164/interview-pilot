@@ -145,6 +145,10 @@ Then in Chrome:
 2. Enable **Developer mode**
 3. Click **Load unpacked** and select `apps/extension/dist`
 
+#### Starting capture
+
+On the meeting tab, press **Alt+Shift+I** or click **Start Capture** in the extension popup to start tab audio and the microphone together. Chrome only allows tab capture after you invoke the extension on that tab, so pairing alone can't start it. If the shortcut does nothing, check that Chrome assigned it at `chrome://extensions/shortcuts` (it stays unset when another extension already uses the key).
+
 #### One-click pairing
 
 By default the dashboard shows a pairing code that you paste into the extension popup. To have **Connect extension** hand the code to the extension directly, give the dashboard the extension's ID:

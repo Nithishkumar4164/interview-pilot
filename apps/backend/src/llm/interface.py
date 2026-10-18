@@ -37,6 +37,9 @@ class LLMConfig:
     temperature: float = 0.7
     stream: bool = False
     response_format: str | None = None  # "json" for structured output
+    # False: answer straight away without extended thinking, for latency-bound
+    # calls (Anthropic; other providers ignore it).
+    thinking: bool = True
 
 
 @dataclass

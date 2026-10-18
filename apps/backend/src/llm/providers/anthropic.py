@@ -78,13 +78,16 @@ class AnthropicProvider(ILLMProvider):
         return {"temperature": config.temperature} if self._accepts_temperature else {}
 
     async def _create(self, config: LLMConfig, **kwargs: Any) -> Any:
-        """messages.create, sending ``temperature`` only to models that accept it.
+        """messages.create, sending ``temperature`` only to models that accept it,
+        and turning thinking off when ``config.thinking`` is False.
 
         Current models reject it with a 400 ("`temperature` is deprecated for
         this model"); on that error the call is retried once without it, and
         this provider stops sending it.
         """
         sampling = self._sampling(config)
+        if not config.thinking:
+            kwargs["thinking"] = {"type": "disabled"}
         try:
             return await self.client.messages.create(**kwargs, **sampling)
         except anthropic.BadRequestError as e:

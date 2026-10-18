@@ -65,17 +65,19 @@ DEFAULT_TASK_MAPPINGS: dict[TaskType, TaskProviderMapping] = {
         fallback_provider="openai",
         fallback_model="gpt-4o",
     ),
+    # Questions are generated while the candidate waits: Haiku without thinking took
+    # 9-10 s per question and 2.6 s per topic list (2026-10-19), Sonnet 5 21-29 s and 4-6 s.
     TaskType.QUESTION_GENERATION: TaskProviderMapping(
         task_type=TaskType.QUESTION_GENERATION,
         primary_provider="anthropic",
-        primary_model="claude-sonnet-5",
+        primary_model="claude-haiku-5-5",
         fallback_provider="openai",
         fallback_model="gpt-4o",
     ),
     TaskType.QUESTION_TOPICS: TaskProviderMapping(
         task_type=TaskType.QUESTION_TOPICS,
         primary_provider="anthropic",
-        primary_model="claude-sonnet-5",
+        primary_model="claude-haiku-5-5",
         fallback_provider="openai",
         fallback_model="gpt-4o",
     ),

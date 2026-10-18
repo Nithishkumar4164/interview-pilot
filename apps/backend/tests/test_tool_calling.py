@@ -312,6 +312,34 @@ async def test_anthropic_analyze_skips_thinking_blocks() -> None:
     assert result.parsed == {"recommendation": "hire"}
 
 
+async def test_anthropic_turns_thinking_off_only_when_asked() -> None:
+    """Latency-bound calls (question generation) disable thinking, including on the temperature retry."""
+    import anthropic
+    import httpx
+
+    from src.llm.interface import AnalysisContext
+
+    rejected = anthropic.BadRequestError(
+        "`temperature` is deprecated for this model.",
+        response=httpx.Response(400, request=httpx.Request("POST", "https://api.anthropic.com/v1/messages")),
+        body=None,
+    )
+    ok = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text='{"ok": true}')],
+        stop_reason="end_turn",
+        usage=SimpleNamespace(input_tokens=5, output_tokens=3),
+    )
+    provider = AnthropicProvider("claude-haiku-5-5")
+    create = AsyncMock(side_effect=[rejected, ok, ok])
+    provider.client = SimpleNamespace(messages=SimpleNamespace(create=create))
+    context = AnalysisContext(system_prompt="s", user_content="u", task_type=TaskType.QUESTION_GENERATION)
+
+    await provider.analyze(context, LLMConfig(max_tokens=10, response_format="json", thinking=False))
+    await provider.analyze(context, LLMConfig(max_tokens=10, response_format="json"))
+    sent = [call.kwargs for call in create.await_args_list]
+    assert [k.get("thinking") for k in sent] == [{"type": "disabled"}, {"type": "disabled"}, None]
+
+
 async def test_a_loop_still_exploring_at_the_last_step_is_told_to_answer() -> None:
     """Real models answered in prose when only tool_choice=none stopped them."""
     from src.llm.interface import ToolTurn

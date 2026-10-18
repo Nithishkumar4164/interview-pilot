@@ -123,12 +123,11 @@ Return JSON:
 }
 """
 
-# Full question-generation answers took 2,136-2,540 output tokens on claude-sonnet-5
-# (2026-10-08) for a plan's worth; only generated tokens are billed.
+# One question with its approaches took 1,783-2,807 output tokens on claude-haiku-5-5
+# (2026-10-19); only generated tokens are billed.
 QUESTION_GENERATION_MAX_TOKENS = 8000
 
-# claude-sonnet-5 thinks before answering: topic answers took 878-1,000+ output
-# tokens (2026-10-15), and 1,000 cut one off before any text.
+# Topic lists took 385-982 output tokens on claude-haiku-5-5 (2026-10-19).
 TOPIC_SUGGESTION_MAX_TOKENS = 4000
 
 
@@ -194,7 +193,10 @@ class QuestionService:
             ),
             task_type=TaskType.QUESTION_TOPICS,
         )
-        config = LLMConfig(max_tokens=TOPIC_SUGGESTION_MAX_TOKENS, temperature=0.8, response_format="json")
+        # Thinking roughly doubled the wait on topic lists without better lists.
+        config = LLMConfig(
+            max_tokens=TOPIC_SUGGESTION_MAX_TOKENS, temperature=0.8, response_format="json", thinking=False
+        )
         result = await self.llm.analyze(context, config)
 
         topics: list[dict] = []
@@ -240,7 +242,9 @@ class QuestionService:
             ),
             task_type=TaskType.QUESTION_GENERATION,
         )
-        config = LLMConfig(max_tokens=QUESTION_GENERATION_MAX_TOKENS, temperature=0.7, response_format="json")
+        config = LLMConfig(
+            max_tokens=QUESTION_GENERATION_MAX_TOKENS, temperature=0.7, response_format="json", thinking=False
+        )
         result = await self.llm.analyze(context, config)
 
         q = result.parsed

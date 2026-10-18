@@ -132,6 +132,10 @@ export function Popup() {
     }
   }, [state.micCaptureActive]);
 
+  const handleClearBuffer = useCallback(() => {
+    chrome.runtime.sendMessage({ type: 'clear-buffer' });
+  }, []);
+
   const isConnected = state.connectionState === 'connected';
   const hasBuffer = state.bufferStats.audioChunks > 0 || state.bufferStats.codeSnapshots > 0;
   const bufferDurationSec = Math.round(state.bufferStats.estimatedDurationMs / 1000);
@@ -275,6 +279,12 @@ export function Popup() {
               <div style={styles.bufferInfo}>
                 <span>{state.bufferStats.codeSnapshots} code snapshots</span>
               </div>
+              <button
+                onClick={handleClearBuffer}
+                style={{ ...styles.button, ...styles.buttonSecondary, marginTop: 6 }}
+              >
+                Clear Buffer
+              </button>
             </div>
           )}
 
@@ -385,6 +395,12 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#64748b',
     textAlign: 'center',
     marginBottom: 8,
+  },
+  buttonSecondary: {
+    backgroundColor: '#e2e8f0',
+    color: '#475569',
+    fontSize: 12,
+    padding: '6px 10px',
   },
   captureButton: {
     color: 'white',

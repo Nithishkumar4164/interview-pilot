@@ -325,6 +325,16 @@ async def end_session(
 ) -> dict:
     session_repo = SessionRepository(db)
 
+    # Already ended (a repeated End): hand back its report instead of generating another.
+    if db_session.status == SessionStatus.ENDED:
+        from src.models.report import Report
+
+        existing = await db.scalar(
+            select(Report.id).where(Report.session_id == db_session.id).order_by(Report.created_at.desc()).limit(1)
+        )
+        if existing is not None:
+            return {"status": "ended", "session_id": session_id, "report_id": str(existing)}
+
     now = datetime.now(UTC)
     db_session.status = SessionStatus.ENDED
     db_session.ended_at = now

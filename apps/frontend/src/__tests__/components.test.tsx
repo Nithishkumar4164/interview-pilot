@@ -71,6 +71,24 @@ describe('SessionBar', () => {
     expect(handlers.onEnd).toHaveBeenCalledOnce();
   });
 
+  it('ignores End Interview clicks while ending is in flight', async () => {
+    // Ending takes seconds (the backend drains the session first). A second click
+    // opened a second confirm, which froze the page and stalled the first end's navigation.
+    useSessionStore.getState().setStatus('live');
+    let finish!: () => void;
+    const onEnd = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+    render(<SessionBar {...handlers} onEnd={onEnd} />);
+
+    fireEvent.click(screen.getByText('End Interview'));
+    const ending = screen.getByRole('button', { name: 'Ending…' });
+    expect(ending).toBeDisabled();
+    fireEvent.click(ending);
+    expect(onEnd).toHaveBeenCalledOnce();
+
+    finish();
+    expect(await screen.findByRole('button', { name: 'End Interview' })).toBeEnabled();
+  });
+
   it('formats time correctly', () => {
     useSessionStore.getState().setSession('s1', 'SDE-2', 45);
     useSessionStore.getState().tickElapsed(125000); // 2:05

@@ -1,6 +1,7 @@
 /**
  * Session controls bar — top bar with status, timer, and controls.
  */
+import { useState } from 'react';
 import { useSessionStore } from '@/stores/session-store';
 import { usePlanStore } from '@/stores/plan-store';
 import { useOfflineStore } from '@/stores/offline-store';
@@ -17,7 +18,8 @@ function formatTime(ms: number): string {
 interface SessionBarProps {
   onPause: () => void;
   onResume: () => void;
-  onEnd: () => void;
+  /** Ending takes seconds; the button stays disabled until the returned promise settles. */
+  onEnd: () => Promise<void> | void;
   onToggleVideo: () => void;
   videoActive: boolean;
 }
@@ -26,6 +28,17 @@ export function SessionBar({ onPause, onResume, onEnd, onToggleVideo, videoActiv
   const { status, level, elapsedMs, durationMinutes, currentQuestionIndex, totalQuestions, currentPhaseIndex } = useSessionStore();
   const plan = usePlanStore((s) => s.plan);
   const { wsStatus, degradationLevel, providerStatuses } = useOfflineStore();
+  const [ending, setEnding] = useState(false);
+
+  const handleEnd = async () => {
+    if (ending) return;
+    setEnding(true);
+    try {
+      await onEnd();
+    } finally {
+      setEnding(false);
+    }
+  };
 
   const currentPhaseName = plan?.phases[currentPhaseIndex]?.phase?.replace('_', ' ') ?? '';
 
@@ -102,8 +115,8 @@ export function SessionBar({ onPause, onResume, onEnd, onToggleVideo, videoActiv
           </button>
         )}
         {(status === 'live' || status === 'paused') && (
-          <button className="btn btn--danger" onClick={onEnd}>
-            End Interview
+          <button className="btn btn--danger" onClick={handleEnd} disabled={ending}>
+            {ending ? 'Ending…' : 'End Interview'}
           </button>
         )}
       </div>

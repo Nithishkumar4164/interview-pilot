@@ -1,13 +1,17 @@
 """PlanGraph — interview plan generation with parallel fan-out.
 
-    calibrate ─► Send(select_questions) × phases ─► plan_hints
+    calibrate ─► plan_topics ─► Send(select_questions) × phases ─► plan_hints
               ─► Send(generate_hints) × technical questions ─► assemble
 
 The previous implementation ran every phase's question generation and every
 question's hint generation one after another. Here phases run in parallel,
 then all hint requests run in parallel, bounded by ``max_concurrency``.
-The result — including phase order, start minutes and time rebalancing — is
-identical to the sequential version (tests/test_plan_golden.py).
+Phase order, start minutes and time rebalancing match the sequential version
+(tests/test_plan_golden.py).
+
+Parallel phases can't see each other's questions, so plan_topics first gives
+each phase a distinct topic; each phase is then told its own topic and the
+others' to avoid. A single phase has nothing to overlap with and skips the call.
 
 No checkpointer: plan generation belongs to a single HTTP request, so a
 resumed run after a crash would have no one to deliver the plan to.
@@ -60,6 +64,7 @@ class PlanState(TypedDict, total=False):
     wrap_up_minutes: int
     buffer_minutes: int
     slots: list[PhaseSlot]
+    topics: dict[str, str]  # phase name → topic its questions must test
     # Written by parallel branches, keyed so order is restored in assemble.
     phase_questions: Annotated[dict[int, list[QuestionData]], _merge]
     hints: Annotated[dict[tuple[int, int], list[dict]], _merge]
@@ -72,6 +77,8 @@ class SelectTask(TypedDict):
     focus_areas: list[str]
     resume_data: dict | None
     bank_questions: list[dict] | None
+    topic: str | None
+    other_topics: list[str]
 
 
 class HintTask(TypedDict):
@@ -104,18 +111,31 @@ def build_plan_graph(service: PlanService) -> CompiledStateGraph:
             "slots": slots,
         }
 
+    async def plan_topics(state: PlanState) -> dict:
+        if len(state["slots"]) < 2:
+            return {"topics": {}}
+        topics = await service.plan_phase_topics(
+            phases=[slot["allocation"] for slot in state["slots"]],
+            level=state["level"].value,
+            resume_data=state.get("resume_data"),
+        )
+        return {"topics": topics}
+
     def fan_out_phases(state: PlanState) -> list[Send] | str:
         if not state["slots"]:
             return "assemble"
+        topics = state["topics"]
         return [
             Send(
                 "select_questions",
                 SelectTask(
                     slot=slot,
                     profile=state["profile"],
-                    focus_areas=state["focus_areas"],
+                    focus_areas=slot["allocation"].focus_areas or state["focus_areas"],
                     resume_data=state.get("resume_data"),
                     bank_questions=state.get("bank_questions"),
+                    topic=topics.get(slot["allocation"].phase),
+                    other_topics=[t for phase, t in topics.items() if phase != slot["allocation"].phase],
                 ),
             )
             for slot in state["slots"]
@@ -130,6 +150,8 @@ def build_plan_graph(service: PlanService) -> CompiledStateGraph:
             focus_areas=state["focus_areas"],
             resume_data=state["resume_data"],
             bank_questions=state["bank_questions"],
+            topic=state["topic"],
+            other_topics=state["other_topics"],
         )
         return {"phase_questions": {slot["index"]: questions}}
 
@@ -186,12 +208,14 @@ def build_plan_graph(service: PlanService) -> CompiledStateGraph:
 
     graph = StateGraph(PlanState)
     graph.add_node("calibrate", calibrate)
+    graph.add_node("plan_topics", plan_topics)
     graph.add_node("select_questions", select_questions, input_schema=SelectTask)
     graph.add_node("plan_hints", plan_hints)
     graph.add_node("generate_hints", generate_hints, input_schema=HintTask)
     graph.add_node("assemble", assemble)
     graph.add_edge(START, "calibrate")
-    graph.add_conditional_edges("calibrate", fan_out_phases, ["select_questions", "assemble"])
+    graph.add_edge("calibrate", "plan_topics")
+    graph.add_conditional_edges("plan_topics", fan_out_phases, ["select_questions", "assemble"])
     graph.add_edge("select_questions", "plan_hints")
     graph.add_conditional_edges("plan_hints", fan_out_hints, ["generate_hints", "assemble"])
     graph.add_edge("generate_hints", "assemble")

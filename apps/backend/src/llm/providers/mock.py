@@ -103,6 +103,16 @@ MOCK_RESPONSES: dict[TaskType, str] = {
             "verifiable_claims": [{"claim": "Reduced latency by 40%", "probe": "What profiling tools did you use?"}],
         }
     ),
+    TaskType.PLAN_TOPICS: json.dumps(
+        {
+            "phases": [
+                {"phase": "coding", "topic": "Find two numbers in an array that sum to a target."},
+                {"phase": "system_design", "topic": "A URL shortening service."},
+                {"phase": "aptitude", "topic": "Estimate the storage needed for a year of chat messages."},
+                {"phase": "behavioral", "topic": "A disagreement with a teammate over a design."},
+            ]
+        }
+    ),
     TaskType.QUESTION_GENERATION: json.dumps(
         {
             "questions": [

@@ -200,10 +200,12 @@ async def get_report(
         )
 
     report_data = report.report_data or {}
+    session = await db.get(InterviewSession, report.session_id)
 
     return {
         "id": str(report.id),
         "session_id": str(report.session_id),
+        "meeting_url": session.meeting_url if session else None,
         "status": report.status,
         "assessment": {
             "recommendation": report.recommendation,

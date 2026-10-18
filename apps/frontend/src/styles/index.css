@@ -2898,6 +2898,11 @@ ul, ol {
   margin-left: auto;
 }
 
+.report-page__meeting {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
 .report-page__generating {
   display: flex;
   flex-direction: column;
@@ -4276,6 +4281,16 @@ ul, ol {
 
 .connect-extension__status {
   color: var(--color-text-secondary);
+}
+
+.connect-extension__meeting {
+  min-width: 240px;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
 }
 
 .connect-extension__status--error {

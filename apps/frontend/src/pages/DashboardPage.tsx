@@ -7,6 +7,7 @@ import { useSessionStore } from '@/stores/session-store';
 import { usePlanStore, type InterviewPlan } from '@/stores/plan-store';
 import { ResumeUploader } from '@/components/planning/ResumeUploader';
 import * as api from '@/api/client';
+import { MEETING_URL_HINT, normalizeMeetingUrl } from '@/lib/meeting';
 
 const LEVELS = [
   { value: 'intern', label: 'Intern' },
@@ -29,6 +30,7 @@ export function DashboardPage() {
 
   const [candidateName, setCandidateName] = useState('');
   const [candidateEmail, setCandidateEmail] = useState('');
+  const [meetingUrl, setMeetingUrl] = useState('');
   const [level, setLevel] = useState('sde2');
   const [duration, setDuration] = useState(60);
   const [focusAreas, setFocusAreas] = useState<string[]>(['coding']);
@@ -75,6 +77,11 @@ export function DashboardPage() {
       setError('Select at least one focus area');
       return;
     }
+    const normalizedMeetingUrl = normalizeMeetingUrl(meetingUrl);
+    if (normalizedMeetingUrl === undefined) {
+      setError(MEETING_URL_HINT);
+      return;
+    }
     setLoading(true);
     setError(null);
     setPlanStatus('generating');
@@ -91,6 +98,7 @@ export function DashboardPage() {
         candidate_name: candidateName || undefined,
         candidate_email: candidateEmail || undefined,
         resume_data: resolvedResumeData,
+        meeting_url: normalizedMeetingUrl,
       });
       const sessionId = sessionResult.session_id;
       const label = LEVELS.find((l) => l.value === level)?.label ?? level;
@@ -115,7 +123,7 @@ export function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [level, duration, focusAreas, candidateName, candidateEmail, navigate, setSession, setPlan, setPlanStatus, setPlanError, waitForResume]);
+  }, [level, duration, focusAreas, candidateName, candidateEmail, meetingUrl, navigate, setSession, setPlan, setPlanStatus, setPlanError, waitForResume]);
 
   return (
     <div className="dashboard-page">
@@ -160,6 +168,17 @@ export function DashboardPage() {
             placeholder="e.g. jane@example.com"
             value={candidateEmail}
             onChange={(e) => setCandidateEmail(e.target.value)}
+          />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="meeting-url">Google Meet Link (Optional)</label>
+          <input
+            id="meeting-url"
+            type="url"
+            placeholder="https://meet.google.com/abc-defg-hij"
+            value={meetingUrl}
+            onChange={(e) => setMeetingUrl(e.target.value)}
           />
         </div>
 

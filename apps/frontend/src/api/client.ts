@@ -101,6 +101,7 @@ export interface StartSessionRequest {
   candidate_name?: string;
   candidate_email?: string;
   resume_data?: Record<string, unknown> | null;
+  meeting_url?: string | null;
 }
 
 export async function startSession(data: StartSessionRequest) {
@@ -123,6 +124,13 @@ export async function goLive(sessionId: string) {
 
 export async function pauseSession(sessionId: string) {
   return request(`/api/sessions/${sessionId}/pause`, { method: 'PATCH' });
+}
+
+export async function updateMeetingUrl(sessionId: string, meetingUrl: string | null) {
+  return request<{ meeting_url: string | null }>(`/api/sessions/${sessionId}/meeting-url`, {
+    method: 'PATCH',
+    body: JSON.stringify({ meeting_url: meetingUrl }),
+  });
 }
 
 export async function endSession(sessionId: string) {

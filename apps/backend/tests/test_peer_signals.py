@@ -79,6 +79,9 @@ def test_pace_alerts_fire_once_per_threshold_highest_first() -> None:
     assert pace_card("s:q:pace:far_over", "far_over", 200, 60, 0, 0, "q", "")["body"].startswith(
         "This is the last planned question."
     )
+    assert pace_card("s:q:pace:over", "over", 125, 60, 0, 18.4, "q", "")["body"].startswith(
+        "18 min of the interview left."
+    )
 
 
 def _analysis(quality: int, on_track: bool = True, hint_signal: str = "none", dims: bool = True):

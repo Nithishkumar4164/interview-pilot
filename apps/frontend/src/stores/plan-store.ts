@@ -1,7 +1,13 @@
 /**
- * Zustand store for interview plan and resume state.
+ * Zustand store for the interview's questions and resume state.
+ *
+ * Questions are generated during the interview; each one the interviewer uses
+ * is logged to the questionnaire. The live dashboard reads the questionnaire as
+ * a plan (a phase per run of one category), the shape sessions planned up front
+ * still restore with.
  */
 import { create } from 'zustand';
+import type { LoggedQuestion } from '@/api/client';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -64,8 +70,36 @@ export interface ResumeState {
 
 // ── Store ──────────────────────────────────────────────────────────────
 
+/** The questionnaire as a plan: consecutive questions of one category share a phase. */
+export function planFromQuestionnaire(sessionId: string, questions: LoggedQuestion[]): InterviewPlan {
+  const phases: PlanPhase[] = [];
+  let minute = 0;
+  for (const logged of questions) {
+    const q = { ...logged.question, id: logged.id };
+    const last = phases[phases.length - 1];
+    if (last && last.phase === logged.category) {
+      last.questions.push(q);
+      last.duration_minutes += q.time_minutes;
+    } else {
+      phases.push({ phase: logged.category, start_minute: minute, duration_minutes: q.time_minutes, questions: [q] });
+    }
+    minute += q.time_minutes;
+  }
+  return {
+    id: '',
+    session_id: sessionId,
+    version: questions.length,
+    is_active: true,
+    phases,
+    total_minutes: minute,
+    created_at: '',
+  };
+}
+
 interface PlanStoreState {
   plan: InterviewPlan | null;
+  /** Questions used so far in a live-generated interview, in order. */
+  questionnaire: LoggedQuestion[];
   planStatus: PlanStatus;
   planError: string | null;
   resume: ResumeState;
@@ -74,6 +108,9 @@ interface PlanStoreState {
   setPlanStatus: (status: PlanStatus) => void;
   setPlanError: (error: string | null) => void;
   updatePlanPhases: (phases: PlanPhase[]) => void;
+  setQuestionnaire: (sessionId: string, questions: LoggedQuestion[]) => void;
+  /** Log a used question; returns its index among all questions. */
+  addQuestion: (sessionId: string, question: LoggedQuestion) => number;
 
   setResumeUploading: (filename: string) => void;
   setResumeProcessing: (referenceId: string) => void;
@@ -92,8 +129,9 @@ const INITIAL_RESUME: ResumeState = {
   error: null,
 };
 
-export const usePlanStore = create<PlanStoreState>((set) => ({
+export const usePlanStore = create<PlanStoreState>((set, get) => ({
   plan: null,
+  questionnaire: [],
   planStatus: 'idle',
   planError: null,
   resume: { ...INITIAL_RESUME },
@@ -103,6 +141,13 @@ export const usePlanStore = create<PlanStoreState>((set) => ({
   setPlanError: (planError) => set({ planError, planStatus: 'error' }),
   updatePlanPhases: (phases) =>
     set((s) => (s.plan ? { plan: { ...s.plan, phases } } : {})),
+  setQuestionnaire: (sessionId, questions) =>
+    set({ questionnaire: questions, plan: planFromQuestionnaire(sessionId, questions), planStatus: 'ready' }),
+  addQuestion: (sessionId, question) => {
+    const questions = [...get().questionnaire, question];
+    get().setQuestionnaire(sessionId, questions);
+    return questions.length - 1;
+  },
 
   setResumeUploading: (filename) =>
     set({ resume: { ...INITIAL_RESUME, filename, status: 'uploading' } }),
@@ -115,5 +160,5 @@ export const usePlanStore = create<PlanStoreState>((set) => ({
   clearResume: () => set({ resume: { ...INITIAL_RESUME } }),
 
   reset: () =>
-    set({ plan: null, planStatus: 'idle', planError: null, resume: { ...INITIAL_RESUME } }),
+    set({ plan: null, questionnaire: [], planStatus: 'idle', planError: null, resume: { ...INITIAL_RESUME } }),
 }));

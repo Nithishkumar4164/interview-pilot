@@ -167,7 +167,7 @@ Seven route groups serve the REST API:
 |---|---|---|
 | `auth` | `/api/auth` | JWT refresh, user profile, Google OAuth |
 | `sessions` | `/api/sessions` | Session lifecycle, pause/resume, hint progression |
-| `plans` | `/api/plans` | Plan CRUD, question swap/reorder, hint regeneration |
+| `questions` | `/api/sessions/{id}/questions` | Topic suggestions, question generation during the interview, the questionnaire |
 | `reports` | `/api/reports` | Report generation, listing, comparison, notes |
 | `upload` | `/api/upload` | Resume upload, extraction status, SSE streaming |
 | `history` | `/api/history` | Session history, filtering, pagination |
@@ -230,7 +230,7 @@ The memory system maintains three tiers with token budgets to prevent context wi
 
 | Service | Responsibility |
 |---|---|
-| `plan_service` | Question generation, time allocation, phase structuring |
+| `question_service` | Topic suggestions and one-at-a-time question generation (hints, approaches, pitfalls) |
 | `hint_service` | 3-level progressive hints with timeout/auto-advance |
 | `runtime_hint_service` | On-demand hint generation from real-time context |
 
@@ -282,7 +282,8 @@ SQLAlchemy 2.0+ models with async support:
 |---|---|
 | `User` | Auth user profile |
 | `InterviewSession` | Session metadata, status, timing |
-| `InterviewPlan` | Versioned question plans (JSON column) |
+| `SessionQuestion` | The questionnaire: each question used in a session, in order, with when it was asked |
+| `InterviewPlan` | Up-front question plans of older sessions (read-only) |
 | `Transcript` | Speech events with timing and speaker info |
 | `AnalysisEvent` | 6-dimension analysis results |
 | `HintEvent` | Hint display and acknowledgment tracking |
@@ -311,7 +312,6 @@ LLM workflows are LangGraph graphs. Nodes read state, call the service functions
 | `session_graph` | `{session_id}` | Live interview: memory tiers, utterance analysis, fact extraction (in parallel), contradiction check, hint signal; optional agentic follow-ups (`AGENTIC_ROUTING_ENABLED`); optional peer interviewer (`PEER_INTERVIEWER_ENABLED`, §11.1) |
 | `code_graph` | `code:{session_id}` | Live code tracking on its own queue, so editor snapshots never wait behind an utterance analysis |
 | `report_graph` | `report:{report_id}` | Post-interview report; resumes after a restart without repeating finished steps |
-| `plan_graph` | none | Interview plan; phases and hints generated in parallel |
 
 `checkpointer.py` owns the Postgres checkpointer (psycopg3 pool, plus a separate pool for per-run advisory locks) and `serde.py` the explicit allowlist of types that may be stored in checkpoints. Session threads are deleted when the session ends; report threads when the report is persisted.
 
@@ -336,7 +336,6 @@ LLM workflows are LangGraph graphs. Nodes read state, call the service functions
 ```
 /                              SessionsPage         Interview history + new session entry
 /new                           DashboardPage         Resume upload + plan setup
-/session/:sessionId/plan       PlanReviewPage         Question review before go-live
 /session/:sessionId            LiveSessionPage        Real-time interview dashboard
 /reports                       ReportHistoryPage      Report archive + search
 /reports/compare               ReportComparisonPage   Side-by-side candidate comparison
@@ -383,7 +382,6 @@ Zustand stores are organized by feature domain. Each store is self-contained wit
 
 **DashboardPage** — Interview setup: resume upload (PDF/DOCX), candidate details, level selection (intern → principal), focus area configuration, LLM-powered plan generation.
 
-**PlanReviewPage** — Pre-interview planning: question tree view with timing, swap alternates, reorder, regenerate hints, transition to LIVE status.
 
 **LiveSessionPage** — Real-time interview dashboard: session timer, transcript panel with speaker coloring, 6-dimension analysis rings, hint panel with progressive levels, plan sidebar, speaker management.
 
@@ -530,13 +528,13 @@ Frontend                      Backend                       Storage
    │───────────────────────────►│  Extract text (LLM)         │
    │                            │  Store PDF in MinIO ────────►│
    │                            │                             │
-   │  POST /api/plans/create    │                             │
-   │───────────────────────────►│  Generate plan (LLM)        │
-   │◄───────────────────────────│  Persist to PostgreSQL      │
-   │                            │                             │
    │  POST /api/sessions/start  │                             │
    │───────────────────────────►│  Create session record      │
    │◄───────────────────────────│                             │
+   │                            │                             │
+   │  POST .../questions/generate                             │
+   │───────────────────────────►│  Generate a question (LLM)  │
+   │  POST .../questions        │  Log the used question ────►│
    │                            │                             │
    │  POST /api/reports/generate│                             │
    │───────────────────────────►│  Build report (LLM)         │

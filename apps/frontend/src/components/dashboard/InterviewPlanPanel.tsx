@@ -1,8 +1,10 @@
 /**
- * Interview Plan Panel — surfaces the generated plan during the live interview.
+ * Questions Panel — the interview's questions during the live interview.
  *
- * Shows: phase progress bar, question navigator, current question with
- * approaches/pitfalls, and prev/next navigation controls.
+ * Questions are generated here as the interview goes (QuestionGenerator); each
+ * one used joins the questionnaire. Shows: phase progress bar, the
+ * questionnaire, the current question with approaches/pitfalls and hints, and
+ * prev/next navigation. Sessions planned up front show their plan the same way.
  */
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { usePlanStore } from '@/stores/plan-store';
@@ -10,8 +12,10 @@ import { useSessionStore, getAllPlanQuestions } from '@/stores/session-store';
 import { useHintStore } from '@/stores/hint-store';
 import { useAnalysisStore, type CodeRatingResult } from '@/stores/analysis-store';
 import type { QuestionHint } from '@/stores/plan-store';
-import type { ApproachPattern } from '@/stores/plan-store';
 import { QuestionTimer } from './QuestionTimer';
+import { ApproachBlock } from './ApproachBlock';
+import { QuestionGenerator } from './QuestionGenerator';
+import type { GeneratedQuestion } from '@/api/client';
 import { PanelTitle } from './PanelTitle';
 import { usePanelCollapsed } from '@/stores/panel-store';
 
@@ -22,6 +26,9 @@ const LEVEL_LABELS: Record<number, string> = {
 };
 
 interface InterviewPlanPanelProps {
+  sessionId: string;
+  focusAreas: string[];
+  onUseQuestion: (category: string, topic: string | null, question: GeneratedQuestion) => Promise<void>;
   onAdvanceQuestion: (delta: number) => void;
   onGoToQuestion: (index: number) => void;
   onRequestHint: (level: number) => void;
@@ -30,6 +37,9 @@ interface InterviewPlanPanelProps {
 }
 
 export function InterviewPlanPanel({
+  sessionId,
+  focusAreas,
+  onUseQuestion,
   onAdvanceQuestion,
   onGoToQuestion,
   onRequestHint,
@@ -48,6 +58,7 @@ export function InterviewPlanPanel({
   const [showOptimal, setShowOptimal] = useState(false);
   const [showPitfalls, setShowPitfalls] = useState(false);
   const [expandedHintLevel, setExpandedHintLevel] = useState<number | null>(null);
+  const [generatorOpen, setGeneratorOpen] = useState(false);
 
   // Reset expandable sections when question changes
   const prevQuestionIndex = useRef(currentQuestionIndex);
@@ -76,295 +87,315 @@ export function InterviewPlanPanel({
     return indices;
   }, [plan]);
 
-  if (!plan || allQuestions.length === 0) {
-    return (
-      <div className={`interview-plan-panel interview-plan-panel--empty${collapsed ? ' is-collapsed' : ''}`}>
-        <div className="interview-plan-panel__header panel-header">
-          <PanelTitle id="plan">Interview Plan</PanelTitle>
-        </div>
-        <p className="interview-plan-panel__placeholder">No interview plan loaded.</p>
-      </div>
-    );
-  }
+  const handleUse = async (category: string, topic: string | null, question: GeneratedQuestion) => {
+    await onUseQuestion(category, topic, question);
+    setGeneratorOpen(false);
+  };
+
+  const hasQuestions = !!plan && allQuestions.length > 0;
+  // With nothing asked yet, the generator is the panel.
+  const showGenerator = generatorOpen || !hasQuestions;
 
   return (
-    <section className={`interview-plan-panel${collapsed ? ' is-collapsed' : ''}`} aria-label="Interview Plan">
+    <section className={`interview-plan-panel${collapsed ? ' is-collapsed' : ''}`} aria-label="Questions">
       <div className="interview-plan-panel__header panel-header">
-        <PanelTitle id="plan">Interview Plan</PanelTitle>
-      </div>
-      {/* Phase Progress Bar — click a phase to jump to its first question */}
-      <PhaseProgressBar
-        phases={plan.phases}
-        currentPhaseIndex={currentQuestion?.phaseIndex ?? 0}
-        onPhaseClick={(phaseIndex) => onGoToQuestion(phaseStartIndices[phaseIndex] ?? 0)}
-      />
-
-      {/* Question Navigator Toggle */}
-      <div className="plan-panel__nav-header">
-        <button
-          className="plan-panel__nav-toggle"
-          onClick={() => setShowNavigator(!showNavigator)}
-        >
-          {showNavigator ? 'Hide' : 'Show'} Questions ({allQuestions.length})
-        </button>
-        <span className="plan-panel__position">
-          Q{currentQuestionIndex + 1} of {allQuestions.length}
-        </span>
+        <PanelTitle id="plan">Questions</PanelTitle>
+        {hasQuestions && (
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            aria-expanded={generatorOpen}
+            onClick={() => setGeneratorOpen((o) => !o)}
+          >
+            {generatorOpen ? 'Close' : '+ New question'}
+          </button>
+        )}
       </div>
 
-      {/* Question Navigator List */}
-      {showNavigator && (
-        <div className="question-navigator">
-          {plan.phases.map((phase, pi) => {
-            let offset = 0;
-            for (let i = 0; i < pi; i++) offset += plan.phases[i].questions.length;
-            return (
-              <div key={pi} className="question-navigator__phase">
-                <div className="question-navigator__phase-label">
-                  <span className={`phase-section__badge phase-section__badge--${phase.phase}`}>
-                    {phase.phase.replace('_', ' ')}
-                  </span>
-                </div>
-                {phase.questions.map((q, qi) => {
-                  const globalIdx = offset + qi;
-                  const isCurrent = globalIdx === currentQuestionIndex;
-                  return (
-                    <button
-                      key={q.id}
-                      className={`question-navigator__item ${isCurrent ? 'question-navigator__item--current' : ''}`}
-                      onClick={() => onGoToQuestion(globalIdx)}
-                    >
-                      <span className="question-navigator__num">Q{globalIdx + 1}</span>
-                      <span className="question-navigator__text">
-                        {q.text.length > 80 ? q.text.slice(0, 80) + '...' : q.text}
+      {showGenerator && (
+        <div className="interview-plan-panel__generator">
+          <QuestionGenerator sessionId={sessionId} focusAreas={focusAreas} onUse={handleUse} />
+        </div>
+      )}
+
+      {plan && hasQuestions && (
+        <>
+          {/* Phase Progress Bar — click a phase to jump to its first question */}
+          <PhaseProgressBar
+            phases={plan.phases}
+            currentPhaseIndex={currentQuestion?.phaseIndex ?? 0}
+            onPhaseClick={(phaseIndex) => onGoToQuestion(phaseStartIndices[phaseIndex] ?? 0)}
+          />
+
+          {/* Question Navigator Toggle */}
+          <div className="plan-panel__nav-header">
+            <button
+              className="plan-panel__nav-toggle"
+              onClick={() => setShowNavigator(!showNavigator)}
+            >
+              {showNavigator ? 'Hide' : 'Show'} Questionnaire ({allQuestions.length})
+            </button>
+            <span className="plan-panel__position">
+              Q{currentQuestionIndex + 1} of {allQuestions.length}
+            </span>
+          </div>
+
+          {/* Question Navigator List */}
+          {showNavigator && (
+            <div className="question-navigator">
+              {plan.phases.map((phase, pi) => {
+                let offset = 0;
+                for (let i = 0; i < pi; i++) offset += plan.phases[i].questions.length;
+                return (
+                  <div key={pi} className="question-navigator__phase">
+                    <div className="question-navigator__phase-label">
+                      <span className={`phase-section__badge phase-section__badge--${phase.phase}`}>
+                        {phase.phase.replace('_', ' ')}
                       </span>
+                    </div>
+                    {phase.questions.map((q, qi) => {
+                      const globalIdx = offset + qi;
+                      const isCurrent = globalIdx === currentQuestionIndex;
+                      return (
+                        <button
+                          key={q.id}
+                          className={`question-navigator__item ${isCurrent ? 'question-navigator__item--current' : ''}`}
+                          onClick={() => onGoToQuestion(globalIdx)}
+                        >
+                          <span className="question-navigator__num">Q{globalIdx + 1}</span>
+                          <span className="question-navigator__text">
+                            {q.text.length > 80 ? q.text.slice(0, 80) + '...' : q.text}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Current Question Card */}
+          {currentQuestion && (
+            <div className="current-question-card" style={{ position: 'relative' }}>
+              {contextReloading && (
+                <div className="current-question-card__sync-badge">
+                  <span className="current-question-card__spinner" />
+                  <span>Syncing context…</span>
+                </div>
+              )}
+              <div className="current-question-card__header">
+                <span className={`phase-section__badge phase-section__badge--${currentQuestion.phaseName}`}>
+                  {currentQuestion.phaseName.replace('_', ' ')}
+                </span>
+                <QuestionTimer timeMinutes={currentQuestion.time_minutes} />
+              </div>
+
+              <p className="current-question-card__text">{currentQuestion.text}</p>
+
+              <div className="current-question-card__meta">
+                <span className="question-card__category">{currentQuestion.category}</span>
+                <span className="question-card__difficulty">
+                  {Array.from({ length: 5 }, (_, i) => (
+                    <span
+                      key={i}
+                      className={`question-card__difficulty-dot ${
+                        i < currentQuestion.difficulty ? 'question-card__difficulty-dot--filled' : ''
+                      }`}
+                    />
+                  ))}
+                </span>
+                <span className="question-card__time">{currentQuestion.time_minutes} min</span>
+              </div>
+
+              {/* Expandable approach sections */}
+              <div className="current-question-card__sections">
+                {currentQuestion.brute_force_approach && (
+                  <>
+                    <button
+                      className="plan-panel__section-toggle"
+                      onClick={() => setShowBruteForce(!showBruteForce)}
+                    >
+                      {showBruteForce ? 'Hide' : 'Show'} Brute Force
                     </button>
+                    {showBruteForce && (
+                      <ApproachBlock approach={currentQuestion.brute_force_approach} />
+                    )}
+                  </>
+                )}
+
+                {currentQuestion.optimal_approaches && currentQuestion.optimal_approaches.length > 0 && (
+                  <>
+                    <button
+                      className="plan-panel__section-toggle"
+                      onClick={() => setShowOptimal(!showOptimal)}
+                    >
+                      {showOptimal ? 'Hide' : 'Show'} Optimal Solution
+                      {currentQuestion.optimal_approaches.length > 1 ? 's' : ''} (
+                      {currentQuestion.optimal_approaches.length})
+                    </button>
+                    {showOptimal &&
+                      currentQuestion.optimal_approaches.map((approach, i) => (
+                        <ApproachBlock key={i} approach={approach} />
+                      ))}
+                  </>
+                )}
+
+                {currentQuestion.common_pitfalls && currentQuestion.common_pitfalls.length > 0 && (
+                  <>
+                    <button
+                      className="plan-panel__section-toggle"
+                      onClick={() => setShowPitfalls(!showPitfalls)}
+                    >
+                      {showPitfalls ? 'Hide' : 'Show'} Common Pitfalls (
+                      {currentQuestion.common_pitfalls.length})
+                    </button>
+                    {showPitfalls && (
+                      <ul className="plan-panel__pitfalls">
+                        {currentQuestion.common_pitfalls.map((p, i) => (
+                          <li key={i}>{p}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Code Rating Section */}
+              <CodeRatingSection
+                questionId={currentQuestion.id}
+                onRateCode={onRateCode}
+              />
+            </div>
+          )}
+
+          {/* ── Hints Accordion ──────────────────────────────────────── */}
+          {currentQuestion && currentQuestion.hints && currentQuestion.hints.length > 0 && (
+            <div className="plan-panel__hints">
+              <div className="hint-panel__header">
+                <h3>Hints</h3>
+                <span className="hint-panel__level">
+                  {givenLevels.size}/{currentQuestion.hints.length} given
+                </span>
+              </div>
+
+              {/* Hint Signal Indicator */}
+              {hintSignal !== 'none' && (
+                <div className={`hint-signal hint-signal--${hintSignal}`} role="status">
+                  {hintSignal === 'nudge' && 'Candidate may need a gentle nudge'}
+                  {hintSignal === 'guide' && 'Candidate seems stuck — hint recommended'}
+                  {hintSignal === 'direct' && 'Candidate very stuck — consider direct hint'}
+                </div>
+              )}
+
+              <div className="hint-accordion">
+                {currentQuestion.hints.map((hint: QuestionHint) => {
+                  const isExpanded = expandedHintLevel === hint.level;
+                  const isGiven = givenLevels.has(hint.level);
+                  const matchingHistory = hintHistory.filter((h) => h.level === hint.level);
+                  const latestEntry = matchingHistory[matchingHistory.length - 1] ?? null;
+
+                  return (
+                    <div
+                      key={hint.level}
+                      className={`hint-accordion__item ${isGiven ? 'hint-accordion__item--given' : ''}`}
+                    >
+                      <button
+                        className="hint-accordion__header"
+                        onClick={() => setExpandedHintLevel(isExpanded ? null : hint.level)}
+                        aria-expanded={isExpanded}
+                      >
+                        <span className={`hint-card__level hint-card__level--${hint.level}`}>
+                          {LEVEL_LABELS[hint.level]}
+                        </span>
+                        <span className="hint-accordion__status">
+                          {isGiven
+                            ? latestEntry?.candidateResponseQuality === 'full'
+                              ? 'Got it'
+                              : latestEntry?.candidateResponseQuality === 'partial'
+                                ? 'Partial'
+                                : latestEntry?.interviewerUsed
+                                  ? 'Given'
+                                  : 'Given'
+                            : ''}
+                        </span>
+                        <span className={`hint-accordion__chevron ${isExpanded ? 'hint-accordion__chevron--open' : ''}`}>
+                          &#9662;
+                        </span>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="hint-accordion__body">
+                          <p className="hint-card__text">{hint.text}</p>
+
+                          {!isGiven && (
+                            <button
+                              className="btn btn--primary btn--sm"
+                              onClick={() => onRequestHint(hint.level)}
+                            >
+                              Give this hint
+                            </button>
+                          )}
+
+                          {isGiven && latestEntry && !latestEntry.interviewerUsed && (
+                            <div className="hint-panel__actions">
+                              <button
+                                className="btn btn--success btn--small"
+                                onClick={() => onAcknowledgeHint(latestEntry.id, 'full')}
+                              >
+                                Got It
+                              </button>
+                              <button
+                                className="btn btn--secondary btn--small"
+                                onClick={() => onAcknowledgeHint(latestEntry.id, 'partial')}
+                              >
+                                Partially
+                              </button>
+                              <button
+                                className="btn btn--ghost btn--small"
+                                onClick={() => onAcknowledgeHint(latestEntry.id, 'none')}
+                              >
+                                No Response
+                              </button>
+                            </div>
+                          )}
+
+                          {isGiven && latestEntry?.interviewerUsed && (
+                            <span className={`hint-accordion__feedback hint-accordion__feedback--${latestEntry.candidateResponseQuality}`}>
+                              {latestEntry.candidateResponseQuality}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Current Question Card */}
-      {currentQuestion && (
-        <div className="current-question-card" style={{ position: 'relative' }}>
-          {contextReloading && (
-            <div className="current-question-card__sync-badge">
-              <span className="current-question-card__spinner" />
-              <span>Syncing context…</span>
-            </div>
-          )}
-          <div className="current-question-card__header">
-            <span className={`phase-section__badge phase-section__badge--${currentQuestion.phaseName}`}>
-              {currentQuestion.phaseName.replace('_', ' ')}
-            </span>
-            <QuestionTimer timeMinutes={currentQuestion.time_minutes} />
-          </div>
-
-          <p className="current-question-card__text">{currentQuestion.text}</p>
-
-          <div className="current-question-card__meta">
-            <span className="question-card__category">{currentQuestion.category}</span>
-            <span className="question-card__difficulty">
-              {Array.from({ length: 5 }, (_, i) => (
-                <span
-                  key={i}
-                  className={`question-card__difficulty-dot ${
-                    i < currentQuestion.difficulty ? 'question-card__difficulty-dot--filled' : ''
-                  }`}
-                />
-              ))}
-            </span>
-            <span className="question-card__time">{currentQuestion.time_minutes} min</span>
-          </div>
-
-          {/* Expandable approach sections */}
-          <div className="current-question-card__sections">
-            {currentQuestion.brute_force_approach && (
-              <>
-                <button
-                  className="plan-panel__section-toggle"
-                  onClick={() => setShowBruteForce(!showBruteForce)}
-                >
-                  {showBruteForce ? 'Hide' : 'Show'} Brute Force
-                </button>
-                {showBruteForce && (
-                  <ApproachBlock approach={currentQuestion.brute_force_approach} />
-                )}
-              </>
-            )}
-
-            {currentQuestion.optimal_approaches && currentQuestion.optimal_approaches.length > 0 && (
-              <>
-                <button
-                  className="plan-panel__section-toggle"
-                  onClick={() => setShowOptimal(!showOptimal)}
-                >
-                  {showOptimal ? 'Hide' : 'Show'} Optimal Solution
-                  {currentQuestion.optimal_approaches.length > 1 ? 's' : ''} (
-                  {currentQuestion.optimal_approaches.length})
-                </button>
-                {showOptimal &&
-                  currentQuestion.optimal_approaches.map((approach, i) => (
-                    <ApproachBlock key={i} approach={approach} />
-                  ))}
-              </>
-            )}
-
-            {currentQuestion.common_pitfalls && currentQuestion.common_pitfalls.length > 0 && (
-              <>
-                <button
-                  className="plan-panel__section-toggle"
-                  onClick={() => setShowPitfalls(!showPitfalls)}
-                >
-                  {showPitfalls ? 'Hide' : 'Show'} Common Pitfalls (
-                  {currentQuestion.common_pitfalls.length})
-                </button>
-                {showPitfalls && (
-                  <ul className="plan-panel__pitfalls">
-                    {currentQuestion.common_pitfalls.map((p, i) => (
-                      <li key={i}>{p}</li>
-                    ))}
-                  </ul>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Code Rating Section */}
-          <CodeRatingSection
-            questionId={currentQuestion.id}
-            onRateCode={onRateCode}
-          />
-        </div>
-      )}
-
-      {/* ── Hints Accordion ──────────────────────────────────────── */}
-      {currentQuestion && currentQuestion.hints && currentQuestion.hints.length > 0 && (
-        <div className="plan-panel__hints">
-          <div className="hint-panel__header">
-            <h3>Hints</h3>
-            <span className="hint-panel__level">
-              {givenLevels.size}/{currentQuestion.hints.length} given
-            </span>
-          </div>
-
-          {/* Hint Signal Indicator */}
-          {hintSignal !== 'none' && (
-            <div className={`hint-signal hint-signal--${hintSignal}`} role="status">
-              {hintSignal === 'nudge' && 'Candidate may need a gentle nudge'}
-              {hintSignal === 'guide' && 'Candidate seems stuck — hint recommended'}
-              {hintSignal === 'direct' && 'Candidate very stuck — consider direct hint'}
             </div>
           )}
 
-          <div className="hint-accordion">
-            {currentQuestion.hints.map((hint: QuestionHint) => {
-              const isExpanded = expandedHintLevel === hint.level;
-              const isGiven = givenLevels.has(hint.level);
-              const matchingHistory = hintHistory.filter((h) => h.level === hint.level);
-              const latestEntry = matchingHistory[matchingHistory.length - 1] ?? null;
-
-              return (
-                <div
-                  key={hint.level}
-                  className={`hint-accordion__item ${isGiven ? 'hint-accordion__item--given' : ''}`}
-                >
-                  <button
-                    className="hint-accordion__header"
-                    onClick={() => setExpandedHintLevel(isExpanded ? null : hint.level)}
-                    aria-expanded={isExpanded}
-                  >
-                    <span className={`hint-card__level hint-card__level--${hint.level}`}>
-                      {LEVEL_LABELS[hint.level]}
-                    </span>
-                    <span className="hint-accordion__status">
-                      {isGiven
-                        ? latestEntry?.candidateResponseQuality === 'full'
-                          ? 'Got it'
-                          : latestEntry?.candidateResponseQuality === 'partial'
-                            ? 'Partial'
-                            : latestEntry?.interviewerUsed
-                              ? 'Given'
-                              : 'Given'
-                        : ''}
-                    </span>
-                    <span className={`hint-accordion__chevron ${isExpanded ? 'hint-accordion__chevron--open' : ''}`}>
-                      &#9662;
-                    </span>
-                  </button>
-
-                  {isExpanded && (
-                    <div className="hint-accordion__body">
-                      <p className="hint-card__text">{hint.text}</p>
-
-                      {!isGiven && (
-                        <button
-                          className="btn btn--primary btn--sm"
-                          onClick={() => onRequestHint(hint.level)}
-                        >
-                          Give this hint
-                        </button>
-                      )}
-
-                      {isGiven && latestEntry && !latestEntry.interviewerUsed && (
-                        <div className="hint-panel__actions">
-                          <button
-                            className="btn btn--success btn--small"
-                            onClick={() => onAcknowledgeHint(latestEntry.id, 'full')}
-                          >
-                            Got It
-                          </button>
-                          <button
-                            className="btn btn--secondary btn--small"
-                            onClick={() => onAcknowledgeHint(latestEntry.id, 'partial')}
-                          >
-                            Partially
-                          </button>
-                          <button
-                            className="btn btn--ghost btn--small"
-                            onClick={() => onAcknowledgeHint(latestEntry.id, 'none')}
-                          >
-                            No Response
-                          </button>
-                        </div>
-                      )}
-
-                      {isGiven && latestEntry?.interviewerUsed && (
-                        <span className={`hint-accordion__feedback hint-accordion__feedback--${latestEntry.candidateResponseQuality}`}>
-                          {latestEntry.candidateResponseQuality}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          {/* Navigation Controls */}
+          <div className="navigation-controls">
+            <button
+              className="btn btn--secondary btn--sm"
+              disabled={currentQuestionIndex <= 0}
+              onClick={() => onAdvanceQuestion(-1)}
+              title="Previous question (P)"
+            >
+              Prev Question
+            </button>
+            <button
+              className="btn btn--primary btn--sm"
+              onClick={() =>
+                currentQuestionIndex >= allQuestions.length - 1 ? setGeneratorOpen(true) : onAdvanceQuestion(1)
+              }
+              title="Next question (N)"
+            >
+              {currentQuestionIndex >= allQuestions.length - 1 ? 'New Question' : 'Next Question'}
+            </button>
           </div>
-        </div>
+        </>
       )}
-
-      {/* Navigation Controls */}
-      <div className="navigation-controls">
-        <button
-          className="btn btn--secondary btn--sm"
-          disabled={currentQuestionIndex <= 0}
-          onClick={() => onAdvanceQuestion(-1)}
-          title="Previous question (P)"
-        >
-          Prev Question
-        </button>
-        <button
-          className="btn btn--primary btn--sm"
-          disabled={currentQuestionIndex >= allQuestions.length - 1}
-          onClick={() => onAdvanceQuestion(1)}
-          title="Next question (N)"
-        >
-          Next Question
-        </button>
-      </div>
     </section>
   );
 }
@@ -572,31 +603,6 @@ function CodeRatingDisplay({ rating }: { rating: CodeRatingResult }) {
         <span>{rating.provider}</span>
         <span>{Math.round(rating.latencyMs)}ms</span>
       </div>
-    </div>
-  );
-}
-
-function ApproachBlock({ approach }: { approach: ApproachPattern }) {
-  return (
-    <div className="approach-block">
-      <div className="approach-block__name">{approach.name}</div>
-      <div className="approach-block__complexity">
-        {Object.entries(approach.expected_complexity).map(([key, val]) => (
-          <span key={key} className="question-card__complexity-badge">
-            {key}: {val}
-          </span>
-        ))}
-      </div>
-      {approach.key_steps.length > 0 && (
-        <ol className="approach-block__steps">
-          {approach.key_steps.map((step, i) => (
-            <li key={i}>{step}</li>
-          ))}
-        </ol>
-      )}
-      {approach.code_snippet && (
-        <pre className="approach-block__code">{approach.code_snippet}</pre>
-      )}
     </div>
   );
 }

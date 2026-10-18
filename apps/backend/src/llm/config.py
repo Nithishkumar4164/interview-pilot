@@ -72,8 +72,8 @@ DEFAULT_TASK_MAPPINGS: dict[TaskType, TaskProviderMapping] = {
         fallback_provider="openai",
         fallback_model="gpt-4o",
     ),
-    TaskType.PLAN_TOPICS: TaskProviderMapping(
-        task_type=TaskType.PLAN_TOPICS,
+    TaskType.QUESTION_TOPICS: TaskProviderMapping(
+        task_type=TaskType.QUESTION_TOPICS,
         primary_provider="anthropic",
         primary_model="claude-sonnet-5",
         fallback_provider="openai",

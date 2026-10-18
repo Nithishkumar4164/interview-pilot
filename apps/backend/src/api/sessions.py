@@ -158,6 +158,18 @@ async def get_session_state(
     )
     plan = plan_result.scalar_one_or_none()
 
+    # The questionnaire logged during the interview
+    from src.api.questions import question_row_to_dict
+    from src.models.question import SessionQuestion
+
+    asked = (
+        await db.execute(
+            select(SessionQuestion)
+            .where(SessionQuestion.session_id == db_session.id)
+            .order_by(SessionQuestion.position)
+        )
+    ).scalars()
+
     # Get session state snapshot
     snapshot_data = None
     try:
@@ -173,6 +185,7 @@ async def get_session_state(
             "status": db_session.status,
             "level": db_session.level,
             "duration_minutes": db_session.duration_minutes,
+            "focus_areas": db_session.focus_areas,
             "elapsed_ms": elapsed_ms,
             "started_at": db_session.started_at.isoformat() if db_session.started_at else None,
             "ended_at": db_session.ended_at.isoformat() if db_session.ended_at else None,
@@ -217,8 +230,10 @@ async def get_session_state(
             }
             for h in hints
         ],
+        # Only sessions planned up front, before questions were generated live, have a plan.
         "plan": plan.plan_data if plan else None,
         "plan_id": str(plan.id) if plan else None,
+        "questions": [question_row_to_dict(row) for row in asked],
         "snapshot": snapshot_data,
     }
 

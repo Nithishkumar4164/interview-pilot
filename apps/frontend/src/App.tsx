@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { DashboardPage } from '@/pages/DashboardPage';
-import { PlanReviewPage } from '@/pages/PlanReviewPage';
 import { LiveSessionPage } from '@/pages/LiveSessionPage';
 import { ReportPage } from '@/pages/ReportPage';
 import { ReportHistoryPage } from '@/pages/ReportHistoryPage';
@@ -37,7 +36,6 @@ export function App() {
       <Route element={<RequireAuth />}>
         <Route path="/" element={<SessionsPage />} />
         <Route path="/new" element={<DashboardPage />} />
-        <Route path="/session/:sessionId/plan" element={<PlanReviewPage />} />
         <Route path="/session/:sessionId" element={<LiveSessionPage />} />
         <Route path="/reports" element={<ReportHistoryPage />} />
         <Route path="/reports/compare" element={<ReportComparisonPage />} />

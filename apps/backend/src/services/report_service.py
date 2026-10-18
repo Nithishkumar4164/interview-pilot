@@ -101,19 +101,37 @@ class ReportService:
         hint_repo = HintEventRepository(db)
         hint_events_db = await hint_repo.get_session_hints(sid)
 
-        # Fetch plan data
+        # The questions asked: the questionnaire logged during the interview, or for
+        # sessions from before questions were generated live, the up-front plan.
         from sqlalchemy import select
 
         from src.models.plan import InterviewPlan
+        from src.models.question import SessionQuestion
+        from src.models.session import InterviewSession
 
-        plan_result = await db.execute(
-            select(InterviewPlan)
-            .where(InterviewPlan.session_id == sid)
-            .where(InterviewPlan.is_active == True)  # noqa: E712
-            .order_by(InterviewPlan.version.desc())
-            .limit(1)
+        asked = list(
+            (
+                await db.execute(
+                    select(SessionQuestion).where(SessionQuestion.session_id == sid).order_by(SessionQuestion.position)
+                )
+            ).scalars()
         )
-        plan = plan_result.scalar_one_or_none()
+        plan_data: dict | None = None
+        if asked:
+            db_session = await db.get(InterviewSession, sid)
+            plan_data = questionnaire_as_plan(asked)
+            time_per_question = time_per_asked_question(asked, db_session.ended_at if db_session else None)
+        else:
+            plan_result = await db.execute(
+                select(InterviewPlan)
+                .where(InterviewPlan.session_id == sid)
+                .where(InterviewPlan.is_active == True)  # noqa: E712
+                .order_by(InterviewPlan.version.desc())
+                .limit(1)
+            )
+            plan = plan_result.scalar_one_or_none()
+            plan_data = plan.plan_data if plan else None
+            time_per_question = self._derive_time_per_question(transcripts, plan)
 
         # Build full transcript list
         full_transcript = [
@@ -167,9 +185,6 @@ class ReportService:
             for h in hint_events_db
         ]
 
-        # Derive time-per-question from transcript timestamps
-        time_per_question = self._derive_time_per_question(transcripts, plan)
-
         # Build ReportInput using both snapshots and DB data
         fact_store = snapshots.get("fact_store", "")
         rolling_summary = snapshots.get("rolling_summary", "")
@@ -205,7 +220,7 @@ class ReportService:
             code_snapshots=code_snaps,
             hint_events_db=hint_events_list,
             time_per_question=time_per_question,
-            plan_data=plan.plan_data if plan else None,
+            plan_data=plan_data,
             scorecard_notes=snapshots.get("scorecard_notes") or None,
             copilot_usage=snapshots.get("copilot_cards_used") or None,
         )
@@ -260,3 +275,24 @@ class ReportService:
 
         per_question = total_minutes / len(question_ids)
         return {qid: round(per_question, 1) for qid in question_ids}
+
+
+def questionnaire_as_plan(asked: list) -> dict:
+    """The asked questions in the plan shape the report reads: a phase per run of one category."""
+    phases: list[dict] = []
+    for row in asked:
+        if not phases or phases[-1]["phase"] != row.category:
+            phases.append({"phase": row.category, "questions": []})
+        phases[-1]["questions"].append(row.question)
+    return {"phases": phases}
+
+
+def time_per_asked_question(asked: list, ended_at: datetime | None) -> dict[str, float]:
+    """Minutes on each question: from when it was asked until the next one (or the end)."""
+    out: dict[str, float] = {}
+    for row, nxt in zip(asked, [*asked[1:], None], strict=True):
+        until = nxt.asked_at if nxt is not None else ended_at
+        if until is None:
+            continue
+        out[str(row.id)] = round(max((until - row.asked_at).total_seconds(), 0) / 60.0, 1)
+    return out

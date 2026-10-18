@@ -18,7 +18,6 @@ from sqlalchemy.pool import NullPool
 from src.config import settings
 from src.dependencies import get_db
 from src.main import app
-from src.models.plan import InterviewPlan
 from src.models.report import Report, ReportNote
 from src.models.session import InterviewSession
 from src.models.user import User
@@ -74,7 +73,7 @@ def production_mode(monkeypatch):
 
 @pytest.fixture
 async def world(production_mode):
-    """Two sessions (owner's and other's), a plan and a report on the owner's; tokens for each principal."""
+    """Two sessions (owner's and other's) and a report on the owner's; tokens for each principal."""
     # NullPool: the app's global pool would bind connections to the first
     # test's event loop; each test gets its own loop.
     engine = create_async_engine(settings.database_url, poolclass=NullPool)
@@ -105,7 +104,6 @@ async def world(production_mode):
     s_owner_2 = InterviewSession(
         id=uuid.uuid4(), user_id=users["owner"].id, status="planning", level="mid", duration_minutes=30, focus_areas=[]
     )
-    plan = InterviewPlan(id=uuid.uuid4(), session_id=s_owner.id, plan_data={"phases": []}, version=1, is_active=True)
     report = Report(
         id=uuid.uuid4(),
         session_id=s_owner.id,
@@ -120,7 +118,7 @@ async def world(production_mode):
         await db.flush()
         db.add_all([s_owner, s_other, s_owner_2])
         await db.flush()
-        db.add_all([plan, report])
+        db.add(report)
         await db.commit()
 
     auth = AuthService(None)  # token helpers don't touch the DB
@@ -137,7 +135,6 @@ async def world(production_mode):
         "s": str(s_owner.id),
         "s_other": str(s_other.id),
         "s_owner_2": str(s_owner_2.id),
-        "plan": str(plan.id),
         "report": str(report.id),
         "tokens": tokens,
     }
@@ -146,7 +143,6 @@ async def world(production_mode):
     async with factory() as db:
         await db.execute(delete(ReportNote).where(ReportNote.report_id == report.id))
         await db.execute(delete(Report).where(Report.id == report.id))
-        await db.execute(delete(InterviewPlan).where(InterviewPlan.id == plan.id))
         await db.execute(
             delete(InterviewSession).where(InterviewSession.id.in_([s_owner.id, s_other.id, s_owner_2.id]))
         )
@@ -168,7 +164,7 @@ SESSION_SCOPED = [
     ("GET", "/api/sessions/{s}/state", None),
     ("GET", "/api/history/sessions/{s}/detail", None),
     ("GET", "/api/history/sessions/{s}/report", None),
-    ("GET", "/api/plans/{plan}", None),
+    ("GET", "/api/sessions/{s}/questions", None),
     ("GET", "/api/reports/{report}", None),
     ("GET", "/api/reports/{report}/status", None),
     ("POST", "/api/sessions/{s}/register-plan-hints", {"phases": []}),
@@ -206,12 +202,9 @@ async def test_session_scoped_routes(world, principal, method, template, body) -
         ("DELETE", "/api/sessions/{s}", None),
         ("POST", "/api/reports/generate/{s}", None),
         ("POST", "/api/reports/{report}/notes", {"note_text": "x"}),
-        ("PATCH", "/api/plans/{plan}/remove", {"phase_index": 0, "question_index": 0}),
-        (
-            "POST",
-            "/api/plans/create",
-            {"session_id": "{s}", "level": "sde2", "duration_minutes": 30, "focus_areas": []},
-        ),
+        ("POST", "/api/sessions/{s}/questions/topics", {"category": "coding"}),
+        ("POST", "/api/sessions/{s}/questions/generate", {"category": "coding"}),
+        ("POST", "/api/sessions/{s}/questions", {"category": "coding", "question": {"text": "q"}}),
     ],
     ids=lambda x: str(x),
 )
@@ -226,7 +219,7 @@ async def test_mutations_are_refused_for_other_users(world, method, template, bo
 @pytestmark_db
 async def test_malformed_ids_are_404_not_500(world) -> None:
     token = world["tokens"]["owner"]
-    for path in ("/api/sessions/not-a-uuid", "/api/plans/not-a-uuid", "/api/reports/not-a-uuid"):
+    for path in ("/api/sessions/not-a-uuid", "/api/sessions/not-a-uuid/questions", "/api/reports/not-a-uuid"):
         assert await _call("GET", path, token) == 404
 
 

@@ -393,12 +393,16 @@ def pace_card(
 ) -> dict[str, Any]:
     over_min = max(1, round((elapsed_s - budget_s) / 60))
     budget_min = max(1, round(budget_s / 60))
-    plan_left = (
-        f"{remaining_questions} question{'s' if remaining_questions != 1 else ''} and "
-        f"{round(remaining_minutes)} min of plan left."
-        if remaining_questions > 0
-        else "This is the last planned question."
-    )
+    if remaining_questions > 0:
+        plan_left = (
+            f"{remaining_questions} question{'s' if remaining_questions != 1 else ''} and "
+            f"{round(remaining_minutes)} min of plan left."
+        )
+    elif remaining_minutes > 0:
+        # Questions generated during the interview: nothing is planned ahead, only time is left.
+        plan_left = f"{round(remaining_minutes)} min of the interview left."
+    else:
+        plan_left = "This is the last planned question."
     return copilot_card(
         card_id,
         "pace",

@@ -314,7 +314,7 @@ interview-pilot/
 | `POST` | `/start` | Create a new interview session |
 | `GET` | `/{session_id}` | Get session metadata |
 | `GET` | `/{session_id}/state` | Get full session state for page recovery |
-| `POST` | `/{session_id}/go-live` | Transition from PLANNING to LIVE |
+| `POST` | `/{session_id}/go-live` | Start the interview (PLANNING to LIVE) |
 | `POST` | `/{session_id}/register-plan-hints` | Register pre-computed hints |
 | `PATCH` | `/{session_id}/pause` | Toggle pause/resume |
 | `POST` | `/{session_id}/end` | End session and trigger report |
@@ -322,16 +322,15 @@ interview-pilot/
 | `POST` | `/{session_id}/hints/next` | Get next progressive hint |
 | `POST` | `/{session_id}/hints/{hint_id}/ack` | Acknowledge hint delivery |
 
-#### Plans (`/api/plans`)
+#### Questions (`/api/sessions/{session_id}/questions`)
+Questions are generated during the interview, not planned up front.
+
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/create` | Generate interview plan for a session |
-| `GET` | `/{plan_id}` | Get plan by ID |
-| `PATCH` | `/{plan_id}/swap` | Swap question with alternate |
-| `PATCH` | `/{plan_id}/reorder` | Reorder questions in a phase |
-| `PATCH` | `/{plan_id}/remove` | Remove a question |
-| `PATCH` | `/{plan_id}/add` | Add a question |
-| `POST` | `/{plan_id}/regenerate-hints` | Regenerate hints for a question |
+| `POST` | `/topics` | Suggest topics for a category |
+| `POST` | `/generate` | Generate a draft question (hints, approaches, pitfalls); pass rejected drafts and feedback to regenerate |
+| `POST` | `` | Log the question the interviewer used to the questionnaire |
+| `GET` | `` | The questionnaire, in order |
 
 #### Reports (`/api/reports`)
 | Method | Path | Description |

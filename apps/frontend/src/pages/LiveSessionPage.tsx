@@ -33,11 +33,18 @@ import { InterviewPlanPanel } from '@/components/dashboard/InterviewPlanPanel';
 import { CopilotPanel } from '@/components/dashboard/CopilotPanel';
 import { useCopilotStore } from '@/stores/copilot-store';
 import * as api from '@/api/client';
+import type { GeneratedQuestion } from '@/api/client';
 
 interface OverlayEntry {
   id: string;
   cropRegion: CropRegion | null;
   mode: OverlayMode;
+}
+
+/** Minutes left in the interview's planned duration. */
+function interviewMinutesLeft(): number {
+  const { durationMinutes, elapsedMs } = useSessionStore.getState();
+  return Math.max(0, Math.round(durationMinutes - elapsedMs / 60000));
 }
 
 export function LiveSessionPage() {
@@ -51,6 +58,7 @@ export function LiveSessionPage() {
   const degradationLevel = useOfflineStore((s) => s.degradationLevel);
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   const [overlays, setOverlays] = useState<OverlayEntry[]>([]);
+  const [focusAreas, setFocusAreas] = useState<string[]>([]);
 
   // Initialize WebSocket and timer
   const { send } = useWebSocket(sessionId ?? null);
@@ -68,8 +76,11 @@ export function LiveSessionPage() {
       try {
         const state = await api.getSessionState(sessionId);
 
-        // Restore plan first (other stores depend on it)
-        if (state.plan) {
+        // Restore the questions first (other stores depend on them): the questionnaire
+        // logged during the interview, or for sessions planned up front, the plan.
+        if (state.questions.length > 0) {
+          usePlanStore.getState().setQuestionnaire(sessionId, state.questions);
+        } else if (state.plan) {
           const planData = state.plan as Record<string, unknown>;
           usePlanStore.getState().setPlan({
             id: (state.plan_id ?? '') as string,
@@ -161,10 +172,20 @@ export function LiveSessionPage() {
     })();
   }, [sessionId, status, setSession, setStatus]);
 
+  // The question generator offers the session's focus areas first.
+  useEffect(() => {
+    if (!sessionId) return;
+    api
+      .getSession(sessionId)
+      .then((s) => setFocusAreas((s.focus_areas as string[] | undefined) ?? []))
+      .catch(() => {});
+  }, [sessionId]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       reset();
+      usePlanStore.getState().reset();
       useTranscriptStore.getState().clear();
       useAnalysisStore.getState().clear();
       useHintStore.getState().clear();
@@ -444,11 +465,25 @@ export function LiveSessionPage() {
           common_pitfalls: q.common_pitfalls,
         },
         remaining_questions: rest.length,
-        remaining_minutes: rest.reduce((sum, x) => sum + (x.time_minutes || 0), 0),
+        // Questions generated live have nothing planned after them: what is left is the interview's time.
+        remaining_minutes:
+          rest.length > 0
+            ? rest.reduce((sum, x) => sum + (x.time_minutes || 0), 0)
+            : interviewMinutesLeft(),
       });
 
     },
     [sessionId, send],
+  );
+
+  const handleUseQuestion = useCallback(
+    async (category: string, topic: string | null, question: GeneratedQuestion) => {
+      if (!sessionId) return;
+      const logged = await api.logQuestion(sessionId, { category, topic, question });
+      const index = usePlanStore.getState().addQuestion(sessionId, logged);
+      await navigateToQuestion(index);
+    },
+    [sessionId, navigateToQuestion],
   );
 
   const handleAdvanceQuestion = useCallback(
@@ -546,6 +581,9 @@ export function LiveSessionPage() {
 
           <div className="live-session__center">
             <InterviewPlanPanel
+              sessionId={sessionId ?? ''}
+              focusAreas={focusAreas}
+              onUseQuestion={handleUseQuestion}
               onAdvanceQuestion={handleAdvanceQuestion}
               onGoToQuestion={handleGoToQuestion}
               onRequestHint={handleRequestHint}

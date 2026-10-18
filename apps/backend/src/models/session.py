@@ -31,11 +31,15 @@ class InterviewSession(BaseModel):
     plans: Mapped[list["InterviewPlan"]] = relationship(back_populates="session", cascade="all, delete-orphan")
     transcripts: Mapped[list["Transcript"]] = relationship(back_populates="session", cascade="all, delete-orphan")
     hint_events: Mapped[list["HintEvent"]] = relationship(back_populates="session", cascade="all, delete-orphan")
+    questions: Mapped[list["SessionQuestion"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", order_by="SessionQuestion.position"
+    )
     reports: Mapped[list["Report"]] = relationship(back_populates="session", cascade="all, delete-orphan")
 
 
 # Avoid circular imports — these are resolved by SQLAlchemy's string-based relationship lookup
 from src.models.hint import HintEvent  # noqa: E402, F401
 from src.models.plan import InterviewPlan  # noqa: E402, F401
+from src.models.question import SessionQuestion  # noqa: E402, F401
 from src.models.report import Report  # noqa: E402, F401
 from src.models.transcript import Transcript  # noqa: E402, F401

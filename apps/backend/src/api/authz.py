@@ -11,7 +11,6 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.dependencies import get_db
-from src.models.plan import InterviewPlan
 from src.models.report import Report
 from src.models.session import InterviewSession
 from src.services.access_control import Principal, dev_mode_active, dev_principal, principal_from_token
@@ -76,20 +75,6 @@ async def authorized_session(
     if session is None or not principal.can_access_session(session):
         raise _not_found("Session")
     return session
-
-
-async def authorized_plan(
-    plan_id: str,
-    principal: Principal = Depends(get_principal),
-    db: AsyncSession = Depends(get_db),
-) -> InterviewPlan:
-    plan = await db.get(InterviewPlan, _parse_uuid(plan_id, "Plan"))
-    if plan is None:
-        raise _not_found("Plan")
-    session = await db.get(InterviewSession, plan.session_id)
-    if session is None or not principal.can_access_session(session):
-        raise _not_found("Plan")
-    return plan
 
 
 async def authorized_report(

@@ -105,26 +105,27 @@ MOCK_RESPONSES: dict[TaskType, str] = {
             "verifiable_claims": [{"claim": "Reduced latency by 40%", "probe": "What profiling tools did you use?"}],
         }
     ),
-    TaskType.PLAN_TOPICS: json.dumps(
+    TaskType.QUESTION_TOPICS: json.dumps(
         {
-            "phases": [
-                {"phase": "coding", "topic": "Find two numbers in an array that sum to a target."},
-                {"phase": "system_design", "topic": "A URL shortening service."},
-                {"phase": "aptitude", "topic": "Estimate the storage needed for a year of chat messages."},
-                {"phase": "behavioral", "topic": "A disagreement with a teammate over a design."},
+            "topics": [
+                {"concept": "hashing", "topic": "Find two numbers in an array that sum to a target."},
+                {"concept": "sliding window", "topic": "The longest substring without repeating characters."},
+                {"concept": "graph traversal", "topic": "Count the islands in a grid."},
             ]
         }
     ),
     TaskType.QUESTION_GENERATION: json.dumps(
         {
-            "questions": [
-                {
-                    "text": "Implement a function to find two numbers that add up to a target.",
-                    "category": "coding",
-                    "difficulty": 2,
-                    "time_minutes": 20,
-                }
-            ]
+            "text": "Implement a function to find two numbers that add up to a target.",
+            "category": "coding",
+            "difficulty": 2,
+            "time_minutes": 20,
+            "hints": [
+                {"level": 1, "text": "What do you need to know about each number as you pass it?"},
+                {"level": 2, "text": "A hash map from value to index answers that in O(1)."},
+                {"level": 3, "text": "For each x, look up target - x before storing x."},
+            ],
+            "common_pitfalls": ["Using the same element twice"],
         }
     ),
     TaskType.PEER_INTERVIEWER: json.dumps(

@@ -15,7 +15,7 @@ class TaskType(str, Enum):
     SUMMARY_COMPRESSION = "summary_compression"
     RESUME_EXTRACTION = "resume_extraction"
     QUESTION_GENERATION = "question_generation"
-    PLAN_TOPICS = "plan_topics"
+    QUESTION_TOPICS = "question_topics"
     REPORT_CRITERION = "report_criterion"
     # Peer interviewer (PEER_INTERVIEWER_ENABLED): probes, claim checks, clarifications, edge cases
     PEER_INTERVIEWER = "peer_interviewer"

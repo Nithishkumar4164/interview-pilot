@@ -4,6 +4,7 @@
  * All endpoints go through the Vite proxy (/api → backend:8000).
  */
 import { useAuthStore } from '@/stores/auth-store';
+import type { PlannedQuestion } from '@/stores/plan-store';
 
 export class APIError extends Error {
   constructor(
@@ -152,6 +153,7 @@ export interface SessionStateResponse {
     status: string;
     level: string;
     duration_minutes: number;
+    focus_areas: string[];
     elapsed_ms: number;
     started_at: string | null;
     ended_at: string | null;
@@ -185,8 +187,10 @@ export interface SessionStateResponse {
     interviewer_used: boolean;
     candidate_response_quality: string;
   }>;
+  /** Only sessions planned up front, before questions were generated live, have a plan. */
   plan: Record<string, unknown> | null;
   plan_id: string | null;
+  questions: LoggedQuestion[];
   snapshot: Record<string, unknown> | null;
 }
 
@@ -312,13 +316,6 @@ export async function acknowledgeHint(
   });
 }
 
-export async function registerPlanHints(sessionId: string, planData: { phases: unknown[] }) {
-  return request<{ registered_questions: number }>(
-    `/api/sessions/${sessionId}/register-plan-hints`,
-    { method: 'POST', body: JSON.stringify(planData) },
-  );
-}
-
 // ── Upload ────────────────────────────────────────────────────────────
 
 export interface UploadResponse {
@@ -351,96 +348,54 @@ export async function createPairingToken(sessionId: string) {
   return request<PairingTokenResponse>(`/api/sessions/${sessionId}/pairing-token`, { method: 'POST' });
 }
 
-// ── Plans ─────────────────────────────────────────────────────────────
+// ── Questions ─────────────────────────────────────────────────────────
 
-export interface CreatePlanRequest {
-  session_id: string;
-  level: string;
-  duration_minutes: number;
-  focus_areas: string[];
-  resume_data?: Record<string, unknown> | null;
+/** A question as the backend generates it; the live dashboard's PlannedQuestion shape. */
+export type GeneratedQuestion = Omit<PlannedQuestion, 'id'> & { id: string; tags?: string[] };
+
+export interface TopicSuggestion {
+  concept: string;
+  topic: string;
 }
 
-export interface PlanQuestionResponse {
+/** A question the interviewer used: one row of the questionnaire. */
+export interface LoggedQuestion {
   id: string;
-  text: string;
+  position: number;
   category: string;
-  difficulty: number;
-  time_minutes: number;
-  alternates: string[];
-  hints: Array<{ level: number; text: string }>;
-  optimal_approaches: Array<{
-    name: string;
-    data_structures: string[];
-    expected_complexity: Record<string, string>;
-    key_steps: string[];
-  }> | null;
-  common_pitfalls: string[] | null;
+  topic: string | null;
+  asked_at: string;
+  question: PlannedQuestion;
 }
 
-export interface PlanPhaseResponse {
-  phase: string;
-  start_minute: number;
-  duration_minutes: number;
-  questions: PlanQuestionResponse[];
+export async function suggestTopics(sessionId: string, category: string) {
+  return request<{ category: string; topics: TopicSuggestion[] }>(`/api/sessions/${sessionId}/questions/topics`, {
+    method: 'POST',
+    body: JSON.stringify({ category }),
+  });
 }
 
-export interface InterviewPlanResponse {
-  id: string;
-  session_id: string;
-  version: number;
-  is_active: boolean;
-  phases: PlanPhaseResponse[];
-  total_minutes: number;
-  created_at: string;
+export interface GenerateQuestionRequest {
+  category: string;
+  topic?: string | null;
+  rejected_drafts?: string[];
+  feedback?: string | null;
 }
 
-export async function createPlan(data: CreatePlanRequest) {
-  return request<InterviewPlanResponse>('/api/plans/create', {
+export async function generateQuestion(sessionId: string, data: GenerateQuestionRequest) {
+  return request<{ category: string; topic: string | null; question: GeneratedQuestion }>(
+    `/api/sessions/${sessionId}/questions/generate`,
+    { method: 'POST', body: JSON.stringify(data) },
+  );
+}
+
+export async function logQuestion(
+  sessionId: string,
+  data: { category: string; topic?: string | null; question: GeneratedQuestion },
+) {
+  return request<LoggedQuestion>(`/api/sessions/${sessionId}/questions`, {
     method: 'POST',
     body: JSON.stringify(data),
-  });
-}
-
-export async function getPlan(planId: string) {
-  return request<InterviewPlanResponse>(`/api/plans/${planId}`);
-}
-
-export async function swapQuestion(
-  planId: string,
-  phaseIndex: number,
-  questionIndex: number,
-  alternateIndex: number,
-) {
-  return request<InterviewPlanResponse>(`/api/plans/${planId}/swap`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      phase_index: phaseIndex,
-      question_index: questionIndex,
-      alternate_index: alternateIndex,
-    }),
-  });
-}
-
-export async function removeQuestion(
-  planId: string,
-  phaseIndex: number,
-  questionIndex: number,
-) {
-  return request<InterviewPlanResponse>(`/api/plans/${planId}/remove`, {
-    method: 'PATCH',
-    body: JSON.stringify({ phase_index: phaseIndex, question_index: questionIndex }),
-  });
-}
-
-export async function regenerateHints(
-  planId: string,
-  phaseIndex: number,
-  questionIndex: number,
-) {
-  return request<InterviewPlanResponse>(`/api/plans/${planId}/regenerate-hints`, {
-    method: 'POST',
-    body: JSON.stringify({ phase_index: phaseIndex, question_index: questionIndex }),
   });
 }
 

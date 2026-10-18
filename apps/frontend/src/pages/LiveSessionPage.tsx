@@ -232,7 +232,7 @@ export function LiveSessionPage() {
   const handleResume = useCallback(async () => {
     if (!sessionId) return;
     try {
-      await api.pauseSession(sessionId); // Toggle pause
+      await api.resumeSession(sessionId);
       setStatus('live');
     } catch (err) {
       console.error('Failed to resume session:', err);

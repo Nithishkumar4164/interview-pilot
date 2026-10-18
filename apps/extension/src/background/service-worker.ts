@@ -153,6 +153,11 @@ function connectWebSockets(config: SessionConfig): void {
       onReconnectAttempt: (attempt, delay) => {
         console.log(`[InterviewPilot] Audio WS reconnect attempt ${attempt} in ${delay}ms`);
       },
+      // The session ended (or its token is no longer valid): stop and let go of the Meet tab.
+      onRefused: (reason) => {
+        console.log(`[InterviewPilot] Session refused by the server (${reason}); stopping capture`);
+        endPairing();
+      },
     },
   );
 
@@ -184,6 +189,17 @@ function disconnectWebSockets(): void {
   audioWs = null;
   codeWs = null;
   state.connectionState = 'disconnected';
+  broadcastState();
+}
+
+/** Leave the session: stop capture, close the sockets, forget the pairing and the Meet tab (left open). */
+function endPairing(): void {
+  stopAllCapture();
+  disconnectWebSockets();
+  state.pairing = null;
+  state.sessionId = null;
+  chrome.storage.session.remove('pairingToken');
+  setMeetingTab(null).catch(() => {});
   broadcastState();
 }
 
@@ -260,6 +276,49 @@ async function adoptMeetingTab(tabId: number): Promise<void> {
   const meetingUrl = canonicalMeetingUrl(tab.url);
   if (meetingUrl) await setMeetingTab({ tabId, meetingUrl });
 }
+
+function stopAllCapture(): void {
+  offscreenExists()
+    .then((exists) => {
+      if (!exists) return;
+      chrome.runtime.sendMessage({ type: 'offscreen:stop-tab-capture' }).catch(() => {});
+      chrome.runtime.sendMessage({ type: 'offscreen:stop-mic-capture' }).catch(() => {});
+    })
+    .catch(() => {});
+}
+
+/** POST pause/resume for the paired session. Idempotent on the backend; 409 means it isn't live yet. */
+async function setSessionPaused(paused: boolean): Promise<void> {
+  let pairing = state.pairing;
+  if (!pairing) {
+    // This worker may have just started for a tab event, before startup restored the pairing.
+    const { pairingToken } = await chrome.storage.session.get('pairingToken');
+    pairing = typeof pairingToken === 'string' ? parsePairingToken(pairingToken) : null;
+  }
+  if (!pairing) return;
+  const { backendUrl } = await chrome.storage.local.get('backendUrl');
+  const httpBase = String(backendUrl ?? state.backendUrl).replace(/^ws/, 'http');
+  const action = paused ? 'pause' : 'resume';
+  const resp = await fetch(`${httpBase}/api/sessions/${pairing.sessionId}/${action}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${pairing.token}` },
+  });
+  if (!resp.ok && resp.status !== 409) {
+    console.warn(`[InterviewPilot] Session ${action} failed: ${resp.status}`);
+  }
+}
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  getMeetingTab()
+    .then(async (tab) => {
+      if (tab?.tabId !== tabId) return;
+      console.log('[InterviewPilot] Meet tab closed; stopping capture and pausing the session');
+      stopAllCapture();
+      await setMeetingTab(null);
+      await setSessionPaused(true);
+    })
+    .catch((err) => console.error('[InterviewPilot] Meet tab close handling failed:', err));
+});
 
 // ── Audio Handling ────────────────────────────────────────────────────────
 
@@ -460,6 +519,8 @@ async function startCapture(tabId: number, streamId?: string): Promise<void> {
   if (tabStreamId) sendToOffscreen({ type: 'offscreen:start-tab-capture', streamId: tabStreamId });
   if (!state.micCaptureActive) sendToOffscreen({ type: 'offscreen:start-mic-capture' });
   await adoptMeetingTab(tabId);
+  // Capture restarting after the Meet tab was closed picks the interview back up.
+  await setSessionPaused(false);
 }
 
 // ── Tab video for the dashboard ───────────────────────────────────────────
@@ -604,11 +665,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     case 'disconnect':
-      disconnectWebSockets();
-      state.pairing = null;
-      state.sessionId = null;
-      chrome.storage.session.remove('pairingToken');
-      broadcastState();
+      endPairing();
       sendResponse({ status: 'disconnected' });
       return true;
 

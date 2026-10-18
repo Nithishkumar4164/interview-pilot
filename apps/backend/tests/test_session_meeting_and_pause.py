@@ -1,4 +1,8 @@
-"""Meeting link on the session, against the real app and Postgres.
+"""Meeting link on the session, and idempotent pause/resume, against the real app and Postgres.
+
+The extension pauses a session when its Meet tab closes and resumes it when
+capture restarts, using the session's pairing token, so both calls must be
+safe to repeat.
 """
 
 import uuid
@@ -171,6 +175,35 @@ async def test_meeting_link_can_be_set_and_cleared(world) -> None:
 
 
 @pytestmark_db
+async def test_pause_and_resume_are_idempotent_with_the_pairing_token(world) -> None:
+    """The extension's path: its pairing token, repeated calls, whatever state the dashboard left."""
+    sid = await world["add_session"]("live")
+    token = world["pairing_token"](sid)
+
+    for _ in range(2):
+        resp = await _call("POST", f"/api/sessions/{sid}/pause", token)
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "paused"}
+    assert await world["status_of"](sid) == "paused"
+
+    for _ in range(2):
+        resp = await _call("POST", f"/api/sessions/{sid}/resume", token)
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "live"}
+    assert await world["status_of"](sid) == "live"
+
+
+@pytestmark_db
+@pytest.mark.parametrize("status", ["planning", "ready", "ended"])
+@pytest.mark.parametrize("action", ["pause", "resume"])
+async def test_only_live_or_paused_sessions_change(world, status, action) -> None:
+    sid = await world["add_session"](status)
+    resp = await _call("POST", f"/api/sessions/{sid}/{action}", world["owner_token"])
+    assert resp.status_code == 409
+    assert await world["status_of"](sid) == status
+
+
+@pytestmark_db
 async def test_report_carries_the_meeting_link(world) -> None:
     sid = await world["add_session"]("ended", meeting_url="https://meet.google.com/abc-defg-hij")
     report = Report(
@@ -189,3 +222,27 @@ async def test_report_carries_the_meeting_link(world) -> None:
     resp = await _call("GET", f"/api/reports/{report.id}", world["owner_token"])
     assert resp.status_code == 200
     assert resp.json()["meeting_url"] == "https://meet.google.com/abc-defg-hij"
+
+
+@pytestmark_db
+async def test_pause_and_resume_tell_the_dashboard_once(world, monkeypatch) -> None:
+    """A pause from the extension (Meet tab closed) must reach the open dashboard; a repeated call sends nothing."""
+    from src.websocket.manager import dashboard_manager
+
+    sent: list[tuple[str, dict]] = []
+
+    async def capture(session_id: str, message: dict) -> None:
+        sent.append((session_id, message))
+
+    monkeypatch.setattr(dashboard_manager, "broadcast", capture)
+    sid = await world["add_session"]("live")
+    token = world["pairing_token"](sid)
+
+    await _call("POST", f"/api/sessions/{sid}/pause", token)
+    await _call("POST", f"/api/sessions/{sid}/pause", token)
+    await _call("POST", f"/api/sessions/{sid}/resume", token)
+
+    assert sent == [
+        (sid, {"type": "phase_change", "payload": {"status": "paused"}}),
+        (sid, {"type": "phase_change", "payload": {"status": "live"}}),
+    ]

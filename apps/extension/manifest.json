@@ -17,7 +17,10 @@
     "https://teams.microsoft.com/*",
     "https://*.coderpad.io/*",
     "https://*.hackerrank.com/*",
-    "https://*.leetcode.com/*"
+    "https://*.leetcode.com/*",
+    "http://localhost:5173/*",
+    "http://localhost:8000/*",
+    "https://interviewpilot.duckdns.org/*"
   ],
   "background": {
     "service_worker": "dist/background/service-worker.js",

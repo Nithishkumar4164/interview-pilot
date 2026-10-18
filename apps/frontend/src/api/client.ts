@@ -123,7 +123,11 @@ export async function goLive(sessionId: string) {
 }
 
 export async function pauseSession(sessionId: string) {
-  return request(`/api/sessions/${sessionId}/pause`, { method: 'PATCH' });
+  return request<{ status: string }>(`/api/sessions/${sessionId}/pause`, { method: 'POST' });
+}
+
+export async function resumeSession(sessionId: string) {
+  return request<{ status: string }>(`/api/sessions/${sessionId}/resume`, { method: 'POST' });
 }
 
 export async function updateMeetingUrl(sessionId: string, meetingUrl: string | null) {

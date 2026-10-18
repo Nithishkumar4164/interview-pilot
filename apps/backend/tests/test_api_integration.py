@@ -171,12 +171,12 @@ class TestSessionEndpoints:
         assert go_live_resp.json()["status"] == "live"
 
         # Pause
-        pause_resp = client.patch(f"/api/sessions/{session_id}/pause")
+        pause_resp = client.post(f"/api/sessions/{session_id}/pause")
         assert pause_resp.status_code == 200
         assert pause_resp.json()["status"] == "paused"
 
-        # Resume (toggle)
-        resume_resp = client.patch(f"/api/sessions/{session_id}/pause")
+        # Resume
+        resume_resp = client.post(f"/api/sessions/{session_id}/resume")
         assert resume_resp.status_code == 200
         assert resume_resp.json()["status"] == "live"
 
@@ -221,11 +221,11 @@ class TestSessionEndpoints:
         assert client.get(f"/api/sessions/{sid}").json()["status"] == "live"
 
         # Pause
-        client.patch(f"/api/sessions/{sid}/pause")
+        client.post(f"/api/sessions/{sid}/pause")
         assert client.get(f"/api/sessions/{sid}").json()["status"] == "paused"
 
         # Resume
-        client.patch(f"/api/sessions/{sid}/pause")
+        client.post(f"/api/sessions/{sid}/resume")
         assert client.get(f"/api/sessions/{sid}").json()["status"] == "live"
 
         # End

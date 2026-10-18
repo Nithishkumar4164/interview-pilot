@@ -30,6 +30,7 @@ from src.schemas.session import (
 from src.services.access_control import Principal
 from src.services.hint_service import HintService
 from src.utils.logging import get_logger
+from src.websocket.manager import dashboard_manager
 
 logger = get_logger("api.sessions")
 
@@ -282,23 +283,38 @@ async def update_meeting_url(
     return {"meeting_url": db_session.meeting_url}
 
 
-@router.patch("/{session_id}/pause")
+async def _set_paused(db: AsyncSession, db_session: InterviewSession, paused: bool) -> dict:
+    """Move a live session to paused, or back. Idempotent: the extension pauses when the
+    meeting tab closes and resumes when capture restarts, whatever the dashboard did meanwhile."""
+    target = SessionStatus.PAUSED if paused else SessionStatus.LIVE
+    if db_session.status not in (SessionStatus.LIVE, SessionStatus.PAUSED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Only a live or paused session can be {'paused' if paused else 'resumed'} (it is {db_session.status}).",
+        )
+    if db_session.status != target:
+        db_session.status = target
+        await SessionRepository(db).update(db_session)
+        await db.commit()
+        # The dashboard follows a pause or resume that came from the extension.
+        await dashboard_manager.broadcast(str(db_session.id), {"type": "phase_change", "payload": {"status": target}})
+    return {"status": db_session.status}
+
+
+@router.post("/{session_id}/pause")
 async def pause_session(
-    session_id: str,
     db: AsyncSession = Depends(get_db),
     db_session: InterviewSession = Depends(authorized_session),
 ) -> dict:
-    session_repo = SessionRepository(db)
+    return await _set_paused(db, db_session, paused=True)
 
-    if db_session.status == SessionStatus.LIVE:
-        db_session.status = SessionStatus.PAUSED
-    elif db_session.status == SessionStatus.PAUSED:
-        db_session.status = SessionStatus.LIVE
 
-    await session_repo.update(db_session)
-    await db.commit()
-
-    return {"status": db_session.status}
+@router.post("/{session_id}/resume")
+async def resume_session(
+    db: AsyncSession = Depends(get_db),
+    db_session: InterviewSession = Depends(authorized_session),
+) -> dict:
+    return await _set_paused(db, db_session, paused=False)
 
 
 @router.post("/{session_id}/end")

@@ -36,7 +36,15 @@ export interface WSClientEvents {
   onMessage?: (data: ArrayBuffer | string) => void;
   onError?: (error: Event) => void;
   onReconnectAttempt?: (attempt: number, delayMs: number) => void;
+  /**
+   * The server refused the session (close code 1008: ended, invalid token,
+   * not accessible). Reconnecting can't help, so the client stops.
+   */
+  onRefused?: (reason: string) => void;
 }
+
+/** RFC 6455 Policy Violation: the backend's close code for auth failures and ended sessions. */
+export const WS_REFUSED_CLOSE_CODE = 1008;
 
 /**
  * Audio chunk metadata header (prepended to binary audio frames).
@@ -167,8 +175,15 @@ export class WSClient {
         this.events.onError?.(event);
       };
 
-      this.ws.onclose = () => {
+      this.ws.onclose = (event: CloseEvent) => {
         this.stopHeartbeat();
+        if (event.code === WS_REFUSED_CLOSE_CODE && !this.intentionalClose) {
+          this.intentionalClose = true;
+          this.ws = null;
+          this.setState('disconnected');
+          this.events.onRefused?.(event.reason);
+          return;
+        }
         if (!this.intentionalClose) {
           this.setState('reconnecting');
           this.scheduleReconnect();

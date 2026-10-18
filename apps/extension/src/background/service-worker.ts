@@ -12,6 +12,7 @@
 import { WSClient, createAudioFrame, type ConnectionState } from '../networking/ws-client';
 import { ChunkQueue, type QueuedChunk } from '../networking/chunk-queue';
 import { OfflineBuffer } from '../storage/offline-buffer';
+import { canonicalMeetingUrl, meetingCode } from '../meeting/meet-link';
 import { parsePairingToken, type Pairing } from '../auth/pairing';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -184,6 +185,80 @@ function disconnectWebSockets(): void {
   codeWs = null;
   state.connectionState = 'disconnected';
   broadcastState();
+}
+
+// ── Meeting tab ───────────────────────────────────────────────────────────
+//
+// The session's Google Meet tab: opened (or focused) on pairing when the
+// dashboard sends the session's Meet link, or adopted when capture starts on
+// a Meet tab. Closing it stops capture and pauses the session; starting
+// capture again resumes it. Kept in session storage, so it survives this
+// worker stopping.
+
+interface MeetingTab {
+  tabId: number;
+  meetingUrl: string;
+}
+
+async function getMeetingTab(): Promise<MeetingTab | null> {
+  const { meetingTab } = await chrome.storage.session.get('meetingTab');
+  return (meetingTab as MeetingTab | undefined) ?? null;
+}
+
+async function setMeetingTab(tab: MeetingTab | null): Promise<void> {
+  const previous = await getMeetingTab();
+  if (tab) await chrome.storage.session.set({ meetingTab: tab });
+  else await chrome.storage.session.remove('meetingTab');
+  if (previous && previous.tabId !== tab?.tabId) clearBadge(previous.tabId);
+  await updateMeetingBadge();
+}
+
+function clearBadge(tabId: number): void {
+  chrome.action.setBadgeText({ tabId, text: '' }).catch(() => {});
+  chrome.action.setTitle({ tabId, title: 'InterviewPilot' }).catch(() => {});
+}
+
+/** On the Meet tab's icon: REC while capturing, otherwise a prompt to start. */
+async function updateMeetingBadge(): Promise<void> {
+  const tab = await getMeetingTab();
+  if (!tab) return;
+  const capturing = state.tabCaptureActive;
+  try {
+    await chrome.action.setBadgeText({ tabId: tab.tabId, text: capturing ? 'REC' : '!' });
+    await chrome.action.setBadgeBackgroundColor({ tabId: tab.tabId, color: capturing ? '#ef4444' : '#f59e0b' });
+    await chrome.action.setTitle({
+      tabId: tab.tabId,
+      title: capturing ? 'InterviewPilot: capturing this meeting' : 'InterviewPilot: press Alt+Shift+I (Option+Shift+I on Mac) to start capture',
+    });
+  } catch {
+    // The tab is gone; onRemoved handles it.
+  }
+}
+
+/** Focus the session's Meet tab if it's open, otherwise open it. */
+async function openMeetingTab(meetingUrl: string): Promise<void> {
+  const code = meetingCode(meetingUrl);
+  if (!code) return;
+  const tabs = await chrome.tabs.query({ url: 'https://meet.google.com/*' });
+  let tab = tabs.find((t) => meetingCode(t.url) === code);
+  if (tab?.id) {
+    await chrome.tabs.update(tab.id, { active: true });
+    await chrome.windows.update(tab.windowId, { focused: true });
+  } else {
+    tab = await chrome.tabs.create({ url: meetingUrl, active: true });
+  }
+  if (!tab?.id) return;
+  enableSidePanel(tab.id);
+  await setMeetingTab({ tabId: tab.id, meetingUrl });
+}
+
+/** Capture started on a Meet tab: that is the session's meeting tab from now on. */
+async function adoptMeetingTab(tabId: number): Promise<void> {
+  const current = await getMeetingTab();
+  if (current?.tabId === tabId) return;
+  const tab = await chrome.tabs.get(tabId);
+  const meetingUrl = canonicalMeetingUrl(tab.url);
+  if (meetingUrl) await setMeetingTab({ tabId, meetingUrl });
 }
 
 // ── Audio Handling ────────────────────────────────────────────────────────
@@ -384,6 +459,7 @@ async function startCapture(tabId: number, streamId?: string): Promise<void> {
   await ensureOffscreen();
   if (tabStreamId) sendToOffscreen({ type: 'offscreen:start-tab-capture', streamId: tabStreamId });
   if (!state.micCaptureActive) sendToOffscreen({ type: 'offscreen:start-mic-capture' });
+  await adoptMeetingTab(tabId);
 }
 
 // ── Tab video for the dashboard ───────────────────────────────────────────
@@ -482,6 +558,11 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
   }
   const backendUrl = typeof message.backendUrl === 'string' ? message.backendUrl : state.backendUrl;
   pairAndConnect(pairing, backendUrl, sender.origin);
+  // The session's Meet link: open (or focus) that tab and track it for the session.
+  const meetingUrl = canonicalMeetingUrl(typeof message.meetingUrl === 'string' ? message.meetingUrl : null);
+  if (meetingUrl) {
+    openMeetingTab(meetingUrl).catch((err) => console.error('[InterviewPilot] Could not open the Meet tab:', err));
+  }
   sendResponse({ ok: true, sessionId: pairing.sessionId });
   return false;
 });
@@ -534,6 +615,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'tab-capture-started':
       state.tabCaptureActive = true;
       broadcastState();
+      updateMeetingBadge().catch(() => {});
       if (dashboardViewer) requestTabVideo(dashboardViewer);
       sendResponse({ status: 'ok' });
       return true;
@@ -541,6 +623,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'tab-capture-stopped':
       state.tabCaptureActive = false;
       broadcastState();
+      updateMeetingBadge().catch(() => {});
       postToDashboard({ type: 'tab-video-ended' });
       sendResponse({ status: 'ok' });
       return true;
@@ -663,20 +746,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // ── Side Panel — auto-enable on Google Meet tabs ──────────────────────────
 
+function enableSidePanel(tabId: number): void {
+  chrome.sidePanel
+    .setOptions({
+      tabId,
+      path: 'dist/src/sidepanel/index.html',
+      enabled: true,
+    })
+    .catch((err) => {
+      console.error('[InterviewPilot] Failed to enable side panel:', err);
+    });
+}
+
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (
-    changeInfo.status === 'complete' &&
-    tab.url?.match(/^https:\/\/meet\.google\.com\//) &&
-    state.sessionId
-  ) {
-    chrome.sidePanel
-      .setOptions({
-        tabId,
-        path: 'dist/src/sidepanel/index.html',
-        enabled: true,
-      })
-      .catch((err) => {
-        console.error('[InterviewPilot] Failed to enable side panel:', err);
-      });
+  if (changeInfo.status === 'complete' && tab.url?.match(/^https:\/\/meet\.google\.com\//) && state.sessionId) {
+    enableSidePanel(tabId);
   }
 });

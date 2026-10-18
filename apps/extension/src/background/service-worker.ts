@@ -374,7 +374,7 @@ function getTabStreamId(tabId: number): Promise<string> {
   });
 }
 
-/** Start whichever of tab audio and microphone isn't running yet. */
+/** Start whichever of tab capture (audio and video) and microphone isn't running yet. */
 async function startCapture(tabId: number, streamId?: string): Promise<void> {
   if (state.connectionState !== 'connected') {
     console.warn('[InterviewPilot] Not connected; pair with a session before starting capture');
@@ -384,6 +384,61 @@ async function startCapture(tabId: number, streamId?: string): Promise<void> {
   await ensureOffscreen();
   if (tabStreamId) sendToOffscreen({ type: 'offscreen:start-tab-capture', streamId: tabStreamId });
   if (!state.micCaptureActive) sendToOffscreen({ type: 'offscreen:start-mic-capture' });
+}
+
+// ── Tab video for the dashboard ───────────────────────────────────────────
+//
+// The live session page holds a port open to the extension and introduces
+// itself with a viewer ID. The offscreen document owns the one tab capture
+// and offers its video to that viewer over WebRTC; this worker only relays
+// the offer and the answer. The WebRTC connection runs page to page, so it
+// survives this worker stopping.
+
+interface DashboardViewer {
+  port: chrome.runtime.Port;
+  viewerId: string;
+}
+
+let dashboardViewer: DashboardViewer | null = null;
+
+async function offscreenExists(): Promise<boolean> {
+  const contexts = await (chrome.runtime as any).getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
+  return contexts.length > 0;
+}
+
+function requestTabVideo(viewer: DashboardViewer): void {
+  offscreenExists()
+    .then((exists) => {
+      // No offscreen document means nothing is being captured yet; capture start will offer.
+      if (exists) chrome.runtime.sendMessage({ type: 'offscreen:offer-tab-video', viewerId: viewer.viewerId });
+    })
+    .catch((err) => console.error('[InterviewPilot] Tab video request failed:', err));
+}
+
+chrome.runtime.onConnectExternal.addListener((port) => {
+  if (port.name !== 'dashboard') {
+    port.disconnect();
+    return;
+  }
+  port.onMessage.addListener((message) => {
+    if (message?.type === 'hello' && typeof message.viewerId === 'string') {
+      dashboardViewer = { port, viewerId: message.viewerId };
+      if (message.wantsVideo && message.sessionId === state.sessionId) requestTabVideo(dashboardViewer);
+    } else if (message?.type === 'tab-video-answer' && message.viewerId === dashboardViewer?.viewerId) {
+      chrome.runtime.sendMessage({ type: 'offscreen:tab-video-answer', viewerId: message.viewerId, sdp: message.sdp });
+    }
+  });
+  port.onDisconnect.addListener(() => {
+    if (dashboardViewer?.port === port) dashboardViewer = null;
+  });
+});
+
+function postToDashboard(message: Record<string, unknown>): void {
+  try {
+    dashboardViewer?.port.postMessage(message);
+  } catch {
+    // The page went away; its port's onDisconnect clears the viewer.
+  }
 }
 
 chrome.commands.onCommand.addListener((command, tab) => {
@@ -404,7 +459,7 @@ async function ensureOffscreen(): Promise<void> {
   offscreenReady = false;
   await (chrome.offscreen as any).createDocument({
     url: 'dist/src/offscreen/offscreen.html',
-    reasons: ['USER_MEDIA', 'AUDIO_PLAYBACK'],
+    reasons: ['USER_MEDIA', 'AUDIO_PLAYBACK', 'WEB_RTC'],
     justification: 'Audio capture and playback for interview transcription',
   });
 }
@@ -479,12 +534,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'tab-capture-started':
       state.tabCaptureActive = true;
       broadcastState();
+      if (dashboardViewer) requestTabVideo(dashboardViewer);
       sendResponse({ status: 'ok' });
       return true;
 
     case 'tab-capture-stopped':
       state.tabCaptureActive = false;
       broadcastState();
+      postToDashboard({ type: 'tab-video-ended' });
+      sendResponse({ status: 'ok' });
+      return true;
+
+    case 'tab-video-offer':
+      // From the offscreen document, for the viewer it names.
+      if (message.viewerId === dashboardViewer?.viewerId) {
+        postToDashboard({ type: 'tab-video-offer', sdp: message.sdp, sessionId: state.sessionId });
+      }
       sendResponse({ status: 'ok' });
       return true;
 

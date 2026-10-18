@@ -7,6 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ConnectExtension } from '@/components/auth/ConnectExtension';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useTimer } from '@/hooks/useTimer';
+import { useExtensionVideo } from '@/hooks/useExtensionVideo';
 import { useSessionStore, getAllPlanQuestions } from '@/stores/session-store';
 import type { SessionStatus } from '@/stores/session-store';
 import { useHintStore } from '@/stores/hint-store';
@@ -183,6 +184,15 @@ export function LiveSessionPage() {
     track.addEventListener('ended', onEnded);
     return () => track.removeEventListener('ended', onEnded);
   }, [videoStream]);
+
+  // Meeting video sent by the extension when capture starts (no picker)
+  useExtensionVideo(sessionId ?? null, (stream) => {
+    setVideoStream((prev) => {
+      prev?.getTracks().forEach((t) => t.stop());
+      return stream;
+    });
+    setOverlays((prev) => (prev.length > 0 ? prev : [{ id: crypto.randomUUID(), cropRegion: null, mode: 'floating' }]));
+  });
 
   // ── Overlay callbacks ──────────────────────────────────────────────
 

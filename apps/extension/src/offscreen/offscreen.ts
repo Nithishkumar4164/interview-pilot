@@ -7,6 +7,8 @@
  * chunks back to the service worker.
  */
 
+import { acceptVideoAnswer, closeAllVideoPeers, offerVideo } from './video-relay';
+
 // ── State ──────────────────────────────────────────────────────────────
 
 interface CaptureState {
@@ -87,11 +89,22 @@ function stopCapture(state: CaptureState): void {
 
 async function startTabCapture(streamId: string): Promise<void> {
   try {
+    // Audio and video in one capture: Chrome allows one capture per tab.
+    // The video is relayed to the dashboard (video-relay.ts).
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         mandatory: {
           chromeMediaSource: 'tab',
           chromeMediaSourceId: streamId,
+        },
+      } as any,
+      video: {
+        mandatory: {
+          chromeMediaSource: 'tab',
+          chromeMediaSourceId: streamId,
+          maxWidth: 1920,
+          maxHeight: 1080,
+          maxFrameRate: 30,
         },
       } as any,
     });
@@ -100,7 +113,7 @@ async function startTabCapture(streamId: string): Promise<void> {
     // Offscreen AudioContext.destination is a null sink (no speakers),
     // so we need a real <audio> element for the AUDIO_PLAYBACK reason.
     const audio = document.createElement('audio');
-    audio.srcObject = stream;
+    audio.srcObject = new MediaStream(stream.getAudioTracks());
     audio.play().catch((err) => console.warn('[Offscreen] Audio play failed:', err));
     tabCapture.audioElement = audio;
 
@@ -113,6 +126,7 @@ async function startTabCapture(streamId: string): Promise<void> {
 }
 
 function stopTabCapture(): void {
+  closeAllVideoPeers();
   stopCapture(tabCapture);
   chrome.runtime.sendMessage({ type: 'tab-capture-stopped' });
   console.log('[Offscreen] Tab capture stopped');
@@ -163,6 +177,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     case 'offscreen:stop-tab-capture':
       stopTabCapture();
+      sendResponse({ status: 'ok' });
+      return true;
+
+    case 'offscreen:offer-tab-video':
+      offerVideo(message.viewerId, tabCapture.stream).catch((err) =>
+        console.error('[Offscreen] Tab video offer failed:', err),
+      );
+      sendResponse({ status: 'ok' });
+      return true;
+
+    case 'offscreen:tab-video-answer':
+      acceptVideoAnswer(message.viewerId, message.sdp).catch((err) =>
+        console.error('[Offscreen] Tab video answer failed:', err),
+      );
       sendResponse({ status: 'ok' });
       return true;
 

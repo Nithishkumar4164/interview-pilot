@@ -17,6 +17,8 @@ RESUME_EXTRACTION_SYSTEM_PROMPT = """You are an expert resume analyzer. Extract 
 Return a JSON object with these exact fields:
 {
   "name": "Full name",
+  "email": "Email address, or null if the resume has none",
+  "phone": "Phone number as written, or null if the resume has none",
   "current_role": "Current or most recent job title",
   "years_experience": <number>,
   "companies": ["Company 1", "Company 2"],
@@ -44,6 +46,8 @@ Return a JSON object with these exact fields:
     }
   ]
 }
+
+Copy name, email and phone exactly as the resume writes them; never invent contact details.
 
 Focus on extracting verifiable_claims — specific, measurable assertions that can be probed during an interview. For example:
 - "Improved API latency by 40%" → "What profiling tools did you use? What was the baseline latency?"

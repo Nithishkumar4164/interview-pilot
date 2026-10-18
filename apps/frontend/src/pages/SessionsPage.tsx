@@ -150,6 +150,18 @@ export function SessionsPage() {
     }
   };
 
+  // Sessions are no longer planned up front; one left in planning just goes live.
+  const handleStart = async (sessionId: string) => {
+    setActionLoading((prev) => ({ ...prev, [sessionId]: true }));
+    try {
+      await api.goLive(sessionId);
+      navigate(`/session/${sessionId}`);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to start the interview');
+      setActionLoading((prev) => ({ ...prev, [sessionId]: false }));
+    }
+  };
+
   const handleDelete = async (sessionId: string) => {
     if (!confirm('Delete this session?')) return;
     setActionLoading((prev) => ({ ...prev, [sessionId]: true }));
@@ -280,9 +292,10 @@ export function SessionsPage() {
                     >
                       {copiedId === s.id ? 'Copied!' : s.id.slice(0, 8)}
                     </span>
-                    {s.candidate_name && (
-                      <span className="session-card__candidate">{s.candidate_name}</span>
-                    )}
+                    <span className="session-card__candidate">
+                      {s.candidate_name ?? 'Guest'}
+                      {s.candidate_role ? ` · ${s.candidate_role}` : ''}
+                    </span>
                     <span className="session-card__level">
                       {LEVEL_LABELS[s.level] ?? s.level}
                     </span>
@@ -339,9 +352,10 @@ export function SessionsPage() {
                     <>
                       <button
                         className="btn btn--sm btn--primary"
-                        onClick={() => navigate(`/session/${s.id}/plan`)}
+                        onClick={() => handleStart(s.id)}
+                        disabled={isActionLoading}
                       >
-                        Resume Planning
+                        {isActionLoading ? 'Starting...' : 'Start Interview'}
                       </button>
                       <button
                         className="btn btn--sm btn--ghost btn--danger-text"

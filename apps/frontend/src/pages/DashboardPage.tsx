@@ -1,10 +1,15 @@
 /**
- * Dashboard page — landing page with resume upload and plan generation.
+ * Dashboard page — start a new interview.
+ *
+ * Nothing is planned up front: the interviewer picks how the candidate is
+ * identified (a parsed resume that prefills editable details, details typed by
+ * hand, or a guest with none) and the session goes live straight away.
+ * Questions are generated during the interview.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSessionStore } from '@/stores/session-store';
-import { usePlanStore, type InterviewPlan } from '@/stores/plan-store';
+import { usePlanStore } from '@/stores/plan-store';
 import { ResumeUploader } from '@/components/planning/ResumeUploader';
 import * as api from '@/api/client';
 import { MEETING_URL_HINT, normalizeMeetingUrl } from '@/lib/meeting';
@@ -20,36 +25,81 @@ const LEVELS = [
 
 const FOCUS_OPTIONS = ['coding', 'system_design', 'behavioral', 'debugging', 'api_design', 'dsa', 'aptitude'];
 
+type CandidateMode = 'resume' | 'manual' | 'guest';
+
+const CANDIDATE_MODES: { value: CandidateMode; label: string }[] = [
+  { value: 'resume', label: 'From resume' },
+  { value: 'manual', label: 'Enter manually' },
+  { value: 'guest', label: 'Guest' },
+];
+
+interface CandidateDetails {
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+}
+
+const EMPTY_DETAILS: CandidateDetails = { name: '', email: '', phone: '', role: '' };
+
+const DETAIL_FIELDS: { key: keyof CandidateDetails; label: string; type: string; placeholder: string }[] = [
+  { key: 'name', label: 'Candidate Name', type: 'text', placeholder: 'e.g. Jane Doe' },
+  { key: 'email', label: 'Candidate Email', type: 'email', placeholder: 'e.g. jane@example.com' },
+  { key: 'phone', label: 'Phone', type: 'tel', placeholder: 'e.g. +1 555 0100' },
+  { key: 'role', label: 'Current Role', type: 'text', placeholder: 'e.g. Backend Engineer' },
+];
+
+/** The candidate details a parsed resume provides. */
+function detailsFromResume(data: Record<string, unknown> | null): CandidateDetails {
+  const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  return {
+    name: text(data?.name),
+    email: text(data?.email),
+    phone: text(data?.phone),
+    role: text(data?.current_role),
+  };
+}
+
+/** Fill the fields the interviewer left empty; never overwrite what they typed. */
+function fillEmpty(current: CandidateDetails, extracted: CandidateDetails): CandidateDetails {
+  return {
+    name: current.name || extracted.name,
+    email: current.email || extracted.email,
+    phone: current.phone || extracted.phone,
+    role: current.role || extracted.role,
+  };
+}
+
 export function DashboardPage() {
   const navigate = useNavigate();
   const setSession = useSessionStore((s) => s.setSession);
-  const setPlan = usePlanStore((s) => s.setPlan);
-  const setPlanStatus = usePlanStore((s) => s.setPlanStatus);
-  const setPlanError = usePlanStore((s) => s.setPlanError);
+  const setStarted = useSessionStore((s) => s.setStarted);
   const resumeStatus = usePlanStore((s) => s.resume.status);
+  const resumeData = usePlanStore((s) => s.resume.structuredData);
 
-  const [candidateName, setCandidateName] = useState('');
-  const [candidateEmail, setCandidateEmail] = useState('');
+  const [mode, setMode] = useState<CandidateMode>('resume');
+  const [details, setDetails] = useState<CandidateDetails>(EMPTY_DETAILS);
   const [meetingUrl, setMeetingUrl] = useState('');
   const [level, setLevel] = useState('sde2');
   const [duration, setDuration] = useState(60);
   const [focusAreas, setFocusAreas] = useState<string[]>(['coding']);
-  const [resumeData, setResumeData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Prefill from the parsed resume as soon as extraction completes.
+  useEffect(() => {
+    if (resumeData) setDetails((d) => fillEmpty(d, detailsFromResume(resumeData)));
+  }, [resumeData]);
+
+  const setDetail = useCallback((key: keyof CandidateDetails, value: string) => {
+    setDetails((d) => ({ ...d, [key]: value }));
+  }, []);
 
   const toggleFocus = useCallback((area: string) => {
     setFocusAreas((prev) =>
       prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area],
     );
   }, []);
-
-  const handleResumeComplete = useCallback(
-    (_referenceId: string, data: Record<string, unknown>) => {
-      setResumeData(data);
-    },
-    [],
-  );
 
   /** Wait for an in-progress resume upload/extraction to settle. */
   const waitForResume = useCallback((): Promise<Record<string, unknown> | null> => {
@@ -72,7 +122,7 @@ export function DashboardPage() {
     });
   }, []);
 
-  const handleGeneratePlan = useCallback(async () => {
+  const handleStart = useCallback(async () => {
     if (focusAreas.length === 0) {
       setError('Select at least one focus area');
       return;
@@ -82,48 +132,53 @@ export function DashboardPage() {
       setError(MEETING_URL_HINT);
       return;
     }
+    if (mode === 'resume' && usePlanStore.getState().resume.status === 'idle') {
+      setError('Upload a resume, or choose Enter manually or Guest');
+      return;
+    }
     setLoading(true);
     setError(null);
-    setPlanStatus('generating');
 
     try {
-      // Wait for any in-progress resume upload/extraction before proceeding
-      const resolvedResumeData = await waitForResume();
+      let candidate: CandidateDetails = EMPTY_DETAILS;
+      let resolvedResumeData: Record<string, unknown> | null = null;
+      if (mode === 'resume') {
+        // Clicking Start mid-extraction waits, then uses what the resume provides
+        resolvedResumeData = await waitForResume();
+        if (!resolvedResumeData) {
+          setError('The resume could not be read. Try again, or choose Enter manually or Guest');
+          return;
+        }
+        candidate = fillEmpty(details, detailsFromResume(resolvedResumeData));
+      } else if (mode === 'manual') {
+        candidate = details;
+      }
 
-      // 1. Create session (starts in PLANNING status)
-      const sessionResult = await api.startSession({
+      const { session_id: sessionId } = await api.startSession({
         level,
         duration_minutes: duration,
         focus_areas: focusAreas,
-        candidate_name: candidateName || undefined,
-        candidate_email: candidateEmail || undefined,
+        candidate_name: candidate.name || undefined,
+        candidate_email: candidate.email || undefined,
+        candidate_phone: candidate.phone || undefined,
+        candidate_role: candidate.role || undefined,
         resume_data: resolvedResumeData,
         meeting_url: normalizedMeetingUrl,
       });
-      const sessionId = sessionResult.session_id;
+      const live = await api.goLive(sessionId);
+
+      // The new session has no plan; don't carry the last one (or its resume) into it.
+      usePlanStore.getState().reset();
       const label = LEVELS.find((l) => l.value === level)?.label ?? level;
       setSession(sessionId, label, duration);
-
-      // 2. Navigate to plan page immediately (shows loading spinner)
-      navigate(`/session/${sessionId}/plan`);
-
-      // 3. Generate plan (async — PlanReviewPage shows spinner)
-      const planResult = await api.createPlan({
-        session_id: sessionId,
-        level,
-        duration_minutes: duration,
-        focus_areas: focusAreas,
-        resume_data: resolvedResumeData,
-      });
-      setPlan(planResult as unknown as InterviewPlan);
+      setStarted(live.started_at);
+      navigate(`/session/${sessionId}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to generate plan';
-      setPlanError(msg);
-      setError(msg);
+      setError(err instanceof Error ? err.message : 'Failed to start the interview');
     } finally {
       setLoading(false);
     }
-  }, [level, duration, focusAreas, candidateName, candidateEmail, meetingUrl, navigate, setSession, setPlan, setPlanStatus, setPlanError, waitForResume]);
+  }, [mode, details, level, duration, focusAreas, meetingUrl, navigate, setSession, setStarted, waitForResume]);
 
   return (
     <div className="dashboard-page">
@@ -150,26 +205,52 @@ export function DashboardPage() {
         <h2>New Interview</h2>
 
         <div className="form-group">
-          <label htmlFor="candidate-name">Candidate Name</label>
-          <input
-            id="candidate-name"
-            type="text"
-            placeholder="e.g. Jane Doe"
-            value={candidateName}
-            onChange={(e) => setCandidateName(e.target.value)}
-          />
+          <label id="candidate-mode-label">Candidate</label>
+          <div className="segmented" role="radiogroup" aria-labelledby="candidate-mode-label">
+            {CANDIDATE_MODES.map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                role="radio"
+                aria-checked={mode === m.value}
+                className={`segmented__option ${mode === m.value ? 'segmented__option--active' : ''}`}
+                onClick={() => setMode(m.value)}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          {mode === 'guest' && (
+            <p className="form-hint">No candidate details are saved for a guest interview.</p>
+          )}
         </div>
 
-        <div className="form-group">
-          <label htmlFor="candidate-email">Candidate Email</label>
-          <input
-            id="candidate-email"
-            type="email"
-            placeholder="e.g. jane@example.com"
-            value={candidateEmail}
-            onChange={(e) => setCandidateEmail(e.target.value)}
-          />
-        </div>
+        {mode === 'resume' && (
+          <div className="form-group">
+            <label>Resume</label>
+            <ResumeUploader />
+          </div>
+        )}
+
+        {(mode === 'manual' || (mode === 'resume' && resumeStatus === 'completed')) && (
+          <div className="candidate-details">
+            {mode === 'resume' && (
+              <p className="form-hint">Filled from the resume. Edit anything it got wrong.</p>
+            )}
+            {DETAIL_FIELDS.map((f) => (
+              <div className="form-group" key={f.key}>
+                <label htmlFor={`candidate-${f.key}`}>{f.label}</label>
+                <input
+                  id={`candidate-${f.key}`}
+                  type={f.type}
+                  placeholder={f.placeholder}
+                  value={details[f.key]}
+                  onChange={(e) => setDetail(f.key, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="form-group">
           <label htmlFor="meeting-url">Google Meet Link (Optional)</label>
@@ -180,11 +261,6 @@ export function DashboardPage() {
             value={meetingUrl}
             onChange={(e) => setMeetingUrl(e.target.value)}
           />
-        </div>
-
-        <div className="form-group">
-          <label>Resume (Optional)</label>
-          <ResumeUploader onUploadComplete={handleResumeComplete} />
         </div>
 
         <div className="form-group">
@@ -238,14 +314,14 @@ export function DashboardPage() {
 
         <button
           className="btn btn--primary btn--lg"
-          onClick={handleGeneratePlan}
+          onClick={handleStart}
           disabled={loading}
         >
           {loading
-            ? (resumeStatus === 'uploading' || resumeStatus === 'processing')
+            ? mode === 'resume' && (resumeStatus === 'uploading' || resumeStatus === 'processing')
               ? 'Waiting for resume...'
-              : 'Generating Plan...'
-            : 'Generate Interview Plan'}
+              : 'Starting...'
+            : 'Start Interview'}
         </button>
       </section>
     </div>

@@ -20,6 +20,8 @@ class InterviewSession(BaseModel):
     custom_notes: Mapped[str | None] = mapped_column(String, nullable=True)
     candidate_name: Mapped[str | None] = mapped_column(String, nullable=True)
     candidate_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    candidate_phone: Mapped[str | None] = mapped_column(String, nullable=True)
+    candidate_role: Mapped[str | None] = mapped_column(String, nullable=True)
     resume_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     meeting_url: Mapped[str | None] = mapped_column(String, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

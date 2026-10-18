@@ -96,6 +96,8 @@ MOCK_RESPONSES: dict[TaskType, str] = {
     TaskType.RESUME_EXTRACTION: json.dumps(
         {
             "name": "Test Candidate",
+            "email": "test.candidate@example.com",
+            "phone": "+1 555 0100",
             "current_role": "Senior Software Engineer",
             "years_experience": 5,
             "tech_stack": ["Python", "Java", "PostgreSQL", "Redis"],

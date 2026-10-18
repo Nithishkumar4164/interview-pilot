@@ -100,6 +100,8 @@ export interface StartSessionRequest {
   focus_areas?: string[];
   candidate_name?: string;
   candidate_email?: string;
+  candidate_phone?: string;
+  candidate_role?: string;
   resume_data?: Record<string, unknown> | null;
   meeting_url?: string | null;
 }
@@ -203,6 +205,7 @@ export interface SessionListItem {
   created_at: string;
   candidate_name: string | null;
   candidate_email: string | null;
+  candidate_role?: string | null;
   report_id: string | null;
   report_status: string | null;
   recommendation: string | null;

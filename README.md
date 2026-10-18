@@ -145,6 +145,23 @@ Then in Chrome:
 2. Enable **Developer mode**
 3. Click **Load unpacked** and select `apps/extension/dist`
 
+#### One-click pairing
+
+By default the dashboard shows a pairing code that you paste into the extension popup. To have **Connect extension** hand the code to the extension directly, give the dashboard the extension's ID:
+
+1. Copy the extension's ID from `chrome://extensions`
+2. Add it to `apps/frontend/.env.local`:
+   ```bash
+   VITE_EXTENSION_ID=<extension-id>
+   ```
+3. Reload the dashboard (Vite restarts itself when an `.env` file changes)
+
+An unpacked extension's ID is derived from the folder it was loaded from, so it changes on another machine or checkout. Set it again whenever you load the extension from a new path. The dashboard origin must also be listed under `externally_connectable` in `apps/extension/manifest.json` (`http://localhost:5173` and the production domain already are). If the ID is missing or wrong, the dashboard falls back to the pairing code.
+
+The backend and dashboard URLs need no setup with one-click pairing. The dashboard sends its own origin as the backend URL (`ws(s)://<dashboard host>`), and its server forwards `/ws` to the backend (the Vite proxy in dev, `apps/frontend/nginx.conf` in production). The extension takes the dashboard URL from the sender origin Chrome reports. Both are saved in the extension's local storage.
+
+With the pasted pairing code, the popup's URL fields default to `ws://localhost:8000` and `http://localhost:5173`, which is right for local dev. For production, enter `wss://interviewpilot.duckdns.org` and `https://interviewpilot.duckdns.org` once per Chrome profile; they are remembered after the first connect.
+
 ---
 
 ## Environment Variables
@@ -172,6 +189,7 @@ Then in Chrome:
 | `FRONTEND_URL` | Frontend base URL | No | `http://localhost:5173` |
 | `ENVIRONMENT` | Runtime environment | No | `development` |
 | `LOG_LEVEL` | Logging verbosity | No | `DEBUG` |
+| `VITE_EXTENSION_ID` | Chrome extension ID for one-click pairing (frontend, `apps/frontend/.env.local`; see [One-click pairing](#one-click-pairing)) | No | — |
 
 ---
 

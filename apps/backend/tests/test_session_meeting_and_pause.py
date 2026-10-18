@@ -246,3 +246,34 @@ async def test_pause_and_resume_tell_the_dashboard_once(world, monkeypatch) -> N
         (sid, {"type": "phase_change", "payload": {"status": "paused"}}),
         (sid, {"type": "phase_change", "payload": {"status": "live"}}),
     ]
+
+
+@pytestmark_db
+async def test_ending_twice_returns_the_same_report(world, monkeypatch) -> None:
+    """A second End (a double click while the first was slow) must not start a second report."""
+    import src.api.sessions as sessions_api
+    from sqlalchemy import func, select
+
+    async def no_generation(**_kwargs) -> None:  # the LLM report run isn't under test
+        return None
+
+    monkeypatch.setattr(sessions_api, "_generate_report_background", no_generation)
+    # No app startup under ASGITransport, so no checkpointer: this session has no checkpoints anyway.
+    import src.workers.langgraph_session as langgraph_session
+
+    async def no_checkpoint(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(langgraph_session, "load_checkpointed_session", no_checkpoint)
+    monkeypatch.setattr(langgraph_session, "delete_session_threads", no_checkpoint)
+    sid = await world["add_session"]("live")
+
+    first = await _call("POST", f"/api/sessions/{sid}/end", world["owner_token"])
+    second = await _call("POST", f"/api/sessions/{sid}/end", world["owner_token"])
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["report_id"]
+    assert second.json() == first.json()
+    async with world["factory"]() as db:
+        count = await db.scalar(select(func.count()).select_from(Report).where(Report.session_id == uuid.UUID(sid)))
+    assert count == 1

@@ -50,6 +50,7 @@ interface TranscriptEntry {
 interface ReportData {
   id: string;
   session_id: string;
+  meeting_url?: string | null;
   status: string;
   assessment: {
     recommendation: string;
@@ -195,6 +196,11 @@ export function ReportPage() {
           </button>
         </div>
         <h1>Interview Report</h1>
+        {report.meeting_url && (
+          <a className="report-page__meeting" href={report.meeting_url} target="_blank" rel="noreferrer">
+            {report.meeting_url.replace('https://', '')}
+          </a>
+        )}
         <button className="btn btn--secondary report-page__export" onClick={handleExportPdf}>
           Export PDF
         </button>

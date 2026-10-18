@@ -25,6 +25,7 @@ from src.schemas.hint import AcknowledgeHintRequest, TriggerHintRequest
 from src.schemas.session import (
     CreateSessionRequest,
     SessionStatus,
+    UpdateMeetingUrlRequest,
 )
 from src.services.access_control import Principal
 from src.services.hint_service import HintService
@@ -67,6 +68,7 @@ async def start_session(
         candidate_name=req.candidate_name,
         candidate_email=req.candidate_email,
         resume_data=req.resume_data,
+        meeting_url=req.meeting_url,
     )
     await session_repo.create(db_session)
     await db.commit()
@@ -89,6 +91,7 @@ async def get_session(
         "duration_minutes": db_session.duration_minutes,
         "focus_areas": db_session.focus_areas,
         "job_description": db_session.job_description,
+        "meeting_url": db_session.meeting_url,
         "plan_id": None,
         "started_at": db_session.started_at.isoformat() if db_session.started_at else None,
         "ended_at": db_session.ended_at.isoformat() if db_session.ended_at else None,
@@ -264,6 +267,19 @@ async def register_plan_hints(
         service.activate_question(first_question_id)
 
     return {"registered_questions": count}
+
+
+@router.patch("/{session_id}/meeting-url")
+async def update_meeting_url(
+    req: UpdateMeetingUrlRequest,
+    db: AsyncSession = Depends(get_db),
+    db_session: InterviewSession = Depends(authorized_session),
+) -> dict:
+    """Set or clear the session's Google Meet link."""
+    db_session.meeting_url = req.meeting_url
+    await SessionRepository(db).update(db_session)
+    await db.commit()
+    return {"meeting_url": db_session.meeting_url}
 
 
 @router.patch("/{session_id}/pause")

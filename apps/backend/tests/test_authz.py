@@ -199,6 +199,7 @@ async def test_session_scoped_routes(world, principal, method, template, body) -
     [
         ("POST", "/api/sessions/{s}/hints/next", {"question_id": "q"}),
         ("PATCH", "/api/sessions/{s}/pause", None),
+        ("PATCH", "/api/sessions/{s}/meeting-url", {"meeting_url": None}),
         ("POST", "/api/sessions/{s}/go-live", None),
         ("POST", "/api/sessions/{s}/end", None),
         ("DELETE", "/api/sessions/{s}", None),

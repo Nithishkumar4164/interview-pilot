@@ -1,12 +1,16 @@
 /**
- * Hands the Chrome extension a credential for this one session.
+ * Hands the Chrome extension a credential for this one session, and the
+ * session's Google Meet link.
  *
  * With VITE_EXTENSION_ID set, the pairing token is sent straight to the
- * extension (it lists this origin under externally_connectable). Otherwise
- * the token is shown as a pairing code to paste into the extension popup.
+ * extension (it lists this origin under externally_connectable), along with
+ * the Meet link: the extension opens that tab and tracks it for the session.
+ * Otherwise the token is shown as a pairing code to paste into the extension
+ * popup.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
+import { MEETING_URL_HINT, normalizeMeetingUrl } from '@/lib/meeting';
 
 interface ChromeRuntime {
   sendMessage: (extensionId: string, message: unknown, callback: (response: unknown) => void) => void;
@@ -35,16 +39,54 @@ function sendToExtension(extensionId: string, message: unknown): Promise<boolean
 type State =
   | { kind: 'idle' }
   | { kind: 'working' }
-  | { kind: 'sent' }
+  | { kind: 'sent'; openedMeeting: boolean }
   | { kind: 'code'; code: string; copied: boolean }
   | { kind: 'error'; message: string };
 
 export function ConnectExtension({ sessionId }: { sessionId: string }) {
   const [state, setState] = useState<State>({ kind: 'idle' });
+  // The saved link, and what is in the field.
+  const [savedMeetingUrl, setSavedMeetingUrl] = useState<string | null>(null);
+  const [meetingUrl, setMeetingUrl] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getSession(sessionId)
+      .then((session) => {
+        const saved = typeof session.meeting_url === 'string' ? session.meeting_url : null;
+        if (cancelled) return;
+        setSavedMeetingUrl(saved);
+        setMeetingUrl(saved ?? '');
+      })
+      .catch(() => {
+        // The field stays empty; the link can still be typed in.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  /** Save the field if it changed; the link to hand the extension, or undefined if it isn't valid. */
+  const saveMeetingUrl = async (): Promise<string | null | undefined> => {
+    const normalized = normalizeMeetingUrl(meetingUrl);
+    if (normalized === undefined) return undefined;
+    if (normalized !== savedMeetingUrl) {
+      const { meeting_url } = await api.updateMeetingUrl(sessionId, normalized);
+      setSavedMeetingUrl(meeting_url);
+    }
+    setMeetingUrl(normalized ?? '');
+    return normalized;
+  };
 
   const connect = async () => {
     setState({ kind: 'working' });
     try {
+      const link = await saveMeetingUrl();
+      if (link === undefined) {
+        setState({ kind: 'error', message: MEETING_URL_HINT });
+        return;
+      }
       const { pairing_token } = await api.createPairingToken(sessionId);
       const extensionId = import.meta.env.VITE_EXTENSION_ID;
       if (extensionId) {
@@ -54,9 +96,10 @@ export function ConnectExtension({ sessionId }: { sessionId: string }) {
           pairingToken: pairing_token,
           backendUrl: wsBase,
           frontendUrl: location.origin,
+          meetingUrl: link,
         });
         if (delivered) {
-          setState({ kind: 'sent' });
+          setState({ kind: 'sent', openedMeeting: !!link });
           return;
         }
       }
@@ -68,10 +111,24 @@ export function ConnectExtension({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="connect-extension">
+      <input
+        className="connect-extension__meeting"
+        type="url"
+        placeholder="Google Meet link (optional)"
+        aria-label="Google Meet link"
+        value={meetingUrl}
+        onChange={(e) => setMeetingUrl(e.target.value)}
+      />
       <button className="btn btn--secondary btn--small" onClick={connect} disabled={state.kind === 'working'}>
         {state.kind === 'working' ? 'Connecting…' : 'Connect extension'}
       </button>
-      {state.kind === 'sent' && <span className="connect-extension__status">Extension connected to this session.</span>}
+      {state.kind === 'sent' && (
+        <span className="connect-extension__status">
+          {state.openedMeeting
+            ? 'Extension connected. On the Meet tab, press Alt+Shift+I (Option+Shift+I on Mac) to start capture.'
+            : 'Extension connected to this session.'}
+        </span>
+      )}
       {state.kind === 'error' && (
         <span className="connect-extension__status connect-extension__status--error" role="alert">
           {state.message}

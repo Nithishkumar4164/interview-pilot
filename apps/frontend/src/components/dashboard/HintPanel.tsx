@@ -11,6 +11,8 @@
  */
 import { useState } from 'react';
 import { useHintStore, type HintSuggestion, type RuntimeHintEntry, type RegenerationReason } from '@/stores/hint-store';
+import { PanelTitle } from './PanelTitle';
+import { usePanelCollapsed } from '@/stores/panel-store';
 
 const DIRECTNESS_LABELS: Record<string, string> = {
   subtle: 'Subtle',
@@ -38,12 +40,13 @@ export function HintPanel({
   onRegenerateRuntimeHint,
   onAcknowledgeRuntimeHint,
 }: HintPanelProps) {
+  const collapsed = usePanelCollapsed('hints');
   const { activeRuntimeHint, runtimeHintHistory, runtimeHintLoading, suggestions, removeSuggestion } = useHintStore();
 
   return (
-    <section className="hint-panel" aria-label="Smart Hints">
-      <div className="hint-panel__header">
-        <h3>Smart Hints</h3>
+    <section className={`hint-panel${collapsed ? ' is-collapsed' : ''}`} aria-label="Smart Hints">
+      <div className="hint-panel__header panel-header">
+        <PanelTitle id="hints">Smart Hints</PanelTitle>
       </div>
 
       {suggestions.map((suggestion) => (

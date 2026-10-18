@@ -12,6 +12,8 @@ import { useAnalysisStore, type CodeRatingResult } from '@/stores/analysis-store
 import type { QuestionHint } from '@/stores/plan-store';
 import type { ApproachPattern } from '@/stores/plan-store';
 import { QuestionTimer } from './QuestionTimer';
+import { PanelTitle } from './PanelTitle';
+import { usePanelCollapsed } from '@/stores/panel-store';
 
 const LEVEL_LABELS: Record<number, string> = {
   1: 'Nudge',
@@ -34,6 +36,7 @@ export function InterviewPlanPanel({
   onAcknowledgeHint,
   onRateCode,
 }: InterviewPlanPanelProps) {
+  const collapsed = usePanelCollapsed('plan');
   const plan = usePlanStore((s) => s.plan);
   const currentQuestionIndex = useSessionStore((s) => s.currentQuestionIndex);
   const contextReloading = useSessionStore((s) => s.contextReloading);
@@ -75,14 +78,20 @@ export function InterviewPlanPanel({
 
   if (!plan || allQuestions.length === 0) {
     return (
-      <div className="interview-plan-panel interview-plan-panel--empty">
+      <div className={`interview-plan-panel interview-plan-panel--empty${collapsed ? ' is-collapsed' : ''}`}>
+        <div className="interview-plan-panel__header panel-header">
+          <PanelTitle id="plan">Interview Plan</PanelTitle>
+        </div>
         <p className="interview-plan-panel__placeholder">No interview plan loaded.</p>
       </div>
     );
   }
 
   return (
-    <section className="interview-plan-panel" aria-label="Interview Plan">
+    <section className={`interview-plan-panel${collapsed ? ' is-collapsed' : ''}`} aria-label="Interview Plan">
+      <div className="interview-plan-panel__header panel-header">
+        <PanelTitle id="plan">Interview Plan</PanelTitle>
+      </div>
       {/* Phase Progress Bar — click a phase to jump to its first question */}
       <PhaseProgressBar
         phases={plan.phases}

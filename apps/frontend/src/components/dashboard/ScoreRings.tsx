@@ -4,6 +4,8 @@
  * Problem Solving, Communication, Code Quality, Hint Responsiveness
  */
 import { useAnalysisStore } from '@/stores/analysis-store';
+import { PanelTitle } from './PanelTitle';
+import { usePanelCollapsed } from '@/stores/panel-store';
 
 interface ScoreRingProps {
   label: string;
@@ -58,9 +60,14 @@ function ScoreRing({ label, score, maxScore = 5, color }: ScoreRingProps) {
 
 export function ScoreRings() {
   const { scores } = useAnalysisStore();
+  const collapsed = usePanelCollapsed('scores');
 
   return (
-    <div className="score-rings" aria-label="Performance Scores">
+    <section className={`score-rings-panel${collapsed ? ' is-collapsed' : ''}`} aria-label="Performance Scores">
+      <div className="score-rings-panel__header panel-header">
+        <PanelTitle id="scores">Scores</PanelTitle>
+      </div>
+      <div className="score-rings">
       <ScoreRing
         label="Problem Solving"
         score={scores.problemSolving}
@@ -81,6 +88,7 @@ export function ScoreRings() {
         score={scores.hintResponsiveness}
         color="var(--color-score-hint)"
       />
-    </div>
+      </div>
+    </section>
   );
 }

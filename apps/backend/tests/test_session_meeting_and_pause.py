@@ -1,4 +1,5 @@
-"""Meeting link on the session, and idempotent pause/resume, against the real app and Postgres.
+"""Session creation (candidate details, meeting link) and idempotent pause/resume,
+against the real app and Postgres.
 
 The extension pauses a session when its Meet tab closes and resumes it when
 capture restarts, using the session's pairing token, so both calls must be
@@ -93,7 +94,13 @@ async def world(monkeypatch):
 
     async def add_session(status: str, **fields) -> str:
         s = InterviewSession(
-            id=uuid.uuid4(), user_id=owner.id, status=status, level="sde2", duration_minutes=30, focus_areas=[], **fields
+            id=uuid.uuid4(),
+            user_id=owner.id,
+            status=status,
+            level="sde2",
+            duration_minutes=30,
+            focus_areas=[],
+            **fields,
         )
         async with factory() as db:
             db.add(s)
@@ -133,7 +140,12 @@ async def test_meeting_link_is_saved_on_create_and_returned(world) -> None:
         "POST",
         "/api/sessions/start",
         world["owner_token"],
-        {"level": "sde2", "duration_minutes": 30, "focus_areas": [], "meeting_url": "meet.google.com/abc-defg-hij?pli=1"},
+        {
+            "level": "sde2",
+            "duration_minutes": 30,
+            "focus_areas": [],
+            "meeting_url": "meet.google.com/abc-defg-hij?pli=1",
+        },
     )
     assert resp.status_code == 200
     sid = resp.json()["session_id"]
@@ -145,6 +157,67 @@ async def test_meeting_link_is_saved_on_create_and_returned(world) -> None:
     listed = await _call("GET", "/api/history/sessions", world["owner_token"])
     row = next(s for s in listed.json()["sessions"] if s["id"] == sid)
     assert row["meeting_url"] == "https://meet.google.com/abc-defg-hij"
+
+
+@pytestmark_db
+async def test_candidate_details_are_saved_and_returned(world) -> None:
+    """The dashboard sends the details prefilled from the resume, as edited."""
+    resp = await _call(
+        "POST",
+        "/api/sessions/start",
+        world["owner_token"],
+        {
+            "level": "sde2",
+            "duration_minutes": 30,
+            "focus_areas": ["coding"],
+            "candidate_name": "  Jane Doe ",
+            "candidate_email": "jane@example.com",
+            "candidate_phone": "+1 555 0100",
+            "candidate_role": "Backend Engineer",
+            "resume_data": {"name": "Jane Doe", "email": "jane@example.com"},
+        },
+    )
+    assert resp.status_code == 200
+    sid = resp.json()["session_id"]
+    world["created"].append(uuid.UUID(sid))
+
+    got = (await _call("GET", f"/api/sessions/{sid}", world["owner_token"])).json()
+    assert got["candidate_name"] == "Jane Doe"
+    assert got["candidate_email"] == "jane@example.com"
+    assert got["candidate_phone"] == "+1 555 0100"
+    assert got["candidate_role"] == "Backend Engineer"
+    assert got["status"] == "planning"
+
+    listed = await _call("GET", "/api/history/sessions", world["owner_token"])
+    row = next(s for s in listed.json()["sessions"] if s["id"] == sid)
+    assert row["candidate_role"] == "Backend Engineer"
+
+
+@pytestmark_db
+async def test_guest_session_has_no_candidate_data_and_goes_live_without_a_plan(world) -> None:
+    resp = await _call(
+        "POST",
+        "/api/sessions/start",
+        world["owner_token"],
+        {
+            "level": "sde2",
+            "duration_minutes": 30,
+            "focus_areas": ["coding"],
+            "candidate_name": "",
+            "candidate_email": " ",
+        },
+    )
+    sid = resp.json()["session_id"]
+    world["created"].append(uuid.UUID(sid))
+
+    live = await _call("POST", f"/api/sessions/{sid}/go-live", world["owner_token"])
+    assert live.status_code == 200
+    assert await world["status_of"](sid) == "live"
+
+    got = (await _call("GET", f"/api/sessions/{sid}", world["owner_token"])).json()
+    assert [got[k] for k in ("candidate_name", "candidate_email", "candidate_phone", "candidate_role")] == [None] * 4
+    state = (await _call("GET", f"/api/sessions/{sid}/state", world["owner_token"])).json()
+    assert state["plan"] is None
 
 
 @pytestmark_db
@@ -251,8 +324,9 @@ async def test_pause_and_resume_tell_the_dashboard_once(world, monkeypatch) -> N
 @pytestmark_db
 async def test_ending_twice_returns_the_same_report(world, monkeypatch) -> None:
     """A second End (a double click while the first was slow) must not start a second report."""
-    import src.api.sessions as sessions_api
     from sqlalchemy import func, select
+
+    import src.api.sessions as sessions_api
 
     async def no_generation(**_kwargs) -> None:  # the LLM report run isn't under test
         return None

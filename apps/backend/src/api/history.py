@@ -85,6 +85,7 @@ async def list_sessions(
                 "ended_at": s.ended_at.isoformat() if s.ended_at else None,
                 "candidate_name": s.candidate_name,
                 "candidate_email": s.candidate_email,
+                "candidate_role": s.candidate_role,
                 "meeting_url": s.meeting_url,
                 "created_at": s.created_at.isoformat() if s.created_at else "",
                 **_extract_report_fields(s.reports),

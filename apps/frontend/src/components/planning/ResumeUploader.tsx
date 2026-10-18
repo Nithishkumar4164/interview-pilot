@@ -9,7 +9,7 @@ import { usePlanStore } from '@/stores/plan-store';
 import * as api from '@/api/client';
 
 interface ResumeUploaderProps {
-  onUploadComplete: (referenceId: string, data: Record<string, unknown>) => void;
+  onUploadComplete?: (referenceId: string, data: Record<string, unknown>) => void;
 }
 
 const ALLOWED_TYPES = [
@@ -66,7 +66,7 @@ export function ResumeUploader({ onUploadComplete }: ResumeUploaderProps) {
               const payload = JSON.parse(data);
               finished = true;
               setResumeCompleted(payload.structured_data);
-              onUploadComplete(uploadResult.reference_id, payload.structured_data);
+              onUploadComplete?.(uploadResult.reference_id, payload.structured_data);
               controller.abort();
             } else if (event === 'error') {
               const payload = JSON.parse(data);

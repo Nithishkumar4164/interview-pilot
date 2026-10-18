@@ -40,6 +40,9 @@ class _ModelWithAnswersOfLength:
     async def analyze(self, context: AnalysisContext, config: LLMConfig) -> StructuredOutput:
         if context.task_type == TaskType.HINT_GENERATION:
             answer, tokens = {"hints": HINTS}, 200
+        elif context.task_type == TaskType.PLAN_TOPICS:
+            phases = json.loads(context.user_content)["phases"]
+            answer, tokens = {"phases": [{"phase": p["phase"], "topic": f"{p['phase']} topic"} for p in phases]}, 150
         else:
             categories = json.loads(context.user_content)["categories"]
             answer = {"questions": [{"text": f"A {categories[0]} question", "category": categories[0]}]}
@@ -116,3 +119,83 @@ async def test_every_phase_gets_questions_at_the_measured_answer_length(session_
     assert response.status_code == 200, response.text
     phases = response.json()["phases"]
     assert phases and all(p["questions"] for p in phases), [(p["phase"], len(p["questions"])) for p in phases]
+
+
+class _ModelThatRecordsPrompts:
+    """Answers topic planning (unless ``topics`` is None) and question generation, keeping every request."""
+
+    def __init__(self, topics: dict[str, str] | None) -> None:
+        self.topics = topics
+        self.requests: list[tuple[TaskType, dict]] = []
+
+    async def analyze(self, context: AnalysisContext, config: LLMConfig) -> StructuredOutput:
+        request = json.loads(context.user_content)
+        self.requests.append((context.task_type, request))
+        if context.task_type == TaskType.PLAN_TOPICS:
+            if self.topics is None:
+                return StructuredOutput(content="not json", parsed=None)
+            answer: dict = {"phases": [{"phase": p, "topic": t} for p, t in self.topics.items()]}
+        elif context.task_type == TaskType.HINT_GENERATION:
+            answer = {"hints": HINTS}
+        else:
+            answer = {"questions": [{"text": f"A {request['categories'][0]} question", "hints": HINTS}]}
+        return StructuredOutput(content=json.dumps(answer), parsed=answer)
+
+    def of(self, task_type: TaskType) -> list[dict]:
+        return [r for t, r in self.requests if t == task_type]
+
+
+async def _create_plan(session_id: str, model: _ModelThatRecordsPrompts, monkeypatch) -> list[dict]:
+    from src.api import plans
+    from src.main import app
+    from src.services.plan_service import PlanService
+
+    monkeypatch.setattr(plans, "_get_plan_service", lambda: PlanService(llm=model))  # type: ignore[arg-type]
+    request = {
+        "session_id": session_id,
+        "level": "sde2",
+        "duration_minutes": 60,
+        "focus_areas": ["coding", "aptitude", "dsa", "api_design"],
+        "resume_data": {"key_projects": [{"name": "CBDC payments", "technologies": ["Go", "Kafka"]}]},
+    }
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/plans/create", json=request)
+    assert response.status_code == 200, response.text
+    return response.json()["phases"]
+
+
+async def test_each_phase_is_written_to_its_own_topic_and_told_the_others(session_id: str, monkeypatch) -> None:
+    """Phases were generated in parallel with identical inputs, so all three could ask about the same thing."""
+    topics = {
+        "coding": "Merge overlapping time intervals",
+        "aptitude": "Probability of a hash collision",
+        "system_design": "A notification fan-out service",
+    }
+    model = _ModelThatRecordsPrompts(topics)
+
+    phases = await _create_plan(session_id, model, monkeypatch)
+
+    assert all(p["questions"] for p in phases)
+    [topic_request] = model.of(TaskType.PLAN_TOPICS)
+    assert topic_request["phases"] == [
+        {"phase": "coding", "focus_areas": ["coding", "dsa"]},
+        {"phase": "aptitude", "focus_areas": ["aptitude"]},
+        {"phase": "system_design", "focus_areas": ["api_design"]},
+    ]
+    question_requests = {r["categories"][0]: r for r in model.of(TaskType.QUESTION_GENERATION)}
+    assert set(question_requests) == set(topics)
+    for phase, request in question_requests.items():
+        assert request["assigned_topic"] == topics[phase]
+        assert sorted(request["topics_covered_by_other_phases"]) == sorted(t for p, t in topics.items() if p != phase)
+    assert question_requests["aptitude"]["focus_areas"] == ["aptitude"]
+    assert question_requests["system_design"]["focus_areas"] == ["api_design"]
+
+
+async def test_plan_is_still_generated_when_topic_planning_fails(session_id: str, monkeypatch) -> None:
+    model = _ModelThatRecordsPrompts(topics=None)
+
+    phases = await _create_plan(session_id, model, monkeypatch)
+
+    assert [p["phase"] for p in phases] == ["coding", "aptitude", "system_design"]
+    assert all(p["questions"] for p in phases)
+    assert all("assigned_topic" not in r for r in model.of(TaskType.QUESTION_GENERATION))

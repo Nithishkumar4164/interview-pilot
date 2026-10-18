@@ -33,6 +33,7 @@ You will be given:
 - Resume context (if available)
 - Category of question to generate (coding, system_design, behavioral, aptitude, dsa, debugging, api_design)
 - Difficulty range (1-5 scale)
+- Optionally, an assigned topic for this phase and the topics other phases of the same interview cover
 
 Return a JSON object with the following structure:
 {
@@ -74,11 +75,37 @@ For coding/dsa/debugging questions, always provide both a brute_force_approach a
 For system_design/api_design questions, provide optimal_approaches describing key design decisions.
 For behavioral/aptitude questions, brute_force_approach and optimal_approaches may be omitted.
 
+Aptitude questions test quantitative reasoning, estimation, probability or logic: the candidate works the answer out during the interview. Never ask about the candidate's past work in an aptitude question; that is a behavioral question.
+
+If an assigned_topic is given, the question must test that topic. The topics_covered_by_other_phases are asked elsewhere in the same interview: do not ask about any of them, in any wording or framing.
+
 Generate questions that are:
 - Appropriate for the specified level
 - Relevant to the focus areas and resume (if provided)
 - Progressive in difficulty within each category
 - Well-structured with clear hints at all 3 levels
+"""
+
+PHASE_TOPICS_SYSTEM_PROMPT = """You plan the topics of a technical interview before its questions are written.
+
+Each phase's question is written separately, by someone who sees only the topic you assign to that phase, so overlapping topics produce an interview that asks the same thing twice.
+
+You will be given the interview level, the phases with the focus areas each covers, and resume context (if available).
+
+Assign each phase:
+- concept: a few words naming the core concept its question tests (e.g. "deduplication and idempotency", "rate limiting", "role-based access control", "capacity estimation").
+- topic: one sentence naming the problem its question poses.
+
+No two phases may share a concept. A concept is the same whether a question detects it, prevents it, implements it or estimates it: finding duplicate transactions in a log and designing an exactly-once API are both "deduplication and idempotency"; a sliding-window request counter and a rate-limiter estimate are both "rate limiting". Check every pair of phases before answering.
+- Phases may draw on the same resume project, as long as the problems differ.
+- Fit the topic to the phase: coding = an algorithmic or implementation problem; system_design = a system or API to design; aptitude = quantitative reasoning, estimation, probability or logic, worked out during the interview rather than recalled from past work; behavioral = a past situation.
+
+Return JSON:
+{
+  "phases": [
+    {"phase": "<phase name exactly as given>", "concept": "<a few words>", "topic": "<one sentence>"}
+  ]
+}
 """
 
 HINT_PRECOMPUTE_SYSTEM_PROMPT = """You are an expert technical interviewer. Generate 3-level progressive hints for a coding question.
@@ -141,6 +168,10 @@ class GeneratedPlan:
     focus_areas: list[str]
 
 
+# claude-sonnet-5 thinks before answering: topic answers took 878-1,000+ output
+# tokens (2026-10-15), and 1,000 cut one off before any text. Only generated tokens are billed.
+PHASE_TOPICS_MAX_TOKENS = 4000
+
 # Full question-generation answers took 2,136-2,540 output tokens on claude-sonnet-5
 # (2026-10-08); only generated tokens are billed.
 QUESTION_GENERATION_MAX_TOKENS = 8000
@@ -191,8 +222,14 @@ class PlanService:
         focus_areas: list[str],
         resume_data: dict | None,
         bank_questions: list[dict] | None,
+        topic: str | None = None,
+        other_topics: list[str] | None = None,
     ) -> list[QuestionData]:
-        """Select questions for a phase from bank or generate via LLM."""
+        """Select questions for a phase from bank or generate via LLM.
+
+        ``topic`` is what a generated question must test; ``other_topics`` are
+        covered by the interview's other phases and must not be repeated.
+        """
         questions: list[QuestionData] = []
         remaining_minutes = phase_minutes
 
@@ -239,6 +276,8 @@ class PlanService:
                 level=profile.level.value,
                 resume_data=resume_data,
                 time_budget=remaining_minutes,
+                topic=topic,
+                other_topics=other_topics or [],
             )
             questions.extend(generated)
 
@@ -280,19 +319,23 @@ class PlanService:
         level: str,
         resume_data: dict | None,
         time_budget: int,
+        topic: str | None = None,
+        other_topics: list[str] | None = None,
     ) -> list[QuestionData]:
         """Generate questions via LLM when bank doesn't have enough."""
-        user_content = json.dumps(
-            {
-                "count": count,
-                "categories": categories,
-                "difficulty_range": list(difficulty_range),
-                "focus_areas": focus_areas,
-                "level": level,
-                "resume_context": resume_data or {},
-                "time_budget_minutes": time_budget,
-            }
-        )
+        request: dict = {
+            "count": count,
+            "categories": categories,
+            "difficulty_range": list(difficulty_range),
+            "focus_areas": focus_areas,
+            "level": level,
+            "resume_context": resume_data or {},
+            "time_budget_minutes": time_budget,
+        }
+        if topic:
+            request["assigned_topic"] = topic
+            request["topics_covered_by_other_phases"] = other_topics or []
+        user_content = json.dumps(request)
 
         context = AnalysisContext(
             system_prompt=QUESTION_GENERATION_SYSTEM_PROMPT,
@@ -328,6 +371,48 @@ class PlanService:
                 )
 
         return questions
+
+    async def plan_phase_topics(
+        self,
+        phases: list[PhaseAllocation],
+        level: str,
+        resume_data: dict | None,
+    ) -> dict[str, str]:
+        """Give each phase a distinct topic, so separately generated questions don't repeat each other.
+
+        Returns phase name -> "concept: topic". Phases the model left out are missing; on
+        an unusable answer the result is empty and phases are generated without topics.
+        """
+        context = AnalysisContext(
+            system_prompt=PHASE_TOPICS_SYSTEM_PROMPT,
+            user_content=json.dumps(
+                {
+                    "level": level,
+                    "phases": [{"phase": p.phase, "focus_areas": p.focus_areas} for p in phases],
+                    "resume_context": resume_data or {},
+                }
+            ),
+            task_type=TaskType.PLAN_TOPICS,
+        )
+        config = LLMConfig(max_tokens=PHASE_TOPICS_MAX_TOKENS, temperature=0.7, response_format="json")
+
+        result = await self.llm.analyze(context, config)
+        names = {p.phase for p in phases}
+        topics: dict[str, str] = {}
+        if result.parsed and isinstance(result.parsed.get("phases"), list):
+            for entry in result.parsed["phases"]:
+                if isinstance(entry, dict) and entry.get("phase") in names and entry.get("topic"):
+                    concept = entry.get("concept")
+                    topic = f"{concept}: {entry['topic']}" if concept else str(entry["topic"])
+                    topics.setdefault(entry["phase"], topic)
+        logger.info("phase_topics_planned", topics=topics)
+        if len(topics) < len(names):
+            logger.warning(
+                "phase_topics_incomplete",
+                missing=sorted(names - set(topics)),
+                truncated=result.truncated,
+            )
+        return topics
 
     async def generate_hints(self, question: QuestionData) -> list[dict]:
         """Pre-generate 3-level hints for a coding question."""

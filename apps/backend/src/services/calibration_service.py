@@ -37,6 +37,8 @@ class PhaseAllocation:
     categories: list[str] = field(default_factory=list)
     min_questions: int = 1
     max_questions: int = 3
+    # The interviewer's focus areas this phase covers; empty for a profile's default phases.
+    focus_areas: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -246,7 +248,7 @@ def build_phases_from_focus_areas(focus_areas: list[str]) -> list[PhaseAllocatio
 
     fraction = 1.0 / len(seen) if seen else 1.0
     phases = []
-    for section, _areas in seen.items():
+    for section, areas in seen.items():
         defaults = SECTION_DEFAULTS.get(section, {"categories": [section], "min_q": 1, "max_q": 2})
         phases.append(
             PhaseAllocation(
@@ -255,6 +257,7 @@ def build_phases_from_focus_areas(focus_areas: list[str]) -> list[PhaseAllocatio
                 categories=defaults["categories"],
                 min_questions=defaults["min_q"],
                 max_questions=defaults["max_q"],
+                focus_areas=areas,
             )
         )
     return phases

@@ -46,6 +46,10 @@ async def code_websocket(websocket: WebSocket, session_id: str) -> None:
     try:
         while True:
             data = await websocket.receive()
+            # Raw receive() reports a close as a message rather than raising, and
+            # calling it again after that raises RuntimeError.
+            if data["type"] == "websocket.disconnect":
+                raise WebSocketDisconnect(data.get("code", 1000))
 
             if active_pipeline(session_id) is not pipeline:
                 # The session ended (end-session closed its pipeline) while this socket was open.

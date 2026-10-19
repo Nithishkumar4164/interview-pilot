@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useSessionStore } from '@/stores/session-store';
 import { usePlanStore } from '@/stores/plan-store';
 import { useOfflineStore } from '@/stores/offline-store';
+import type { MeetControlAction, MeetControlsState } from '@/hooks/useExtensionChannel';
 
 function formatTime(ms: number): string {
   const totalSecs = Math.floor(ms / 1000);
@@ -22,9 +23,20 @@ interface SessionBarProps {
   onEnd: () => Promise<void> | void;
   onToggleVideo: () => void;
   videoActive: boolean;
+  /** The session's Meet tab, as the extension reads it; null before it has reported. */
+  meetControls?: MeetControlsState | null;
+  onMeetControl?: (action: MeetControlAction) => void;
 }
 
-export function SessionBar({ onPause, onResume, onEnd, onToggleVideo, videoActive }: SessionBarProps) {
+export function SessionBar({
+  onPause,
+  onResume,
+  onEnd,
+  onToggleVideo,
+  videoActive,
+  meetControls = null,
+  onMeetControl,
+}: SessionBarProps) {
   const { status, level, elapsedMs, durationMinutes, currentQuestionIndex, totalQuestions, currentPhaseIndex } = useSessionStore();
   const plan = usePlanStore((s) => s.plan);
   const { wsStatus, degradationLevel, providerStatuses } = useOfflineStore();
@@ -86,6 +98,10 @@ export function SessionBar({ onPause, onResume, onEnd, onToggleVideo, videoActiv
       </div>
 
       <div className="session-bar__right">
+        {meetControls?.available && onMeetControl && (
+          <MeetControls controls={meetControls} onControl={onMeetControl} />
+        )}
+
         {Object.entries(providerStatuses).map(([provider, s]) => (
           <span key={provider} className={`provider-badge provider-badge--${s}`}>
             {provider}
@@ -121,6 +137,56 @@ export function SessionBar({ onPause, onResume, onEnd, onToggleVideo, videoActiv
         )}
       </div>
     </header>
+  );
+}
+
+/** Mute, camera and present for the Meet tab. Meet's own state is shown; the buttons click Meet's buttons. */
+function MeetControls({
+  controls,
+  onControl,
+}: {
+  controls: MeetControlsState;
+  onControl: (action: MeetControlAction) => void;
+}) {
+  return (
+    <div className="meet-controls" role="group" aria-label="Meeting controls">
+      {controls.mic && (
+        <button
+          type="button"
+          className={`btn btn--secondary btn--sm meet-controls__button ${controls.mic === 'off' ? 'meet-controls__button--off' : ''}`}
+          aria-pressed={controls.mic === 'off'}
+          title={controls.mic === 'on' ? 'Mute your microphone in Meet' : 'Unmute your microphone in Meet'}
+          onClick={() => onControl('toggle-mic')}
+        >
+          {controls.mic === 'on' ? 'Mute' : 'Unmute'}
+        </button>
+      )}
+      {controls.camera && (
+        <button
+          type="button"
+          className={`btn btn--secondary btn--sm meet-controls__button ${controls.camera === 'off' ? 'meet-controls__button--off' : ''}`}
+          aria-pressed={controls.camera === 'off'}
+          title={controls.camera === 'on' ? 'Turn your camera off in Meet' : 'Turn your camera on in Meet'}
+          onClick={() => onControl('toggle-camera')}
+        >
+          {controls.camera === 'on' ? 'Camera off' : 'Camera on'}
+        </button>
+      )}
+      {(controls.canPresent || controls.presenting) && (
+        <button
+          type="button"
+          className={`btn btn--secondary btn--sm meet-controls__button ${controls.presenting ? 'meet-controls__button--live' : ''}`}
+          title={
+            controls.presenting
+              ? 'You are presenting in Meet; open Meet to stop'
+              : "Opens Meet with its Share screen button highlighted (Chrome needs that click to happen in Meet)"
+          }
+          onClick={() => onControl('present')}
+        >
+          {controls.presenting ? 'Presenting' : 'Present'}
+        </button>
+      )}
+    </div>
   );
 }
 

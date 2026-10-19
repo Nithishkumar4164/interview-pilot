@@ -44,6 +44,9 @@ importers:
       eslint:
         specifier: ^9.0.0
         version: 9.39.2
+      jsdom:
+        specifier: ^25.0.0
+        version: 25.0.1
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

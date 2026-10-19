@@ -13,9 +13,9 @@
   },
   "dependencies": {
     "@copilot/shared-types": "workspace:*",
+    "idb": "^8.0.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "idb": "^8.0.0"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.287",
@@ -23,6 +23,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.0.0",
     "eslint": "^9.0.0",
+    "jsdom": "^25.0.0",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
     "vitest": "^3.0.0"

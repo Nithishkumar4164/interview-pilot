@@ -4539,3 +4539,25 @@ ul, ol {
 .live-session__center:has(> .is-collapsed) {
   width: auto;
 }
+
+/* ======================================================================
+ * MEETING CONTROLS (session bar)
+ * Mute / camera / present for the session's Meet tab, via the extension.
+ * ====================================================================== */
+.meet-controls {
+  display: flex;
+  gap: var(--space-1);
+  padding-right: var(--space-2);
+  margin-right: var(--space-1);
+  border-right: 1px solid var(--color-border);
+}
+
+.meet-controls__button--off {
+  color: var(--color-danger);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.meet-controls__button--live {
+  color: var(--color-success);
+  border-color: var(--color-success);
+}

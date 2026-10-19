@@ -1,12 +1,15 @@
 /**
- * Meeting-tab video from the Chrome extension.
+ * The live session page's channel to the Chrome extension: meeting video and
+ * meeting controls.
  *
  * The page keeps a port open to the extension (it lists this origin under
  * externally_connectable). The extension captures the meeting tab once, for
  * audio and video, and offers the video to this page over a local WebRTC
- * connection, so the dashboard shows it without the screen-share picker.
+ * connection, so the dashboard shows it without the screen-share picker. It
+ * also reports the Meet tab's mic, camera and presenting state, and takes
+ * mute / camera / present requests back.
  */
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 interface ExtensionPort {
   onMessage: { addListener: (cb: (message: unknown) => void) => void };
@@ -19,9 +22,27 @@ interface ChromeRuntime {
   connect?: (extensionId: string, info: { name: string }) => ExtensionPort;
 }
 
+/** The Meet tab's controls, as the extension reads them from Meet. */
+export interface MeetControlsState {
+  /** Meet's call controls were found (the session's Meet tab is open). */
+  available: boolean;
+  mic: 'on' | 'off' | null;
+  camera: 'on' | 'off' | null;
+  presenting: boolean;
+  canPresent: boolean;
+}
+
+export type MeetControlAction = 'toggle-mic' | 'toggle-camera' | 'present';
+
 type ExtensionMessage =
   | { type: 'tab-video-offer'; sdp: string; sessionId: string | null }
-  | { type: 'tab-video-ended' };
+  | { type: 'tab-video-ended' }
+  | { type: 'meet-controls'; state: MeetControlsState };
+
+interface ExtensionChannelHandlers {
+  onStream: (stream: MediaStream) => void;
+  onMeetControls: (state: MeetControlsState) => void;
+}
 
 const RECONNECT_DELAY_MS = 1000;
 // No ICE servers: both ends run in this browser.
@@ -47,10 +68,14 @@ function isLive(pc: RTCPeerConnection | null): boolean {
   return !!pc && pc.connectionState !== 'failed' && pc.connectionState !== 'closed';
 }
 
-export function useExtensionVideo(sessionId: string | null, onStream: (stream: MediaStream) => void): void {
-  // The latest callback, so the port isn't reopened on every render.
-  const onStreamRef = useRef(onStream);
-  onStreamRef.current = onStream;
+export function useExtensionChannel(
+  sessionId: string | null,
+  handlers: ExtensionChannelHandlers,
+): { sendMeetControl: (action: MeetControlAction) => void } {
+  // The latest callbacks, so the port isn't reopened on every render.
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
+  const portRef = useRef<ExtensionPort | null>(null);
 
   useEffect(() => {
     const extensionId = import.meta.env.VITE_EXTENSION_ID;
@@ -75,7 +100,7 @@ export function useExtensionVideo(sessionId: string | null, onStream: (stream: M
       const peer = new RTCPeerConnection();
       pc = peer;
       peer.addEventListener('track', (event) => {
-        onStreamRef.current(event.streams[0] ?? new MediaStream([event.track]));
+        handlersRef.current.onStream(event.streams[0] ?? new MediaStream([event.track]));
       });
       peer.addEventListener('connectionstatechange', () => {
         if (peer.connectionState === 'failed' && pc === peer) closePeer();
@@ -89,6 +114,7 @@ export function useExtensionVideo(sessionId: string | null, onStream: (stream: M
     const open = () => {
       const current = connect(extensionId, { name: 'dashboard' });
       port = current;
+      portRef.current = current;
       current.onMessage.addListener((raw) => {
         const message = raw as ExtensionMessage;
         if (message.type === 'tab-video-offer' && message.sessionId === sessionId) {
@@ -97,12 +123,15 @@ export function useExtensionVideo(sessionId: string | null, onStream: (stream: M
           );
         } else if (message.type === 'tab-video-ended') {
           closePeer();
+        } else if (message.type === 'meet-controls') {
+          handlersRef.current.onMeetControls(message.state);
         }
       });
       // The extension's service worker can stop at any time; reconnecting wakes it.
       // A live video connection runs page to page and doesn't need the port.
       current.onDisconnect.addListener(() => {
         if (port === current) port = null;
+        if (portRef.current === current) portRef.current = null;
         if (!closed) retry = setTimeout(open, RECONNECT_DELAY_MS);
       });
       current.postMessage({ type: 'hello', viewerId, sessionId, wantsVideo: !isLive(pc) });
@@ -113,7 +142,15 @@ export function useExtensionVideo(sessionId: string | null, onStream: (stream: M
       closed = true;
       clearTimeout(retry);
       port?.disconnect();
+      portRef.current = null;
       closePeer();
     };
   }, [sessionId]);
+
+  const sendMeetControl = useCallback((action: MeetControlAction) => {
+    // No port (no extension, or it is reconnecting): the controls show as unavailable anyway.
+    portRef.current?.postMessage({ type: 'meet-control', action });
+  }, []);
+
+  return { sendMeetControl };
 }

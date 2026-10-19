@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     # so local runs can exercise slow calls (e.g. crash during report generation).
     mock_llm_latency_ms: int = 0
     # Provider used when no LLM keys are configured (development): "mock" or "scripted".
+    # "claude_code" runs every task on the local Claude Code login instead, even with keys
+    # set (needs the claude-code extra: `uv sync --extra claude-code`).
     dev_llm_provider: str = "mock"
 
     # Upper bound on parallel LLM calls while generating one interview plan.
@@ -105,6 +107,8 @@ class Settings(BaseSettings):
                 "INTERVIEW_PILOT_DEV_MODE=true is only allowed when "
                 "environment=development. Set dev_mode=false for prod."
             )
+        if self.dev_llm_provider == "claude_code":
+            errors.append("INTERVIEW_PILOT_DEV_LLM_PROVIDER=claude_code is only allowed when environment=development.")
         if not self.anthropic_api_key and not self.openai_api_key:
             errors.append(
                 "At least one of INTERVIEW_PILOT_ANTHROPIC_API_KEY or "

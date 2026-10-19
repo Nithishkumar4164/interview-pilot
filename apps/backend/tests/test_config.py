@@ -58,6 +58,10 @@ class TestProductionConfigValidation:
     def test_prod_accepts_openai_only(self):
         Settings(**_kwargs(anthropic_api_key="", openai_api_key="ok"))
 
+    def test_prod_rejects_the_claude_code_provider(self):
+        with pytest.raises(RuntimeError, match="DEV_LLM_PROVIDER=claude_code"):
+            Settings(**_kwargs(dev_llm_provider="claude_code"))
+
     def test_prod_rejects_missing_deepgram(self):
         with pytest.raises(RuntimeError, match="DEEPGRAM_API_KEY"):
             Settings(**_kwargs(deepgram_api_key=""))

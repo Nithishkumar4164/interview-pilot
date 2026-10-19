@@ -112,6 +112,7 @@ cp apps/backend/.env.example apps/backend/.env
 The backend reads `.env` from the directory it starts in (`apps/backend`), and every variable carries the `INTERVIEW_PILOT_` prefix. For a first run you can leave the keys empty:
 
 - **LLM:** with no Anthropic or OpenAI key, a mock provider answers every call; one key is enough to use a real model.
+  To run on your own Claude Code login instead, `uv sync --extra claude-code` and set `INTERVIEW_PILOT_DEV_LLM_PROVIDER=claude_code`. This mode is for personal local development on your own Claude account only: Anthropic's consumer terms don't allow a Claude subscription to power apps for other people, so never use it in a shared or deployed environment (the backend refuses to start with it outside `development`).
 - **Transcription:** live transcripts need `INTERVIEW_PILOT_DEEPGRAM_API_KEY`.
 - **Sign-in:** see [Signing in locally](#signing-in-locally).
 
@@ -212,7 +213,7 @@ Backend variables live in `apps/backend/.env` and are read with the `INTERVIEW_P
 | `ADMIN_EMAILS` | Users who get the admin role | — |
 | `PAIRING_TOKEN_EXPIRE_HOURS` | Lifetime of the token the dashboard hands to the extension | `6` |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | LLM providers; Anthropic is primary, OpenAI the fallback; with neither, a mock answers | — |
-| `DEV_LLM_PROVIDER` | Without keys: `mock` or `scripted` (deterministic, input-sensitive) | `mock` |
+| `DEV_LLM_PROVIDER` | Without keys: `mock` or `scripted` (deterministic, input-sensitive). `claude_code` runs every task on your local Claude Code login, keys or not (development only; `uv sync --extra claude-code`) | `mock` |
 | `DEEPGRAM_API_KEY` | Deepgram key for transcription | — |
 | `PEER_INTERVIEWER_ENABLED` | Copilot acts as a peer interviewer | `false` |
 | `AGENTIC_ROUTING_ENABLED` | Analysis chooses its own follow-ups | `false` |

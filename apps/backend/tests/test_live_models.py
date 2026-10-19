@@ -92,6 +92,33 @@ async def test_anthropic_tool_loop_round_trip() -> None:
     assert result.providers[0] == "anthropic"
 
 
+async def test_claude_code_tool_loop_round_trip() -> None:
+    """Tool use through the signed-in Claude Code CLI (no API key): call, result, answer."""
+    pytest.importorskip("claude_agent_sdk")
+    from src.llm.config import TaskProviderMapping
+    from src.llm.factory import ProviderFactory
+    from src.llm.failover import FailoverManager
+    from src.llm.health import HealthMonitor
+    from src.llm.interface import TaskType
+    from src.llm.providers.claude_code import ClaudeCodeProvider
+
+    ProviderFactory.register("claude_code", ClaudeCodeProvider)
+    fm = FailoverManager(HealthMonitor())
+    fm.update_mapping(
+        TaskProviderMapping(
+            task_type=TaskType.REPORT_CRITERION,
+            primary_provider="claude_code",
+            primary_model="claude-sonnet-5",
+            fallback_provider="claude_code",
+            fallback_model="claude-sonnet-5",
+        )
+    )
+    result, calls = await _capital_loop(fm, TaskType.REPORT_CRITERION)
+    assert [c.get("country", "").lower() for c in calls] == ["peru"]
+    assert "lima" in result.text.lower() and result.stop_reason == "end"
+    assert set(result.providers) == {"claude_code"}
+
+
 async def test_anthropic_tool_loop_fails_over_mid_conversation() -> None:
     """Primary model ID does not exist (404); every turn runs on the fallback."""
     from src.llm.config import TaskProviderMapping

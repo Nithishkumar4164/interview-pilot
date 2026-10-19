@@ -64,6 +64,10 @@ dev = [
     "httpx>=0.28.0",
     "factory-boy>=3.3.0",
 ]
+# Local development only: DEV_LLM_PROVIDER=claude_code (ships its own ~250 MB CLI).
+claude-code = [
+    "claude-agent-sdk>=0.2.168",
+]
 
 [tool.ruff]
 target-version = "py312"

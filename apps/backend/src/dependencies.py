@@ -12,9 +12,10 @@ async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
 _has_anthropic = bool(settings.anthropic_api_key)
 _has_openai = bool(settings.openai_api_key)
+_use_claude_code = settings.dev_llm_provider == "claude_code"
 
 # If no LLM keys, fall back to mock provider for development
-if not _has_anthropic and not _has_openai:
+if not _has_anthropic and not _has_openai and not _use_claude_code:
     import logging
 
     logging.getLogger("dependencies").warning(
@@ -29,7 +30,24 @@ checkpointer = Checkpointer()  # opened in main.lifespan
 
 # Override mappings so only providers with valid keys are used.
 # If no keys at all, use mock provider. If only one key, use that provider for both.
-if not _has_anthropic and not _has_openai:
+if _use_claude_code:
+    # Every task on the signed-in Claude Code CLI with its usual Claude model; any API keys are ignored.
+    from src.llm.factory import ProviderFactory
+    from src.llm.providers.claude_code import ClaudeCodeProvider
+
+    ProviderFactory.register("claude_code", ClaudeCodeProvider)
+    for task_type, mapping in DEFAULT_TASK_MAPPINGS.items():
+        model = mapping.primary_model if mapping.primary_provider == "anthropic" else mapping.fallback_model
+        failover_manager.update_mapping(
+            TaskProviderMapping(
+                task_type=task_type,
+                primary_provider="claude_code",
+                primary_model=model,
+                fallback_provider="claude_code",
+                fallback_model=model,
+            )
+        )
+elif not _has_anthropic and not _has_openai:
     _dev_provider, _dev_model = "mock", "mock-v1"
     if settings.dev_llm_provider == "scripted":
         # Deterministic, input-sensitive answers (red flags, contradictions, tool use) for local e2e runs.

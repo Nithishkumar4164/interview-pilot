@@ -133,6 +133,8 @@ cd apps/frontend
 pnpm dev        # Start Vite dev server on :5173
 ```
 
+Open the dashboard at http://interviewpilot.localhost:5173. Chrome and macOS resolve any `*.localhost` name to this machine, so no `/etc/hosts` entry is needed; `http://localhost:5173` also works, but Google sign-in returns to the `GOOGLE_REDIRECT_URI` host, and a sign-in is kept per address.
+
 ### 7. Load the Chrome extension (optional)
 
 ```bash
@@ -160,11 +162,11 @@ By default the dashboard shows a pairing code that you paste into the extension 
    ```
 3. Reload the dashboard (Vite restarts itself when an `.env` file changes)
 
-An unpacked extension's ID is derived from the folder it was loaded from, so it changes on another machine or checkout. Set it again whenever you load the extension from a new path. The dashboard origin must also be listed under `externally_connectable` in `apps/extension/manifest.json` (`http://localhost:5173` and the production domain already are). If the ID is missing or wrong, the dashboard falls back to the pairing code.
+An unpacked extension's ID is derived from the folder it was loaded from, so it changes on another machine or checkout. Set it again whenever you load the extension from a new path. The dashboard origin must also be listed under `externally_connectable` in `apps/extension/manifest.json` (`http://interviewpilot.localhost:5173`, `http://localhost:5173` and the production domain already are). If the ID is missing or wrong, the dashboard falls back to the pairing code.
 
 The backend and dashboard URLs need no setup with one-click pairing. The dashboard sends its own origin as the backend URL (`ws(s)://<dashboard host>`), and its server forwards `/ws` to the backend (the Vite proxy in dev, `apps/frontend/nginx.conf` in production). The extension takes the dashboard URL from the sender origin Chrome reports. Both are saved in the extension's local storage.
 
-With the pasted pairing code, the popup's URL fields default to `ws://localhost:8000` and `http://localhost:5173`, which is right for local dev. For production, enter `wss://interviewpilot.duckdns.org` and `https://interviewpilot.duckdns.org` once per Chrome profile; they are remembered after the first connect.
+With the pasted pairing code, the popup's URL fields default to `ws://localhost:8000` and `http://interviewpilot.localhost:5173`, which is right for local dev. For production, enter `wss://interviewpilot.duckdns.org` and `https://interviewpilot.duckdns.org` once per Chrome profile; they are remembered after the first connect.
 
 ---
 
@@ -181,7 +183,7 @@ With the pasted pairing code, the popup's URL fields default to `ws://localhost:
 | `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token TTL | No | `7` |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID | No | — |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | No | — |
-| `GOOGLE_REDIRECT_URI` | OAuth redirect URI | No | `http://localhost:5173/auth/callback` |
+| `GOOGLE_REDIRECT_URI` | OAuth redirect URI | No | `http://interviewpilot.localhost:5173/auth/callback` |
 | `ANTHROPIC_API_KEY` | Anthropic API key | Yes | — |
 | `OPENAI_API_KEY` | OpenAI API key | Yes | — |
 | `DEEPGRAM_API_KEY` | Deepgram API key | Yes | — |
@@ -190,7 +192,7 @@ With the pasted pairing code, the popup's URL fields default to `ws://localhost:
 | `S3_SECRET_KEY` | MinIO / S3 secret key | Yes | `minioadmin` |
 | `S3_BUCKET` | S3 bucket name | No | `interview-pilot` |
 | `BACKEND_URL` | Backend base URL | No | `http://localhost:8000` |
-| `FRONTEND_URL` | Frontend base URL | No | `http://localhost:5173` |
+| `FRONTEND_URL` | Frontend base URL | No | `http://interviewpilot.localhost:5173` |
 | `ENVIRONMENT` | Runtime environment | No | `development` |
 | `LOG_LEVEL` | Logging verbosity | No | `DEBUG` |
 | `VITE_EXTENSION_ID` | Chrome extension ID for one-click pairing (frontend, `apps/frontend/.env.local`; see [One-click pairing](#one-click-pairing)) | No | — |

@@ -58,7 +58,7 @@ export function Popup() {
   const [pairingCode, setPairingCode] = useState('');
   const [connectError, setConnectError] = useState<string | null>(null);
   const [backendUrl, setBackendUrl] = useState('ws://localhost:8000');
-  const [frontendUrl, setFrontendUrl] = useState('http://localhost:5173');
+  const [frontendUrl, setFrontendUrl] = useState('http://interviewpilot.localhost:5173');
 
   // Fetch initial state from service worker
   useEffect(() => {

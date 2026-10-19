@@ -19,6 +19,7 @@ import { useAnalysisStore, mapDimensions } from '@/stores/analysis-store';
 import type { AnalysisEntry } from '@/stores/analysis-store';
 import { useOfflineStore } from '@/stores/offline-store';
 import { useSpeakerStore } from '@/stores/speaker-store';
+import { usePanelStore, type PanelId } from '@/stores/panel-store';
 import { WebSocketProvider } from '@/contexts/WebSocketContext';
 import { SessionBar } from '@/components/dashboard/SessionBar';
 import { VideoOverlay } from '@/components/dashboard/VideoOverlay';
@@ -42,6 +43,9 @@ interface OverlayEntry {
 }
 
 /** Minutes left in the interview's planned duration. */
+/** The panes in the right-hand column; the column goes when all of them are hidden. */
+const RIGHT_PANES: PanelId[] = ['copilot', 'speakers', 'scores', 'flags', 'hints'];
+
 function interviewMinutesLeft(): number {
   const { durationMinutes, elapsedMs } = useSessionStore.getState();
   return Math.max(0, Math.round(durationMinutes - elapsedMs / 60000));
@@ -58,6 +62,7 @@ export function LiveSessionPage() {
   const degradationLevel = useOfflineStore((s) => s.degradationLevel);
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   const [overlays, setOverlays] = useState<OverlayEntry[]>([]);
+  const hiddenPanes = usePanelStore((s) => s.hidden);
   const [focusAreas, setFocusAreas] = useState<string[]>([]);
   const [meetControls, setMeetControls] = useState<MeetControlsState | null>(null);
 
@@ -538,6 +543,14 @@ export function LiveSessionPage() {
     );
   }
 
+  const dockedOverlays = videoStream ? overlays.filter((o) => o.mode === 'docked') : [];
+  const showLeft = !hiddenPanes.transcript || dockedOverlays.length > 0;
+  const showCenter = !hiddenPanes.plan;
+  const showRight = RIGHT_PANES.some((id) => !hiddenPanes[id]);
+  // The transcript column takes the spare width; with it hidden, the next shown column does.
+  const fillColumn = showLeft ? 'left' : showCenter ? 'center' : 'right';
+  const fill = (column: typeof fillColumn) => (fillColumn === column ? ' live-session__column--fill' : '');
+
   return (
     <WebSocketProvider value={{ send }}>
       <div className={`live-session live-session--degradation-${degradationLevel}`}>
@@ -568,9 +581,18 @@ export function LiveSessionPage() {
         ))}
 
         <main className="live-session__body">
-          <div className="live-session__left">
+          {!showLeft && !showCenter && !showRight && (
+            <div className="live-session__no-panes">
+              <p>All panes are hidden.</p>
+              <button type="button" className="btn btn--secondary" onClick={() => usePanelStore.getState().showAll()}>
+                Show all panes
+              </button>
+            </div>
+          )}
+
+          <div className="live-session__left" hidden={!showLeft}>
             {/* Docked overlays render above transcript */}
-            {videoStream && overlays.filter(o => o.mode === 'docked').map(overlay => (
+            {videoStream && dockedOverlays.map(overlay => (
               <VideoOverlay
                 key={overlay.id}
                 stream={videoStream}
@@ -585,7 +607,7 @@ export function LiveSessionPage() {
             <TranscriptPanel />
           </div>
 
-          <div className="live-session__center">
+          <div className={`live-session__center${fill('center')}`} hidden={!showCenter}>
             <InterviewPlanPanel
               sessionId={sessionId ?? ''}
               focusAreas={focusAreas}
@@ -598,7 +620,7 @@ export function LiveSessionPage() {
             />
           </div>
 
-          <div className="live-session__right">
+          <div className={`live-session__right${fill('right')}`} hidden={!showRight}>
             <CopilotPanel
               onAsk={(id, question) => send({ type: 'copilot_query', id, question })}
               onAddNote={(criterion, text) => {

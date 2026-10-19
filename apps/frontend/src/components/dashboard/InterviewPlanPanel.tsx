@@ -17,7 +17,7 @@ import { ApproachBlock } from './ApproachBlock';
 import { QuestionGenerator } from './QuestionGenerator';
 import type { GeneratedQuestion } from '@/api/client';
 import { PanelTitle } from './PanelTitle';
-import { usePanelCollapsed } from '@/stores/panel-store';
+import { usePaneHidden } from '@/stores/panel-store';
 
 const LEVEL_LABELS: Record<number, string> = {
   1: 'Nudge',
@@ -46,7 +46,7 @@ export function InterviewPlanPanel({
   onAcknowledgeHint,
   onRateCode,
 }: InterviewPlanPanelProps) {
-  const collapsed = usePanelCollapsed('plan');
+  const hidden = usePaneHidden('plan');
   const plan = usePlanStore((s) => s.plan);
   const currentQuestionIndex = useSessionStore((s) => s.currentQuestionIndex);
   const contextReloading = useSessionStore((s) => s.contextReloading);
@@ -97,7 +97,7 @@ export function InterviewPlanPanel({
   const showGenerator = generatorOpen || !hasQuestions;
 
   return (
-    <section className={`interview-plan-panel${collapsed ? ' is-collapsed' : ''}`} aria-label="Questions">
+    <section className="interview-plan-panel" hidden={hidden} aria-label="Questions">
       <div className="interview-plan-panel__header panel-header">
         <PanelTitle id="plan">Questions</PanelTitle>
         {hasQuestions && (

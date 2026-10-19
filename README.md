@@ -8,19 +8,24 @@ Reduces cognitive load and bias for SDE interviewers with real-time transcriptio
 
 ## Features
 
-- **Interview Planning** — Upload a resume (PDF/DOCX), let the LLM parse it and generate a tailored question plan with phases, alternates, and pre-computed hints
+- **Quick Session Start** — Start from an uploaded resume (PDF/DOCX, parsed by the LLM to prefill the candidate's details), from typed details, or as a guest; nothing is planned up front
+- **In-Interview Question Generation** — Pick a category, take a suggested topic (or type one), and generate a question with hints, approaches, and pitfalls; regenerate with feedback, and only the questions you use are logged to the session's questionnaire
 - **Real-Time Transcription** — Live audio transcription via Deepgram Nova-2 with sub-second latency
 - **3-Layer Speaker Identification** — Channel separation → diarization → calibration for accurate speaker attribution
 - **6-Dimension Utterance Analysis** — Each candidate response scored on relevance, behavioral signals, consistency, hint reception, depth, and communication
 - **3-Tier Hierarchical Memory** — Working memory → rolling summary → fact store keeps context across long interviews without losing signal
 - **Progressive Hint System** — Three tiers (Nudge → Guide → Direct) plus runtime smart hints generated on demand
 - **Contradiction Detection** — Flags inconsistencies between candidate statements in real time
-- **Video Overlay Capture** — Chrome extension captures audio from Google Meet, Zoom, and Teams
+- **Peer Interviewer Copilot** — Suggested probes, claim checks, pacing and coverage, a running scorecard, and ask-the-copilot (behind `PEER_INTERVIEWER_ENABLED`)
+- **Meeting Capture** — The extension captures the meeting tab's audio and your microphone, and relays the tab's video to the dashboard without a screen-share picker; the video is pinned above the transcript
+- **Google Meet Controls** — Mute, camera, and present for the session's Meet tab from the dashboard's top bar; after capture starts, the extension switches back to the Interview Pilot tab
+- **Code Capture** — Snapshots the candidate's code from CoderPad, HackerRank, and LeetCode
+- **Configurable Layout** — Show or hide each live-session pane; the layout is remembered per browser
 - **Post-Interview Reports** — Automated report generation with recommendation, 7-criteria scoring, annotated transcript, and hint usage summary
 - **Report Comparison** — Side-by-side comparison of candidates across sessions
 - **Offline Resilience** — 3 degradation levels keep the session usable when connectivity drops
 - **LLM Provider Failover** — Automatic failover between Anthropic Claude and OpenAI GPT
-- **Chrome Extension** — Manifest V3 extension with side panel UI and audio capture
+- **Chrome Extension** — Manifest V3 extension, paired with a session in one click from the dashboard
 
 ---
 
@@ -57,23 +62,25 @@ interview-pilot/
 **Communication:**
 
 ```
-┌─────────────┐   REST API    ┌─────────────┐   SQL/async   ┌────────────┐
-│   Frontend   │◄────────────►│   Backend    │◄────────────►│ PostgreSQL │
-│   (React)    │              │  (FastAPI)   │              └────────────┘
-└──────┬───────┘              └──┬───┬───┬───┘
-       │                        │   │   │         ┌────────────┐
-       │  /ws/dashboard/{id}    │   │   │         │   Redis    │
-       └────────────────────────┘   │   │         └────────────┘
-                                    │   │
-┌─────────────┐  /ws/audio/{id}    │   │         ┌────────────┐
-│  Extension   │◄──────────────────┘   │         │   MinIO    │
-│  (Chrome)    │                                 │   (S3)     │
-└─────────────┘                                  └────────────┘
+┌──────────────┐   REST /api      ┌──────────────┐  SQL (async)  ┌────────────┐
+│  Dashboard   │◄────────────────►│   Backend    │◄─────────────►│ PostgreSQL │
+│   (React)    │◄─────────────────│  (FastAPI)   │               └────────────┘
+└──────▲───────┘  /ws/dashboard   └──────▲───────┘─────────────►  Redis, MinIO (S3)
+       │                                 │
+       │ meeting video (WebRTC),         │ /ws/audio
+       │ status, Meet controls           │ /ws/code
+┌──────┴───────┐                         │
+│  Extension   │─────────────────────────┘
+│  (Chrome)    │
+└──────────────┘
 ```
 
-Two dedicated WebSocket channels:
+Three WebSocket channels:
 - **`/ws/audio/{session_id}`** — Streams binary audio frames from the extension to the transcription pipeline
-- **`/ws/dashboard/{session_id}`** — Broadcasts real-time events (transcripts, analysis, hints, red flags) to the dashboard
+- **`/ws/code/{session_id}`** — Streams code snapshots from the extension's content script
+- **`/ws/dashboard/{session_id}`** — Broadcasts real-time events (transcripts, analysis, hints, red flags, copilot cards) to the dashboard
+
+The dashboard and the extension also talk directly in the browser: the extension relays the meeting tab's video over a local WebRTC connection, reports its pairing and capture status, and carries Meet's mic, camera, and presenting state and controls.
 
 ---
 
@@ -99,10 +106,14 @@ cd interview-pilot
 ### 2. Configure environment
 
 ```bash
-cp .env.example .env
+cp apps/backend/.env.example apps/backend/.env
 ```
 
-Fill in the required API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`) and any OAuth credentials.
+The backend reads `.env` from the directory it starts in (`apps/backend`), and every variable carries the `INTERVIEW_PILOT_` prefix. For a first run you can leave the keys empty:
+
+- **LLM:** with no Anthropic or OpenAI key, a mock provider answers every call; one key is enough to use a real model.
+- **Transcription:** live transcripts need `INTERVIEW_PILOT_DEEPGRAM_API_KEY`.
+- **Sign-in:** see [Signing in locally](#signing-in-locally).
 
 ### 3. Start infrastructure
 
@@ -135,6 +146,17 @@ pnpm dev        # Start Vite dev server on :5173
 
 Open the dashboard at http://interviewpilot.localhost:5173. Chrome and macOS resolve any `*.localhost` name to this machine, so no `/etc/hosts` entry is needed; `http://localhost:5173` also works, but Google sign-in returns to the `GOOGLE_REDIRECT_URI` host, and a sign-in is kept per address.
 
+#### Signing in locally
+
+The dashboard signs in with Google. Without a Google OAuth client, use the stand-in provider in `apps/backend/tests/fake_oidc.py`, which approves every sign-in as the email you give it:
+
+```bash
+cd apps/backend
+PYTHONPATH=. uv run python -m tests.fake_oidc --port 9400 --email you@example.com
+```
+
+Then uncomment the "Local sign-in without Google" block in `apps/backend/.env` and restart the backend. With a real Google client instead, add `http://interviewpilot.localhost:5173/auth/callback` to its authorized redirect URIs.
+
 ### 7. Load the Chrome extension (optional)
 
 ```bash
@@ -149,7 +171,7 @@ Then in Chrome:
 
 #### Starting capture
 
-On the meeting tab, press **Alt+Shift+I** or click **Start Capture** in the extension popup to start tab audio and the microphone together. Chrome only allows tab capture after you invoke the extension on that tab, so pairing alone can't start it. If the shortcut does nothing, check that Chrome assigned it at `chrome://extensions/shortcuts` (it stays unset when another extension already uses the key).
+Click **Connect extension** on the live session (with the session's Google Meet link) to pair the extension and open the Meet tab. On the meeting tab, press **Alt+Shift+I** (Option+Shift+I on Mac) or click **Start Capture** in the extension popup to start tab audio and the microphone together; the extension then switches back to the Interview Pilot tab, and the strip under the top bar shows that it is capturing. Chrome only allows tab capture after you invoke the extension on that tab, so pairing alone can't start it. If the shortcut does nothing, check that Chrome assigned it at `chrome://extensions/shortcuts` (it stays unset when another extension already uses the key).
 
 #### One-click pairing
 
@@ -172,30 +194,39 @@ With the pasted pairing code, the popup's URL fields default to `ws://localhost:
 
 ## Environment Variables
 
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `DATABASE_URL` | Async PostgreSQL connection string | Yes | `postgresql+asyncpg://copilot:copilot@localhost:5432/interview_pilot` |
-| `DATABASE_URL_SYNC` | Sync PostgreSQL connection string (migrations) | Yes | `postgresql://copilot:copilot@localhost:5432/interview_pilot` |
-| `REDIS_URL` | Redis connection string | Yes | `redis://localhost:6379/0` |
-| `JWT_SECRET_KEY` | Secret for signing JWTs | Yes | `change-me-in-production` |
-| `JWT_ALGORITHM` | JWT signing algorithm | No | `HS256` |
-| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Access token TTL | No | `30` |
-| `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token TTL | No | `7` |
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID | No | — |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | No | — |
-| `GOOGLE_REDIRECT_URI` | OAuth redirect URI | No | `http://interviewpilot.localhost:5173/auth/callback` |
-| `ANTHROPIC_API_KEY` | Anthropic API key | Yes | — |
-| `OPENAI_API_KEY` | OpenAI API key | Yes | — |
-| `DEEPGRAM_API_KEY` | Deepgram API key | Yes | — |
-| `S3_ENDPOINT` | MinIO / S3 endpoint | Yes | `http://localhost:9000` |
-| `S3_ACCESS_KEY` | MinIO / S3 access key | Yes | `minioadmin` |
-| `S3_SECRET_KEY` | MinIO / S3 secret key | Yes | `minioadmin` |
-| `S3_BUCKET` | S3 bucket name | No | `interview-pilot` |
-| `BACKEND_URL` | Backend base URL | No | `http://localhost:8000` |
-| `FRONTEND_URL` | Frontend base URL | No | `http://interviewpilot.localhost:5173` |
-| `ENVIRONMENT` | Runtime environment | No | `development` |
-| `LOG_LEVEL` | Logging verbosity | No | `DEBUG` |
-| `VITE_EXTENSION_ID` | Chrome extension ID for one-click pairing (frontend, `apps/frontend/.env.local`; see [One-click pairing](#one-click-pairing)) | No | — |
+Backend variables live in `apps/backend/.env` and are read with the `INTERVIEW_PILOT_` prefix (for example `INTERVIEW_PILOT_DATABASE_URL`); `apps/backend/.env.example` lists them all. Outside development the backend refuses to start without a real JWT secret, an LLM key, a Deepgram key, a Google client, and a sign-in allowlist, and with `DEV_MODE` on.
+
+| Variable (after `INTERVIEW_PILOT_`) | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | Async PostgreSQL connection string | `postgresql+asyncpg://copilot:copilot@localhost:5432/interview_pilot` |
+| `DATABASE_URL_SYNC` | Sync PostgreSQL connection string (migrations) | `postgresql://copilot:copilot@localhost:5432/interview_pilot` |
+| `REDIS_URL` | Redis connection string | `redis://localhost:6379/0` |
+| `JWT_SECRET_KEY` | Secret for signing JWTs (required outside development) | `change-me-in-production` |
+| `JWT_ALGORITHM` | JWT signing algorithm | `HS256` |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Access token TTL | `30` |
+| `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token TTL | `7` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth client; sign-in is off without it | — |
+| `GOOGLE_REDIRECT_URI` | Where sign-in returns | `http://interviewpilot.localhost:5173/auth/callback` |
+| `OIDC_ISSUER`, `OIDC_AUTHORIZATION_URL`, `OIDC_TOKEN_URL`, `OIDC_JWKS_URL` | OpenID provider endpoints; point them at the fake provider for local sign-in | Google's |
+| `ALLOWED_LOGIN_EMAILS` / `ALLOWED_LOGIN_DOMAINS` | Who may sign in (comma-separated); empty allows anyone, development only | — |
+| `ADMIN_EMAILS` | Users who get the admin role | — |
+| `PAIRING_TOKEN_EXPIRE_HOURS` | Lifetime of the token the dashboard hands to the extension | `6` |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | LLM providers; Anthropic is primary, OpenAI the fallback; with neither, a mock answers | — |
+| `DEV_LLM_PROVIDER` | Without keys: `mock` or `scripted` (deterministic, input-sensitive) | `mock` |
+| `DEEPGRAM_API_KEY` | Deepgram key for transcription | — |
+| `PEER_INTERVIEWER_ENABLED` | Copilot acts as a peer interviewer | `false` |
+| `AGENTIC_ROUTING_ENABLED` | Analysis chooses its own follow-ups | `false` |
+| `REPORT_AGENTIC_SCORING` | Reports score each criterion with evidence tools | `false` |
+| `S3_ENDPOINT` | MinIO / S3 endpoint | `http://localhost:9000` |
+| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | MinIO / S3 credentials | `minioadmin` |
+| `S3_BUCKET` | S3 bucket name | `interview-pilot` |
+| `BACKEND_URL` | Backend base URL | `http://localhost:8000` |
+| `FRONTEND_URL` | Dashboard origin (CORS) | `http://interviewpilot.localhost:5173` |
+| `ENVIRONMENT` | `development` or `production` | `development` |
+| `LOG_LEVEL` | Logging verbosity | `DEBUG` |
+| `DEV_MODE` | API calls without a token act as a seeded dev user (development only) | `true` |
+
+The dashboard has one variable of its own, `VITE_EXTENSION_ID` in `apps/frontend/.env.local`, for one-click pairing (see [One-click pairing](#one-click-pairing)).
 
 ---
 
@@ -212,6 +243,8 @@ interview-pilot/
 │   │   │   ├── models/           # SQLAlchemy ORM models
 │   │   │   ├── schemas/          # Pydantic request/response schemas
 │   │   │   ├── llm/              # LLM provider clients and failover logic
+│   │   │   ├── graphs/           # LangGraph session graph
+│   │   │   ├── replay/           # Golden-transcript replay and scripted provider
 │   │   │   ├── repositories/     # Data access layer
 │   │   │   ├── workers/          # Background task workers
 │   │   │   └── main.py           # FastAPI app entrypoint
@@ -225,13 +258,18 @@ interview-pilot/
 │   │   │   ├── stores/           # Zustand state stores
 │   │   │   ├── api/              # API client layer
 │   │   │   ├── contexts/         # React contexts
-│   │   │   ├── utils/            # Utility functions
+│   │   │   ├── hooks/            # WebSocket, timer, and extension channel hooks
+│   │   │   ├── lib/              # Helpers (meeting links, flags)
+│   │   │   ├── styles/           # Global stylesheet
+│   │   │   ├── __tests__/        # Vitest suites
 │   │   │   └── App.tsx           # Root component with routing
 │   │   └── package.json
 │   └── extension/
 │       ├── src/
 │       │   ├── background/       # Service worker
-│       │   ├── content/          # Content scripts
+│       │   ├── auth/             # Pairing tokens
+│       │   ├── meeting/          # Google Meet tab: link, capture banner, controls
+│       │   ├── content/          # Code capture content script
 │       │   ├── sidepanel/        # Side panel React UI
 │       │   ├── popup/            # Browser action popup UI
 │       │   ├── offscreen/        # Offscreen document for audio processing
@@ -307,7 +345,10 @@ interview-pilot/
 #### Auth (`/api/auth`)
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/refresh` | Refresh JWT tokens |
+| `GET` | `/google/start` | Start Google sign-in (returns the authorization URL) |
+| `POST` | `/google/callback` | Finish sign-in with the returned code |
+| `POST` | `/refresh` | Refresh the access token (refresh cookie) |
+| `POST` | `/logout` | Sign out |
 | `GET` | `/me` | Get current user profile |
 
 #### Sessions (`/api/sessions`)
@@ -318,7 +359,10 @@ interview-pilot/
 | `GET` | `/{session_id}/state` | Get full session state for page recovery |
 | `POST` | `/{session_id}/go-live` | Start the interview (PLANNING to LIVE) |
 | `POST` | `/{session_id}/register-plan-hints` | Register pre-computed hints |
-| `PATCH` | `/{session_id}/pause` | Toggle pause/resume |
+| `PATCH` | `/{session_id}/meeting-url` | Set the session's Google Meet link |
+| `POST` | `/{session_id}/pairing-token` | Token that pairs the extension with this session |
+| `POST` | `/{session_id}/pause` | Pause the interview |
+| `POST` | `/{session_id}/resume` | Resume the interview |
 | `POST` | `/{session_id}/end` | End session and trigger report |
 | `DELETE` | `/{session_id}` | Delete session (PLANNING/READY only) |
 | `POST` | `/{session_id}/hints/next` | Get next progressive hint |
@@ -370,30 +414,35 @@ Questions are generated during the interview, not planned up front.
 | Endpoint | Direction | Description |
 |----------|-----------|-------------|
 | `/ws/audio/{session_id}` | Extension → Backend | Binary audio frames with 12-byte header (channel, timestamp, sample rate) |
+| `/ws/code/{session_id}` | Extension → Backend | Code snapshots from CoderPad, HackerRank, and LeetCode |
 | `/ws/dashboard/{session_id}` | Backend → Frontend | Real-time events: transcripts, analysis, hints, red flags, speaker updates |
 
 ---
 
 ## Chrome Extension
 
-The Chrome extension captures audio from interview platforms and streams it to the backend via WebSocket.
+The Chrome extension captures the interview and streams it to the backend.
 
 **Capabilities:**
-- Tab audio capture via offscreen document
-- Side panel UI for session control
+- Tab audio and microphone capture via an offscreen document, started with Alt+Shift+I (Option+Shift+I on Mac) on the meeting tab
+- Meeting video relayed to the dashboard over a local WebRTC connection
+- Google Meet: opens the session's Meet tab, shows a start-capture banner, pauses and resumes the session with the tab, and takes mute, camera, and present from the dashboard
+- Code snapshots from CoderPad, HackerRank, and LeetCode
+- Popup and side panel for pairing by code and session status
 - IndexedDB offline buffer for resilience
 
 **Supported Platforms:**
 
 | Category | Platforms |
 |----------|----------|
-| Video conferencing | Google Meet, Zoom, Microsoft Teams |
+| Video conferencing | Google Meet (full support); any other meeting tab for audio and video capture |
+| Coding | CoderPad, HackerRank, LeetCode |
 
 **Installation:**
 1. Run `pnpm dev` inside `apps/extension` to build with watch mode
 2. Open `chrome://extensions` and enable **Developer mode**
 3. Click **Load unpacked** → select `apps/extension/dist`
-4. The Interview Pilot icon appears in your toolbar; open the side panel to connect to a session
+4. Set `VITE_EXTENSION_ID` for one-click pairing (see [One-click pairing](#one-click-pairing)), then click **Connect extension** on a live session
 
 ---
 

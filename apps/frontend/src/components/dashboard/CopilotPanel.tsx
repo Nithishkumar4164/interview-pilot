@@ -3,7 +3,8 @@
  *
  * Each card is advice for the interviewer, never shown to the candidate.
  * "Mark as asked" tells the backend the interviewer relayed it (the report
- * can then tell copilot-prompted moves from the interviewer's own);
+ * can then tell copilot-prompted moves from the interviewer's own); on a hint
+ * card it reads "Mark as given", and the backend records the hint as given.
  * "Dismiss" just drops it. Kinds can be muted from the panel header.
  */
 import { useMemo, useState } from 'react';
@@ -22,7 +23,14 @@ import { PanelTitle } from './PanelTitle';
 import { usePaneHidden } from '@/stores/panel-store';
 
 /** Cards whose primary action is relaying something to the candidate. */
-const RELAY_KINDS: ReadonlySet<CopilotCardKind> = new Set(['probe', 'clarification', 'claim_check', 'edge_cases']);
+const RELAY_KINDS: ReadonlySet<CopilotCardKind> = new Set([
+  'probe',
+  'clarification',
+  'claim_check',
+  'edge_cases',
+  'hint',
+  'code_check',
+]);
 
 interface CopilotPanelProps {
   onUseCard: (card: CopilotCard) => void;
@@ -96,6 +104,12 @@ export function CopilotPanel({ onUseCard, onAddNote, onAsk }: CopilotPanelProps)
                   ))}
                 </ul>
               )}
+              {/* What to say: a hint card's text, a claim check's question (probe cards list it in items). */}
+              {card.probe && !card.items.includes(card.probe) && (
+                <p className="copilot-card__probe">
+                  <span>{card.kind === 'hint' ? 'Say:' : 'Ask:'}</span> {card.probe}
+                </p>
+              )}
               <div className="copilot-card__actions">
                 {RELAY_KINDS.has(card.kind) ? (
                   <button
@@ -105,7 +119,7 @@ export function CopilotPanel({ onUseCard, onAddNote, onAsk }: CopilotPanelProps)
                       markUsed(card.id);
                     }}
                   >
-                    Mark as asked
+                    {card.kind === 'hint' ? 'Mark as given' : 'Mark as asked'}
                   </button>
                 ) : (
                   <button

@@ -360,23 +360,28 @@ from src.workers.langgraph_session import LangGraphSessionPipeline
 async def main(session_id, durability, texts):
     factory = async_sessionmaker(create_async_engine(settings.database_url, poolclass=NullPool), expire_on_commit=False)
     persistence = PersistenceService(factory)
-    original = session_graph.check_contradictions
+    original_analyze, original_verify = session_graph.analyze_utterance_with_actions, session_graph.verify_claim
     calls = 0
 
-    async def check_then_hang(*args, **kwargs):
+    async def choose_claim_check(*args, **kwargs):
+        result, _ = await original_analyze(*args, **kwargs)
+        return result, ["verify_claim"]
+
+    async def verify_then_hang(*args, **kwargs):
         nonlocal calls
         calls += 1
         if calls == 2:
             await persistence._flush_batch()  # the analysis row is in the DB before the kill
             print("IN_FOLLOW_UP", flush=True)
             await asyncio.Event().wait()
-        return await original(*args, **kwargs)
+        return await original_verify(*args, **kwargs)
 
-    session_graph.check_contradictions = check_then_hang
+    session_graph.analyze_utterance_with_actions = choose_claim_check
+    session_graph.verify_claim = verify_then_hang
     cp = Checkpointer(); await cp.open(settings.database_url_sync, max_size=2)
     with patch("src.dependencies.get_persistence_service", lambda: persistence):
         p = LangGraphSessionPipeline(session_id, build_scripted_failover_manager(), cp,
-                                     min_analysis_interval_s=0, durability=durability)
+                                     min_analysis_interval_s=0, durability=durability, peer=True)
         for n, text in enumerate(texts):
             await p.on_transcript_event(TranscriptEventSchema(
                 id=f"utt-{n}", session_id=session_id, speaker_role=SpeakerRole.CANDIDATE, text=text,
@@ -430,7 +435,7 @@ async def test_sigkill_mid_run_is_finished_on_restart_without_duplicates(
     async def wait_for_marker() -> None:
         while (line := await child.stdout.readline()) and line.strip() != b"IN_FOLLOW_UP":
             pass
-        assert line, "child exited before reaching the contradiction check"
+        assert line, "child exited before reaching the claim check"
 
     try:
         await asyncio.wait_for(wait_for_marker(), timeout=60)
@@ -452,12 +457,12 @@ async def test_sigkill_mid_run_is_finished_on_restart_without_duplicates(
 
         with (
             patch("src.dependencies.get_persistence_service", lambda: persistence),
-            patch.object(dashboard_manager, "send_red_flag", capture("send_red_flag")),
+            patch.object(dashboard_manager, "send_copilot_card", capture("send_copilot_card")),
             patch.object(dashboard_manager, "send_analysis", capture("send_analysis")),
             patch.object(dashboard_manager, "send_hint", capture("send_hint")),
         ):
             restarted = LangGraphSessionPipeline(
-                session_id, build_scripted_failover_manager(), checkpointer, durability=durability
+                session_id, build_scripted_failover_manager(), checkpointer, durability=durability, peer=True
             )
             await restarted.wait_idle()  # loading the pipeline finishes the interrupted run
             await persistence._flush_batch()
@@ -467,8 +472,11 @@ async def test_sigkill_mid_run_is_finished_on_restart_without_duplicates(
         values = restarted.to_dict()
         assert values["analyses_run"] == 2
         assert [u["text"] for u in values["memory"]["working_memory"]] == [CLAIM, DENIAL]
-        flags = [p for m, p in sent if m == "send_red_flag" and p.get("type") == "contradiction"]
-        assert len(flags) == 1 and flags[0]["new_statement"] == DENIAL
+        # The interrupted claim check ran once on restart: the rule pass flags the denial exactly once.
+        flags = [
+            p for m, p in sent if m == "send_copilot_card" and ":contradiction:" in p["id"] and p["source"] == "rule"
+        ]
+        assert len(flags) == 1 and flags[0]["items"] == [f"Earlier: {CLAIM}", f"Now: {DENIAL}"]
 
         async with factory() as db:
             rows = (

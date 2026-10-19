@@ -16,7 +16,6 @@ export type WSMessageType =
   | 'provider_status'
   | 'error'
   | 'speaker_snapshot'
-  | 'hint_suggestion'
   | 'speaker_transcript_assigned'
   | 'sv_transcripts'
   | 'context_reloaded'

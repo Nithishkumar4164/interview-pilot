@@ -20,6 +20,8 @@ def _kwargs(**overrides):
         "google_client_id": "client-id.apps.googleusercontent.com",
         "google_client_secret": "client-secret",
         "allowed_login_domains": "example.com",
+        # Pinned: a developer's .env may select a development-only provider.
+        "dev_llm_provider": "mock",
     }
     base.update(overrides)
     return base

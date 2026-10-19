@@ -18,13 +18,25 @@ from src.llm.failover import FailoverManager
 from src.llm.interface import AnalysisContext, LLMConfig, TaskType
 from src.schemas.analysis import EnhancedAnalysisResult
 from src.services.analysis_service import build_question_plan_context
+from src.services.contradiction_service import Contradiction, pair_key
 from src.utils.logging import get_logger
 
 logger = get_logger("peer_interviewer")
 
 # ── Copilot cards ──────────────────────────────────────────────────────────
 
-CARD_KINDS = ("probe", "claim_check", "clarification", "coaching", "pace", "stuck", "difficulty", "edge_cases")
+CARD_KINDS = (
+    "probe",
+    "claim_check",
+    "clarification",
+    "coaching",
+    "pace",
+    "stuck",
+    "difficulty",
+    "edge_cases",
+    "hint",
+    "code_check",
+)
 PRIORITIES = ("info", "suggest", "urgent")
 
 
@@ -152,22 +164,41 @@ async def suggest_probes(
 
 # ── Claim verification ─────────────────────────────────────────────────────
 
-CLAIM_SYSTEM_PROMPT = """Verify a technical claim made in a live interview. Return JSON.
+CLAIM_SYSTEM_PROMPT = """Verify a technical claim made in a live interview, and check it against what the candidate said before. Return JSON.
 
-The candidate just stated something technical as fact: a complexity, a guarantee, how an algorithm, data
-structure, protocol or tool behaves. Decide whether it is right. Be strict about what was actually claimed and
-generous about imprecise wording. If the statement is an opinion, a plan, or cannot be checked, say so.
+Check the candidate's latest statement two ways.
+
+1. Technical accuracy. If it states something technical as fact (a complexity, a guarantee, how an algorithm,
+   data structure, protocol or tool behaves), decide whether it is right. Be strict about what was actually
+   claimed and generous about imprecise wording. An opinion, a plan, or something that cannot be checked is
+   "unverifiable".
+2. Consistency. Compare it with the candidate's earlier statements, listed by id under "Earlier Statements".
+   Report a conflict only when both cannot be true: they said X and now say not X, a timeline or number that
+   does not add up, or a claim to have led or built something while lacking basics they would know. A new
+   topic or added detail is not a conflict.
 
 Respond in JSON:
 {
-  "claim": "<the claim, in one sentence>",
+  "claim": "<the technical claim, in one sentence; empty if there is none>",
   "verdict": "<correct|incorrect|misleading|unverifiable>",
   "confidence": <0.0-1.0>,
   "correction": "<what is actually true, one or two sentences; empty if correct>",
-  "self_correct_probe": "<a question the interviewer can ask so the candidate finds the error themselves; empty if correct>"
-}"""
+  "self_correct_probe": "<a question the interviewer can ask so the candidate finds the error themselves; empty if correct>",
+  "conflicts": [
+    {"earlier_id": "E<number>", "explanation": "<how the two conflict, one sentence>", "confidence": <0.0-1.0>, "probe": "<a question that lets the candidate reconcile them>"}
+  ]
+}
+Return "conflicts": [] when nothing conflicts."""
 
 CLAIM_MIN_CONFIDENCE = 0.6
+CONFLICT_MIN_CONFIDENCE = 0.6
+
+
+def _confidence(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 async def verify_claim(
@@ -177,33 +208,88 @@ async def verify_claim(
     question_plan: dict | None,
     speaker: str,
     text: str,
-) -> dict[str, Any] | None:
-    """A wrong or misleading claim with its correction, or None. LLM errors propagate."""
+    earlier: list[str],
+) -> dict[str, Any]:
+    """One claim check: {"technical": a wrong or misleading claim with its correction, or None,
+    "conflicts": the ``earlier`` statements it contradicts, as Contradictions}. LLM errors propagate.
+    """
+    listed = "\n".join(f"E{i}: {claim}" for i, claim in enumerate(earlier, start=1)) or "(none yet)"
     user_content = (
-        f"{context_text}{build_question_plan_context(question_plan)}\n\n## Statement To Verify\n[{speaker}]: {text}"
+        f"{context_text}{build_question_plan_context(question_plan)}"
+        f"\n\n## Earlier Statements\n{listed}"
+        f"\n\n## Statement To Verify\n[{speaker}]: {text}"
     )
     result = await failover.analyze(
         AnalysisContext(
             system_prompt=CLAIM_SYSTEM_PROMPT, user_content=user_content, task_type=TaskType.PEER_INTERVIEWER
         ),
-        LLMConfig(max_tokens=400, temperature=0.1, response_format="json"),
+        LLMConfig(max_tokens=600, temperature=0.1, response_format="json"),
         session_id=session_id,
     )
     data = _parsed(result.content, result.parsed)
     verdict = str(data.get("verdict", "")).lower()
-    try:
-        confidence = float(data.get("confidence", 0) or 0)
-    except (TypeError, ValueError):
-        confidence = 0.0
-    if verdict not in ("incorrect", "misleading") or confidence < CLAIM_MIN_CONFIDENCE:
-        return None
-    return {
-        "claim": str(data.get("claim", "")) or text[:160],
-        "verdict": verdict,
-        "confidence": confidence,
-        "correction": str(data.get("correction", "")),
-        "self_correct_probe": str(data.get("self_correct_probe", "")),
-    }
+    confidence = _confidence(data.get("confidence"))
+    technical = None
+    if verdict in ("incorrect", "misleading") and confidence >= CLAIM_MIN_CONFIDENCE:
+        technical = {
+            "claim": str(data.get("claim", "")) or text[:160],
+            "verdict": verdict,
+            "confidence": confidence,
+            "correction": str(data.get("correction", "")),
+            "self_correct_probe": str(data.get("self_correct_probe", "")),
+        }
+    conflicts: list[Contradiction] = []
+    seen: set[str] = set()
+    for item in data.get("conflicts") or []:
+        if not isinstance(item, dict):
+            continue
+        # Only statements we listed: the id must name one, so the earlier claim is always real.
+        ref = str(item.get("earlier_id", "")).strip().upper().removeprefix("E")
+        if not ref.isdigit() or not 1 <= int(ref) <= len(earlier) or ref in seen:
+            continue
+        found = _confidence(item.get("confidence"))
+        if found < CONFLICT_MIN_CONFIDENCE:
+            continue
+        seen.add(ref)
+        conflicts.append(
+            Contradiction(
+                claim=earlier[int(ref) - 1],
+                new_statement=text,
+                explanation=str(item.get("explanation", "")) or "Conflicts with an earlier statement",
+                confidence=found,
+                suggested_probe=str(item.get("probe", "")),
+                detection_method="llm",
+            )
+        )
+    return {"technical": technical, "conflicts": conflicts}
+
+
+def claim_card(card_id: str, found: dict[str, Any], question_id: str) -> dict[str, Any]:
+    return copilot_card(
+        card_id,
+        "claim_check",
+        f"Claim looks {found['verdict']}: {found['claim']}",
+        found["correction"],
+        probe=found["self_correct_probe"],
+        priority="urgent",
+        question_id=question_id,
+    )
+
+
+def contradiction_card(session_id: str, utterance_id: str, c: Contradiction, question_id: str) -> dict[str, Any]:
+    """A statement that conflicts with an earlier one (from the rule pass or the claim check)."""
+    return copilot_card(
+        f"{session_id}:{utterance_id}:contradiction:{pair_key(c.claim, c.new_statement)}",
+        "claim_check",
+        "Conflicts with something they said earlier",
+        c.explanation,
+        items=[f"Earlier: {c.claim}", f"Now: {c.new_statement}"],
+        probe=c.suggested_probe,
+        priority="urgent",
+        source="rule" if c.detection_method == "rule_based" else "llm",
+        question_id=question_id,
+        timestamp=c.detected_at,
+    )
 
 
 # ── Clarification watch ────────────────────────────────────────────────────
@@ -420,7 +506,7 @@ def stuck_card(card_id: str, quiet_s: float, question_id: str, timestamp: str) -
         card_id,
         "stuck",
         f"Quiet for {round(quiet_s)} s and the code is not moving",
-        "A hint is being drafted (Smart Hints). Or ask them to talk through what they are trying now.",
+        "A hint is being drafted (it appears as a Hint card). Or ask them to talk through what they are trying now.",
         priority="suggest",
         source="rule",
         question_id=question_id,
@@ -667,3 +753,32 @@ async def suggest_edge_cases(
 def edge_case_line(case: dict[str, str]) -> str:
     line = f"{case['input']} → {case['expected']}" if case.get("expected") else case["input"]
     return f"{line} ({case['exposes']})" if case.get("exposes") else line
+
+
+# ── Code check and drafted hints ───────────────────────────────────────────
+
+
+def code_check_card(card_id: str, statement: str, mismatch: dict[str, Any], question_id: str) -> dict[str, Any]:
+    """What the candidate said about their code does not match the code they wrote."""
+    return copilot_card(
+        card_id,
+        "code_check",
+        "What they said does not match their code",
+        str(mismatch.get("explanation", "")),
+        items=[f"They said: {statement}"],
+        probe=str(mismatch.get("suggested_probe", "")),
+        priority="urgent",
+        question_id=question_id,
+    )
+
+
+def hint_card(card_id: str, text: str, directness: str, question_id: str) -> dict[str, Any]:
+    """A hint drafted for the interviewer to give; using the card records it as a hint given."""
+    return copilot_card(
+        card_id,
+        "hint",
+        f"Suggested hint ({directness})",
+        "Give it if they stay stuck.",
+        probe=text,
+        question_id=question_id,
+    )

@@ -1,10 +1,11 @@
 /**
  * Copilot store — what the peer interviewer whispers to the interviewer.
  *
- * Cards arrive on the `copilot_card` channel (probes, claim checks,
- * clarifications, coaching, pacing, stuck, difficulty, edge cases). The
- * interviewer marks a card as used (asked the probe, relayed the reply) or
- * dismisses it; either way it leaves the list. Kinds can be muted; the mute
+ * Cards arrive on the `copilot_card` channel (probes, claim checks and
+ * contradictions, clarifications, coaching, pacing, stuck, difficulty, edge
+ * cases, drafted hints, code checks). The interviewer marks a card as used
+ * (asked the probe, relayed the reply, gave the hint) or dismisses it; either
+ * way it leaves the list. Kinds can be muted; the mute
  * list is a per-viewer convenience kept in localStorage.
  */
 import { create } from 'zustand';
@@ -17,7 +18,9 @@ export type CopilotCardKind =
   | 'pace'
   | 'stuck'
   | 'difficulty'
-  | 'edge_cases';
+  | 'edge_cases'
+  | 'hint'
+  | 'code_check';
 
 export type CopilotPriority = 'info' | 'suggest' | 'urgent';
 
@@ -44,6 +47,8 @@ export const CARD_KIND_LABELS: Record<CopilotCardKind, string> = {
   stuck: 'Stuck',
   difficulty: 'Difficulty',
   edge_cases: 'Edge cases',
+  hint: 'Hint',
+  code_check: 'Code check',
 };
 
 export const ALL_CARD_KINDS = Object.keys(CARD_KIND_LABELS) as CopilotCardKind[];

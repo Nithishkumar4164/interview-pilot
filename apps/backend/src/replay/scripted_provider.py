@@ -290,8 +290,6 @@ def classify(context: AnalysisContext) -> str:
     sp = context.system_prompt
     if context.task_type == TaskType.SUMMARY_COMPRESSION:
         return "summary"
-    if sp.startswith("Detect contradictions"):
-        return "contradiction"
     if sp.startswith("Extract factual claims"):
         return "fact_extraction"
     if sp.startswith("Analyze interview code"):
@@ -394,15 +392,6 @@ def _fact_extraction(user_content: str) -> dict:
     return out
 
 
-def _contradiction(h: int) -> dict:
-    return {
-        "is_contradiction": h % 2 == 0,
-        "confidence": 0.9 if h % 2 == 0 else 0.3,
-        "explanation": f"scripted-contradiction-{h % 1_000:03d}",
-        "suggested_probe": f"scripted-probe-{h % 1_000:03d}",
-    }
-
-
 def _code_rating(h: int) -> dict:
     return {
         "approach_match": _pick(("optimal", "brute_force", "partial_optimal", "novel", "unclear"), h),
@@ -444,15 +433,31 @@ def _next_actions(h: int, system_prompt: str) -> list[str]:
     return [a for i, a in enumerate(offered) if (h >> (13 + i)) & 1]
 
 
-def _claim_check(h: int) -> dict:
+_EARLIER_STATEMENT = re.compile(r"^E(\d+): ", re.MULTILINE)
+
+
+def _claim_check(h: int, user_content: str) -> dict:
     verdict = _pick(("correct", "incorrect", "misleading", "unverifiable"), h, 5)
     wrong = verdict in ("incorrect", "misleading")
+    # About half the checks with earlier statements to compare find one conflicting statement.
+    earlier = _EARLIER_STATEMENT.findall(user_content)
+    conflicts = []
+    if earlier and (h >> 21) & 1:
+        conflicts.append(
+            {
+                "earlier_id": f"E{earlier[(h >> 23) % len(earlier)]}",
+                "explanation": f"scripted-contradiction-{h % 1_000:03d}",
+                "confidence": 0.9,
+                "probe": f"scripted-probe-{h % 1_000:03d}",
+            }
+        )
     return {
         "claim": f"scripted-claim-{h % 1_000:03d}",
         "verdict": verdict,
         "confidence": 0.9 if wrong else 0.3,
         "correction": f"scripted-correction-{h % 1_000:03d}" if wrong else "",
         "self_correct_probe": f"scripted-self-correct-{h % 1_000:03d}" if wrong else "",
+        "conflicts": conflicts,
     }
 
 
@@ -535,7 +540,7 @@ def respond(kind: str, context: AnalysisContext) -> str:
     if kind == "probes":
         return json.dumps(_probes(h))
     if kind == "claim_check":
-        return json.dumps(_claim_check(h))
+        return json.dumps(_claim_check(h, context.user_content))
     if kind == "clarification":
         return json.dumps(_clarification(h))
     if kind == "coaching":
@@ -548,8 +553,6 @@ def respond(kind: str, context: AnalysisContext) -> str:
         return json.dumps(_report_synthesis(context.user_content, h))
     if kind == "fact_extraction":
         return json.dumps(_fact_extraction(context.user_content))
-    if kind == "contradiction":
-        return json.dumps(_contradiction(h))
     if kind == "code_rating":
         return json.dumps(_code_rating(h))
     if kind == "hint":

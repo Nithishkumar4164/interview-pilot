@@ -30,7 +30,6 @@ _CAPTURED_METHODS = (
     "send_hint",
     "send_speaker_snapshot",
     "send_code_analysis",
-    "send_hint_suggestion",
     # peer interviewer
     "send_copilot_card",
     "send_copilot_coverage",

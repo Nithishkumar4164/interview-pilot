@@ -10,7 +10,7 @@
  * - Runtime hint history
  */
 import { useState } from 'react';
-import { useHintStore, type HintSuggestion, type RuntimeHintEntry, type RegenerationReason } from '@/stores/hint-store';
+import { useHintStore, type RuntimeHintEntry, type RegenerationReason } from '@/stores/hint-store';
 import { PanelTitle } from './PanelTitle';
 import { usePaneHidden } from '@/stores/panel-store';
 
@@ -28,52 +28,24 @@ const REGENERATION_OPTIONS: Array<{ value: RegenerationReason; label: string }> 
 ];
 
 interface HintPanelProps {
-  onUseSuggestion?: (suggestion: HintSuggestion) => void;
   onRequestRuntimeHint: () => void;
   onRegenerateRuntimeHint: (reason: string) => void;
   onAcknowledgeRuntimeHint: (hintId: string, quality: string) => void;
 }
 
 export function HintPanel({
-  onUseSuggestion,
   onRequestRuntimeHint,
   onRegenerateRuntimeHint,
   onAcknowledgeRuntimeHint,
 }: HintPanelProps) {
   const hidden = usePaneHidden('hints');
-  const { activeRuntimeHint, runtimeHintHistory, runtimeHintLoading, suggestions, removeSuggestion } = useHintStore();
+  const { activeRuntimeHint, runtimeHintHistory, runtimeHintLoading } = useHintStore();
 
   return (
     <section className="hint-panel" hidden={hidden} aria-label="Smart Hints">
       <div className="hint-panel__header panel-header">
         <PanelTitle id="hints">Smart Hints</PanelTitle>
       </div>
-
-      {suggestions.map((suggestion) => (
-        <div key={suggestion.id} className="hint-panel__suggestion" role="note" aria-label="Suggested hint">
-          <div className="hint-panel__suggestion-header">
-            <span className="hint-panel__suggestion-label">Suggested hint</span>
-            <span className={`hint-card__directness hint-card__directness--${suggestion.directness}`}>
-              {DIRECTNESS_LABELS[suggestion.directness] ?? suggestion.directness}
-            </span>
-          </div>
-          <p className="hint-panel__suggestion-text">{suggestion.text}</p>
-          <div className="hint-panel__suggestion-actions">
-            <button
-              className="btn btn--small btn--primary"
-              onClick={() => {
-                onUseSuggestion?.(suggestion);
-                removeSuggestion(suggestion.id);
-              }}
-            >
-              Use
-            </button>
-            <button className="btn btn--small btn--ghost" onClick={() => removeSuggestion(suggestion.id)}>
-              Dismiss
-            </button>
-          </div>
-        </div>
-      ))}
 
       <button
         className="btn btn--primary hint-panel__trigger"

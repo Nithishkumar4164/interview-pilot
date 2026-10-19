@@ -1125,15 +1125,21 @@
       }
     },
     {
-      "method": "send_red_flag",
+      "method": "send_copilot_card",
       "payload": {
-        "claim": "I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.",
-        "confidence": 0.8,
-        "explanation": "Candidate previously said 'I have used' but now says 'I've never'",
-        "new_statement": "Actually I've never used Kafka Connect or MirrorMaker myself, another team ran that part.",
-        "suggested_probe": "Could you clarify your experience level with this technology?",
+        "body": "Candidate previously said 'I have used' but now says 'I've never'",
+        "id": "04-long-interview-memory:c6e4328e-6ee9-5ff2-9500-1a6470bbd1ba:contradiction:4aa353669eb97fad",
+        "items": [
+          "Earlier: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.",
+          "Now: Actually I've never used Kafka Connect or MirrorMaker myself, another team ran that part."
+        ],
+        "kind": "claim_check",
+        "priority": "urgent",
+        "probe": "Could you clarify your experience level with this technology?",
+        "question_id": "q-kafka",
+        "source": "rule",
         "timestamp": "<volatile>",
-        "type": "contradiction"
+        "title": "Conflicts with something they said earlier"
       }
     },
     {

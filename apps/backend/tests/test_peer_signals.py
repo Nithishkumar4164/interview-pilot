@@ -158,3 +158,91 @@ def test_difficulty_signal_needs_three_scored_answers() -> None:
         "s:q1:difficulty:cruising", "cruising", {"id": "q1", "alternates": ["Harder variant", "", "Third"]}, "t"
     )
     assert card["items"] == ["Harder variant", "Third"] and card["question_id"] == "q1" and card["source"] == "rule"
+
+
+# ── Claim check parsing (fake LLM) ─────────────────────────────────────────
+
+
+class _Failover:
+    """Answers every analyze() with one canned JSON reply and keeps the request."""
+
+    def __init__(self, reply: dict) -> None:
+        self.reply = reply
+        self.contexts: list = []
+
+    async def analyze(self, context, config, session_id=None):
+        from src.llm.interface import StructuredOutput
+
+        self.contexts.append(context)
+        return StructuredOutput(content="", parsed=self.reply)
+
+
+EARLIER = ["I have used Kafka for five years", "We processed a billion events a day"]
+
+
+async def test_the_claim_check_lists_earlier_statements_and_keeps_only_real_conflicts() -> None:
+    from src.services.peer_interviewer import verify_claim
+
+    fm = _Failover(
+        {
+            "claim": "Kafka keeps messages forever",
+            "verdict": "incorrect",
+            "confidence": 0.9,
+            "correction": "Retention is time- or size-bound.",
+            "self_correct_probe": "What happens to old messages?",
+            "conflicts": [
+                {"earlier_id": "E2", "explanation": "Volume does not add up", "confidence": 0.8, "probe": "How many?"},
+                {"earlier_id": "e2", "explanation": "repeat of E2", "confidence": 0.9},  # same statement twice
+                {"earlier_id": "E7", "explanation": "no such statement", "confidence": 0.9},
+                {"earlier_id": "E1", "explanation": "too unsure", "confidence": 0.4},
+                "not an object",
+            ],
+        }
+    )
+    found = await verify_claim(fm, "s", "ctx", None, "candidate", "Kafka keeps messages forever", EARLIER)
+    user = fm.contexts[0].user_content
+    assert (
+        "## Earlier Statements\nE1: I have used Kafka for five years\nE2: We processed a billion events a day" in user
+    )
+    assert user.endswith("## Statement To Verify\n[candidate]: Kafka keeps messages forever")
+    assert found["technical"]["verdict"] == "incorrect" and found["technical"]["correction"]
+    (conflict,) = found["conflicts"]
+    assert (conflict.claim, conflict.new_statement) == (EARLIER[1], "Kafka keeps messages forever")
+    assert conflict.detection_method == "llm" and conflict.suggested_probe == "How many?"
+
+
+async def test_a_correct_claim_with_no_conflicts_yields_nothing() -> None:
+    from src.services.peer_interviewer import verify_claim
+
+    fm = _Failover({"verdict": "correct", "confidence": 0.95, "conflicts": []})
+    found = await verify_claim(fm, "s", "ctx", None, "candidate", "Hash map lookups are O(1) on average.", [])
+    assert found == {"technical": None, "conflicts": []}
+    assert "## Earlier Statements\n(none yet)" in fm.contexts[0].user_content
+
+
+def test_cards_for_contradictions_code_checks_and_hints() -> None:
+    from src.services.contradiction_service import Contradiction
+    from src.services.peer_interviewer import code_check_card, contradiction_card, hint_card
+
+    rule = Contradiction(
+        "I led the team", "I never led anyone", "Led vs never led", 0.8, "Who did you lead?", "rule_based"
+    )
+    card = contradiction_card("s", "u1", rule, "q1")
+    assert card["kind"] == "claim_check" and card["source"] == "rule" and card["priority"] == "urgent"
+    assert card["id"].startswith("s:u1:contradiction:") and card["timestamp"] == rule.detected_at
+    assert card["items"] == ["Earlier: I led the team", "Now: I never led anyone"]
+    # One card per (earlier, new) pair: the id is stable across a resumed run.
+    assert contradiction_card("s", "u1", rule, "q1")["id"] == card["id"]
+
+    code = code_check_card(
+        "s:u2:code_check", "It is O(n)", {"explanation": "Nested loops", "suggested_probe": "Why?"}, ""
+    )
+    assert (code["kind"], code["body"], code["probe"], code["items"]) == (
+        "code_check",
+        "Nested loops",
+        "Why?",
+        ["They said: It is O(n)"],
+    )
+
+    hint = hint_card("s:u3:hint", "Think about lookups.", "moderate", "q1")
+    assert (hint["kind"], hint["probe"], hint["title"]) == ("hint", "Think about lookups.", "Suggested hint (moderate)")

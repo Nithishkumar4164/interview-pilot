@@ -231,24 +231,21 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                                 error=str(e),
                             )
 
-                elif msg_type == "use_hint_suggestion":
-                    # The interviewer is giving the drafted hint: it counts as a hint given in the
-                    # report, and analyses score hint_reception against it.
-                    text = str(message.get("text", "")).strip()
-                    suggestion_id = str(message.get("id", "")).strip()
-                    if text and suggestion_id:
-                        from src.api.sessions import _get_or_create_hint_service
-
-                        _get_or_create_hint_service(session_id).record_suggested_hint(
-                            suggestion_id, str(message.get("question_id", "")), text
-                        )
-                        worker = _active_workers.get(session_id)
-                        if worker:
-                            worker.set_active_hint(text)
-
                 elif msg_type == "use_copilot_card":
                     # The interviewer asked the suggested probe / relayed the card to the candidate.
                     worker = _active_workers.get(session_id)
+                    text = str(message.get("text", "")).strip()
+                    card_id = str(message.get("id", "")).strip()
+                    if message.get("kind") == "hint" and text and card_id:
+                        # Giving a drafted hint: it counts as a hint given in the report,
+                        # and analyses score hint_reception against it.
+                        from src.api.sessions import _get_or_create_hint_service
+
+                        _get_or_create_hint_service(session_id).record_suggested_hint(
+                            card_id, str(message.get("question_id", "")), text
+                        )
+                        if worker:
+                            worker.set_active_hint(text)
                     if worker:
                         try:
                             await worker.handle_copilot_card_used(message)

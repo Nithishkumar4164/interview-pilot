@@ -148,7 +148,7 @@ class HintService:
         return active
 
     def record_suggested_hint(self, suggestion_id: str, question_id: str, text: str) -> ActiveHint | None:
-        """Record a hint the agentic pipeline drafted and the interviewer chose to give.
+        """Record a hint the copilot drafted (a ``hint`` card) and the interviewer chose to give.
 
         Recorded once per suggestion (level 0, like other generated hints);
         returns None if this suggestion was already recorded. The progressive

@@ -238,10 +238,10 @@ describe('useAnalysisStore', () => {
 
   it('addRedFlags appends flags', () => {
     useAnalysisStore.getState().addRedFlags([
-      { id: 'f1', kind: 'contradiction', text: 'Contradiction detected', timestamp: '2024-01-01T00:00:00Z' },
+      { id: 'f1', text: 'Avoided the question', timestamp: '2024-01-01T00:00:00Z' },
     ]);
     expect(useAnalysisStore.getState().redFlags).toHaveLength(1);
-    expect(useAnalysisStore.getState().redFlags[0].kind).toBe('contradiction');
+    expect(useAnalysisStore.getState().redFlags[0].text).toBe('Avoided the question');
   });
 
   it('updateScores merges partial scores', () => {

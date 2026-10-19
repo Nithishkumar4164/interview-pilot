@@ -50,6 +50,43 @@ describe('copilot cards', () => {
     expect(useCopilotStore.getState().cards).toEqual([]);
   });
 
+  it('shows a drafted hint and reports it as given', () => {
+    const hint = cardFromPayload(
+      {
+        id: 'sess:utt-4:hint',
+        kind: 'hint',
+        title: 'Suggested hint (subtle)',
+        body: 'Give it if they stay stuck.',
+        probe: 'What lookup would find the complement in constant time?',
+        question_id: 'q-two-sum',
+      },
+      '2026-01-01T00:00:00Z',
+    );
+    expect(hint).not.toBeNull();
+    useCopilotStore.getState().addCard(hint!);
+    const onUse = renderPanel();
+    expect(screen.getByRole('note', { name: 'Hint' }).textContent).toContain(hint!.probe);
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as given' }));
+    expect(onUse).toHaveBeenCalledWith(hint);
+  });
+
+  it('shows contradictions and code checks as relayable cards', () => {
+    for (const [id, kind, title] of [
+      ['sess:utt-5:contradiction:ab12', 'claim_check', 'Conflicts with something they said earlier'],
+      ['sess:utt-6:code_check', 'code_check', 'What they said does not match their code'],
+    ]) {
+      const card = cardFromPayload(
+        { id, kind, title, items: ['Earlier: a', 'Now: b'], probe: 'Which is it?', priority: 'urgent' },
+        '',
+      );
+      useCopilotStore.getState().addCard(card!);
+    }
+    renderPanel();
+    expect(screen.getByRole('note', { name: 'Claim check' }).textContent).toContain('Earlier: a');
+    expect(screen.getByRole('note', { name: 'Code check' }).className).toContain('copilot-card--urgent');
+    expect(screen.getAllByRole('button', { name: 'Mark as asked' })).toHaveLength(2);
+  });
+
   it('dismisses without reporting', () => {
     useCopilotStore.getState().addCard(PROBE);
     const onUse = renderPanel();

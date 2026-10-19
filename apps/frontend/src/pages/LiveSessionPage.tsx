@@ -647,14 +647,6 @@ export function LiveSessionPage() {
               onRequestRuntimeHint={handleRequestRuntimeHint}
               onRegenerateRuntimeHint={handleRegenerateRuntimeHint}
               onAcknowledgeRuntimeHint={handleAcknowledgeRuntimeHint}
-              onUseSuggestion={(suggestion) =>
-                send({
-                  type: 'use_hint_suggestion',
-                  id: suggestion.id,
-                  text: suggestion.text,
-                  question_id: suggestion.questionId,
-                })
-              }
             />
           </div>
         </main>

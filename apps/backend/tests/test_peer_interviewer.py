@@ -112,7 +112,9 @@ async def test_probes_are_drafted_when_chosen_or_when_the_answer_left_gaps(check
     report = await _replay(checkpointer, scenario)
     assert report.error is None
     due = [text for text, actions, analysis in chosen if "suggest_probe" in actions or _gaps(analysis)]
-    assert due and len(due) < len(chosen), "scenario should exercise both branches"
+    assert due, "scenario exercises no probe"
+    if scenario.startswith("04"):
+        assert len(due) < len(chosen), "scenario 04 should exercise both branches"
     # One probe call per due analysis, about the utterance it was due for.
     calls = _calls(report, "probes")
     assert [c["user_content"].rsplit("\n", 1)[-1] for c in calls] == [f"[candidate]: {t}" for t in due]
@@ -126,36 +128,23 @@ async def test_probes_are_drafted_when_chosen_or_when_the_answer_left_gaps(check
     assert len([e for e in report.events if e.method == "send_analysis"]) == len(chosen)
 
 
-async def test_peer_mode_without_agentic_offers_only_peer_actions(checkpointer, chosen) -> None:
-    report = await _replay(checkpointer, "04_long_interview_memory.scenario.json", agentic=False, peer=True)
+async def test_the_copilot_offers_every_follow_up_and_runs_them_as_cards(checkpointer, chosen) -> None:
+    report = await _replay(checkpointer, "07_live_coding.scenario.json")
     assert report.error is None and chosen
     assert all(set(actions) <= set(session_graph.PEER_ACTIONS) for _, actions, _ in chosen)
-    offered = [c for c in report.llm_calls if c["kind"] == "utterance_analysis"]
-    assert offered and all('"draft_hint"' not in c["user_content"] for c in offered)
-    # No agentic follow-ups ran; the rule-based contradiction pass still did.
-    assert not [e for e in report.events if e.method == "send_hint_suggestion"]
-    assert not _calls(report, "code_inspection")
-    contradictions = [
-        e for e in report.events if e.method == "send_red_flag" and e.payload.get("type") == "contradiction"
-    ]
-    assert len(contradictions) == 1
-
-
-async def test_both_flags_offer_both_action_sets(checkpointer, chosen) -> None:
-    report = await _replay(checkpointer, "07_live_coding.scenario.json", agentic=True, peer=True)
-    assert report.error is None
+    # The folded-in follow-ups are chosen alongside the original copilot ones.
     all_chosen = {a for _, actions, _ in chosen for a in actions}
-    assert all_chosen & set(session_graph.AGENT_ACTIONS) and all_chosen & set(session_graph.PEER_ACTIONS)
-    assert len([e for e in report.events if e.method == "send_hint_suggestion"]) == sum(
-        "draft_hint" in a for _, a, _ in chosen
-    )
+    assert all_chosen & {"draft_hint", "inspect_code"} and all_chosen & {"suggest_probe", "clarify", "edge_cases"}
+    # Every follow-up result is a copilot card; contradictions and code mismatches are no longer red flags.
+    assert not [e for e in report.events if e.method == "send_red_flag" and "type" in e.payload]
 
 
-async def test_flag_off_keeps_the_copilot_silent(checkpointer, chosen) -> None:
-    report = await _replay(checkpointer, "04_long_interview_memory.scenario.json", agentic=True, peer=False)
-    assert report.error is None and chosen
-    assert not _cards(report) and not _calls(report, "probes") and not _calls(report, "coaching")
-    assert all(set(actions) <= set(session_graph.AGENT_ACTIONS) for _, actions, _ in chosen)
+async def test_flag_off_keeps_the_copilot_to_the_rule_pass(checkpointer, chosen) -> None:
+    report = await _replay(checkpointer, "04_long_interview_memory.scenario.json", peer=False)
+    assert report.error is None and not chosen
+    assert not _calls(report, "probes") and not _calls(report, "coaching") and not _calls(report, "claim_check")
+    # Only the rule-based contradiction pass speaks, as a claim-check card.
+    assert [(c["kind"], c["source"]) for c in _cards(report)] == [("claim_check", "rule")]
 
 
 async def test_a_failing_probe_does_not_fail_the_run(checkpointer, chosen, monkeypatch) -> None:
@@ -180,6 +169,7 @@ async def test_claims_are_verified_only_when_chosen_and_flagged_only_when_wrong(
     assert due, "scenario exercises no claim check"
     calls = _calls(report, "claim_check")
     assert [c["user_content"].rsplit("\n", 1)[-1] for c in calls] == [f"[candidate]: {t}" for t in due]
+    assert all("## Earlier Statements\n" in c["user_content"] for c in calls)
     # Exactly the checks the scripted LLM judged wrong (recomputed from the recorded prompt) become cards.
     from src.llm.interface import AnalysisContext, TaskType
     from src.replay.scripted_provider import respond
@@ -200,7 +190,7 @@ async def test_claims_are_verified_only_when_chosen_and_flagged_only_when_wrong(
         )["verdict"]
         in ("incorrect", "misleading")
     ]
-    cards = _cards(report, "claim_check")
+    cards = [c for c in _cards(report, "claim_check") if c["id"].endswith(":claim_check")]
     assert len(cards) == len(wrong)
     for card in cards:
         assert card["priority"] == "urgent" and card["probe"].startswith("scripted-self-correct-")
@@ -275,7 +265,7 @@ async def test_talk_share_and_monologue_signals(checkpointer) -> None:
             speaker_role=SpeakerRole.INTERVIEWER, text=_words(100, "still"), delay_ms=1000
         ),  # inside 5 min gap
     ]
-    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events), agentic=False)
+    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events))
     assert report.error is None
     rule_cards = [c for c in _cards(report, "coaching") if c["source"] == "rule"]
     assert [c["id"].rsplit(":", 1)[-1] for c in rule_cards] == ["monologue", "talk_share"]
@@ -310,7 +300,7 @@ async def test_time_steward_alerts_once_per_threshold_and_resets_on_question_cha
         TickEvent(delay_ms=50_000),  # 2:31 — 0:50 into q2: nothing
         TickEvent(delay_ms=15_000),  # 2:46 — 1:05 into q2: over
     ]
-    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events), agentic=False)
+    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events))
     assert report.error is None
     cards = _cards(report, "pace")
     assert [c["id"].split(":", 1)[1] for c in cards] == ["q1:pace:over", "q1:pace:far_over", "q2:pace:over"]
@@ -335,13 +325,13 @@ async def test_stuck_countdown_drafts_one_hint_per_stuck_snapshot(checkpointer) 
         CodeUpdateEvent(code=code + "x", delay_ms=1000),  # a new (still stuck) snapshot
         TickEvent(delay_ms=30_000),  # the candidate is still quiet: one more
     ]
-    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events), agentic=False)
+    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events))
     assert report.error is None
     stuck = _cards(report, "stuck")
     assert len(stuck) == 2 and all(c["title"].startswith("Quiet for ") for c in stuck)
-    drafted = [e.payload for e in report.events if e.method == "send_hint_suggestion"]
+    drafted = [c for c in _cards(report, "hint") if ":stuck:" in c["id"]]  # not the hints analyses chose
     assert [d["id"].split(":", 1)[1] for d in drafted] == [f"stuck:{c['id'].split(':')[1]}:hint" for c in stuck]
-    assert drafted[0]["question_id"] == "q1" and drafted[0]["text"].startswith("scripted-hint-")
+    assert drafted[0]["question_id"] == "q1" and drafted[0]["probe"].startswith("scripted-hint-")
 
 
 # ── Coverage map and adaptive difficulty ───────────────────────────────────
@@ -366,7 +356,7 @@ async def test_coverage_snapshots_follow_the_analyses(checkpointer, chosen) -> N
             delay_ms=1000,
         ),
     ]
-    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events), agentic=False)
+    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events))
     assert report.error is None
     snapshots = [e.payload for e in report.events if e.method == "send_copilot_coverage"]
     assert len(snapshots) == len(chosen) == 2
@@ -402,7 +392,7 @@ async def test_difficulty_card_once_per_question(checkpointer, monkeypatch, qual
         QuestionChangeEvent(question_text="Q2", question_plan={"id": "q2"}, delay_ms=1000),
         *answers,
     ]
-    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events), agentic=False)
+    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events))
     assert report.error is None
     cards = _cards(report, "difficulty")
     assert [c["id"].split(":", 1)[1] for c in cards] == [f"q1:difficulty:{key}", f"q2:difficulty:{key}"]
@@ -472,7 +462,7 @@ async def test_copilot_answers_from_the_live_transcript_with_real_citations(chec
         CopilotQueryEvent(query_id="ask-1", question="What did they say about Kafka earlier?", delay_ms=1000),
         CopilotQueryEvent(query_id="ask-2", question="   ", delay_ms=1000),
     ]
-    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events), agentic=False)
+    report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events))
     assert report.error is None
     answered, empty = report.copilot_replies
     assert answered["id"] == "ask-1" and answered["answer"].startswith("scripted-answer-")
@@ -540,7 +530,7 @@ async def test_edge_cases_are_suggested_once_per_code_snapshot(checkpointer, cho
                 speaker_role=SpeakerRole.CANDIDATE, text="Added the return, this should be complete.", delay_ms=1000
             ),
         ]
-        report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events), agentic=False)
+        report = await _replay(checkpointer, Scenario(meta=ScenarioMeta(id="x"), events=events))
     assert report.error is None
     calls = _calls(report, "edge_cases")
     assert len(calls) == 2  # once per snapshot, never without code

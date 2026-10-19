@@ -18,7 +18,12 @@ chooses the batch and the utterance to analyze, and runs the graph.
   and the DB write as soon as it returns, so follow-ups do not delay them.
 - merge_results: merges extracted facts in utterance order; records the
   analysis in the bounded history windows.
-- follow_up:     contradiction check against the fact store, then the hint signal.
+- follow_up:     rule-based contradiction check against the fact store, then the hint signal.
+
+With the peer interviewer on (PEER_INTERVIEWER_ENABLED) the analysis also
+chooses copilot follow-ups, run in parallel after merge_results instead of
+follow_up (see ``plan_actions``); every result reaches the dashboard as a
+copilot card.
 
 Nodes never call the dashboard or the DB. They emit effects with
 ``get_stream_writer`` and the pipeline's sink performs them, keyed so a
@@ -44,13 +49,12 @@ from src.llm.retry import retry_transient
 from src.schemas.analysis import EnhancedAnalysisResult
 from src.schemas.hint import RuntimeHintRequest
 from src.services.analysis_service import (
-    AGENT_ACTIONS,
     PEER_ACTIONS,
     analyze_utterance,
     analyze_utterance_with_actions,
 )
 from src.services.code_analysis_service import inspect_code_against_statement
-from src.services.contradiction_service import Contradiction, check_contradictions
+from src.services.contradiction_service import Contradiction, check_contradictions, known_claims, pair_key
 from src.services.memory_service import (
     CLAIM_PROVENANCE_SIZE,
     SUMMARY_TRIGGER_COUNT,
@@ -72,7 +76,10 @@ from src.services.peer_interviewer import (
     TALK_SHARE_MIN_WORDS,
     TALK_SHARE_THRESHOLD,
     TALK_WINDOW_SIZE,
+    claim_card,
     coach_interviewer,
+    code_check_card,
+    contradiction_card,
     copilot_card,
     coverage_increments,
     coverage_payload,
@@ -80,6 +87,7 @@ from src.services.peer_interviewer import (
     difficulty_signal,
     draft_clarification,
     edge_case_line,
+    hint_card,
     interviewer_note,
     looks_like_a_question,
     monologue_card,
@@ -225,7 +233,7 @@ class SessionState(TypedDict, total=False):
     analyze: UtteranceIn | None  # the utterance the ingress chose to analyze in this run
     transport_events: int  # transcript events the transport saw since the previous run
     memory_in_flight: int  # utterances a running compression covers (process-local)
-    code_context: dict | None  # latest code from CodeGraph (agentic inspect_code)
+    code_context: dict | None  # latest code from CodeGraph (copilot inspect_code, edge cases, stuck countdown)
 
     # ── memory ──
     working_memory: list[Utterance]
@@ -280,8 +288,8 @@ class SessionState(TypedDict, total=False):
     # ── per-run scratch ──
     extracted: Annotated[dict[int, dict], _reset_or_merge]
     analysis: EnhancedAnalysisResult | None
-    planned_actions: list[str]  # follow-ups the agentic analysis chose this run
-    found_contradictions: list[Contradiction] | None  # agentic check -> finish
+    planned_actions: list[str]  # copilot follow-ups the analysis chose this run
+    found_contradictions: list[Contradiction] | None  # check_claim -> finish
     checked_now: set[str] | None
 
 
@@ -361,8 +369,15 @@ def quality_counts(a: EnhancedAnalysisResult) -> bool:
     return a.answer_quality > 0 and a.on_track
 
 
-class ContradictionTask(TypedDict):
-    statement: str
+class ClaimTask(TypedDict):
+    """The claim check of one analyzed utterance: the rule pass always, the LLM check when chosen."""
+
+    utterance_id: str
+    question_id: str
+    question_plan: dict
+    context_text: str
+    speaker: str
+    text: str
     fact_store: FactStore
     checked_pairs: set[str]
     exclude_claims: list[str]
@@ -379,6 +394,8 @@ class HintTask(TypedDict):
 
 
 class InspectTask(TypedDict):
+    utterance_id: str
+    question_id: str
     question: str
     statement: str
     code: str
@@ -396,7 +413,7 @@ class ProbeTask(TypedDict):
 
 
 class PeerUtteranceTask(TypedDict):
-    """A peer action about one utterance (claim check, clarification)."""
+    """A peer action about one utterance (clarification)."""
 
     utterance_id: str
     question_id: str
@@ -439,23 +456,17 @@ class AnalyzeTask(TypedDict):
     active_hint: str
 
 
-def build_session_graph(
-    failover: FailoverManager, session_id: str, agentic: bool = False, peer: bool = False
-) -> StateGraph:
+def build_session_graph(failover: FailoverManager, session_id: str, peer: bool = False) -> StateGraph:
     """The graph for one session (``session_id`` scopes LLM calls and effect keys).
 
-    ``agentic`` (AGENTIC_ROUTING_ENABLED): the analysis also chooses follow-ups,
-    run in parallel after it (see ``plan_actions``). Off, the follow-up is the
-    fixed contradiction check of today.
-
     ``peer`` (PEER_INTERVIEWER_ENABLED): the copilot acts as a peer interviewer.
-    The analysis may also choose the peer actions (suggested probes, ...),
-    run in the same fan-out, and their results reach the dashboard as
-    copilot cards. Peer mode uses the fan-out shape even when ``agentic`` is
-    off; the agentic actions are offered only when ``agentic`` is on.
+    The analysis also chooses copilot follow-ups (PEER_ACTIONS: probes, claim
+    checks, clarifications, edge cases, drafted hints, code checks), run in
+    parallel after it (see ``plan_actions``), and every result reaches the
+    dashboard as a copilot card. Off, the follow-up is the rule-based
+    contradiction check and the hint signal.
     """
-    follow_ups = agentic or peer
-    offered: tuple[str, ...] = (*(AGENT_ACTIONS if agentic else ()), *(PEER_ACTIONS if peer else ()))
+    offered: tuple[str, ...] = PEER_ACTIONS if peer else ()
 
     def emit(kind: str, **data: Any) -> None:
         get_stream_writer()({"effect": kind, **data})
@@ -880,28 +891,14 @@ def build_session_graph(
         target = state["analyze"]
         result = state["analysis"]
         assert target is not None and result is not None
-        found, checked = await check_contradictions(
-            failover,
-            session_id,
+        found, checked = check_contradictions(
             target.text,
             state["fact_store"],
             state.get("checked_pairs", set()),
             exclude_claims=set(state.get("claims_by_utterance", {}).get(target.id, [])),
         )
         for c in found:
-            emit(
-                EFFECT_DASHBOARD,
-                method="send_red_flag",
-                payload={
-                    "type": "contradiction",
-                    "claim": c.claim,
-                    "new_statement": c.new_statement,
-                    "explanation": c.explanation,
-                    "suggested_probe": c.suggested_probe,
-                    "confidence": c.confidence,
-                    "timestamp": c.detected_at,
-                },
-            )
+            emit_card(contradiction_card(session_id, target.id, c, state.get("active_question_id") or ""))
         if result.hint_signal != "none":
             emit(
                 EFFECT_DASHBOARD,
@@ -913,39 +910,30 @@ def build_session_graph(
             "checked_pairs": set(state.get("checked_pairs", set())) | checked,
         }
 
-    # ── Agentic follow-ups ─────────────────────────────────────────────
-
-    def emit_contradiction(c: Contradiction) -> None:
-        emit(
-            EFFECT_DASHBOARD,
-            method="send_red_flag",
-            payload={
-                "type": "contradiction",
-                "claim": c.claim,
-                "new_statement": c.new_statement,
-                "explanation": c.explanation,
-                "suggested_probe": c.suggested_probe,
-                "confidence": c.confidence,
-                "timestamp": c.detected_at,
-            },
-        )
+    # ── Copilot follow-ups (peer interviewer) ──────────────────────────
 
     def plan_actions(state: SessionState) -> list[Send] | str:
         target, result = state.get("analyze"), state.get("analysis")
         if target is None or result is None:
             return END
         chosen = set(state.get("planned_actions", []))
-        # The rule-based contradiction pass always runs (cheap, deterministic);
-        # the LLM pass only when the agent chose to check.
+        question_id = state.get("active_question_id") or ""
+        # The claim check always runs its rule-based contradiction pass (cheap,
+        # deterministic); its LLM check only when the analysis chose verify_claim.
         sends = [
             Send(
-                "check_contradiction",
-                ContradictionTask(
-                    statement=target.text,
+                "check_claim",
+                ClaimTask(
+                    utterance_id=target.id,
+                    question_id=question_id,
+                    question_plan=state.get("question_plan", {}),
+                    context_text=peer_context(state),
+                    speaker=target.speaker,
+                    text=target.text,
                     fact_store=state["fact_store"],
                     checked_pairs=state.get("checked_pairs", set()),
                     exclude_claims=state.get("claims_by_utterance", {}).get(target.id, []),
-                    use_llm="check_contradiction" in chosen,
+                    use_llm="verify_claim" in chosen,
                 ),
             )
         ]
@@ -955,7 +943,7 @@ def build_session_graph(
                     "draft_hint",
                     HintTask(
                         utterance_id=target.id,
-                        question_id=state.get("active_question_id") or "",
+                        question_id=question_id,
                         question_plan=state.get("question_plan", {}),
                         working_memory_text=format_utterances(state.get("working_memory", [])),
                         rolling_summary=state.get("rolling_summary", ""),
@@ -969,6 +957,8 @@ def build_session_graph(
                 Send(
                     "inspect_code",
                     InspectTask(
+                        utterance_id=target.id,
+                        question_id=question_id,
                         question=state.get("current_question", ""),
                         statement=target.text,
                         code=code,
@@ -976,8 +966,7 @@ def build_session_graph(
                     ),
                 )
             )
-        if peer:
-            sends.extend(peer_sends(state, target, result, chosen))
+        sends.extend(peer_sends(state, target, result, chosen))
         return sends
 
     # ── Peer interviewer follow-ups ────────────────────────────────────
@@ -1010,8 +999,6 @@ def build_session_graph(
         gaps = bool(dims and dims.depth_completeness.key_points_missed)
         if "suggest_probe" in chosen or gaps:
             sends.append(Send("suggest_probes", ProbeTask(**task, analysis=result)))
-        if "verify_claim" in chosen:
-            sends.append(Send("verify_claim", task))
         # The candidate asking something is checked even if the analysis did not flag it.
         if "clarify" in chosen or looks_like_a_question(target.text):
             sends.append(Send("draft_clarification", task))
@@ -1072,38 +1059,44 @@ def build_session_graph(
         )
         return update
 
-    async def verify_claim_node(state: PeerUtteranceTask) -> dict:
-        try:
-            found = await asyncio.wait_for(
-                retry_transient(
-                    lambda: verify_claim(
-                        failover,
-                        session_id,
-                        state["context_text"],
-                        state["question_plan"] or None,
-                        state["speaker"],
-                        state["text"],
-                    )
-                ),
-                ACTION_TIMEOUT_S,
-            )
-        except Exception as e:
-            logger.warning("peer_action_failed", action="verify_claim", session_id=session_id, error=str(e))
-            return {}
-        if found is None:
-            return {}
-        emit_card(
-            copilot_card(
-                f"{session_id}:{state['utterance_id']}:claim_check",
-                "claim_check",
-                f"Claim looks {found['verdict']}: {found['claim']}",
-                found["correction"],
-                probe=found["self_correct_probe"],
-                priority="urgent",
-                question_id=state["question_id"],
-            )
+    async def check_claim(state: ClaimTask) -> dict:
+        """Contradictions with earlier statements (rule pass, plus the LLM check when chosen) and technical errors."""
+        found, checked = check_contradictions(
+            state["text"], state["fact_store"], state["checked_pairs"], exclude_claims=set(state["exclude_claims"])
         )
-        return {}
+        technical = None
+        if state["use_llm"]:
+            earlier = [c for c in known_claims(state["fact_store"]) if c not in set(state["exclude_claims"])]
+            try:
+                verified = await asyncio.wait_for(
+                    retry_transient(
+                        lambda: verify_claim(
+                            failover,
+                            session_id,
+                            state["context_text"],
+                            state["question_plan"] or None,
+                            state["speaker"],
+                            state["text"],
+                            earlier,
+                        )
+                    ),
+                    ACTION_TIMEOUT_S,
+                )
+            except Exception as e:
+                logger.warning("peer_action_failed", action="verify_claim", session_id=session_id, error=str(e))
+            else:
+                technical = verified["technical"]
+                ruled = {c.claim for c in found}
+                for c in verified["conflicts"]:
+                    key = pair_key(c.claim, c.new_statement)
+                    if c.claim not in ruled and key not in state["checked_pairs"]:
+                        found.append(c)
+                        checked.add(key)
+        for c in found:
+            emit_card(contradiction_card(session_id, state["utterance_id"], c, state["question_id"]))
+        if technical is not None:
+            emit_card(claim_card(f"{session_id}:{state['utterance_id']}:claim_check", technical, state["question_id"]))
+        return {"found_contradictions": found, "checked_now": checked}
 
     async def draft_clarification_node(state: PeerUtteranceTask) -> dict:
         try:
@@ -1171,29 +1164,6 @@ def build_session_graph(
         )
         return {}
 
-    async def check_contradiction(state: ContradictionTask) -> dict:
-        try:
-            found, checked = await asyncio.wait_for(
-                retry_transient(
-                    lambda: check_contradictions(
-                        failover,
-                        session_id,
-                        state["statement"],
-                        state["fact_store"],
-                        state["checked_pairs"],
-                        exclude_claims=set(state["exclude_claims"]),
-                        use_llm=state["use_llm"],
-                    )
-                ),
-                ACTION_TIMEOUT_S,
-            )
-        except Exception as e:
-            logger.warning("agent_action_failed", action="check_contradiction", session_id=session_id, error=str(e))
-            return {}
-        for c in found:
-            emit_contradiction(c)
-        return {"found_contradictions": found, "checked_now": checked}
-
     async def draft_hint(state: HintTask) -> dict:
         insights = state["recent_insights"]
         request = RuntimeHintRequest(question_id=state["question_id"])
@@ -1215,19 +1185,17 @@ def build_session_graph(
                 ACTION_TIMEOUT_S,
             )
         except Exception as e:
-            logger.warning("agent_action_failed", action="draft_hint", session_id=session_id, error=str(e))
+            logger.warning("peer_action_failed", action="draft_hint", session_id=session_id, error=str(e))
             return {}
         if response.text.startswith("Hint generation failed"):
             return {}
-        emit(
-            EFFECT_DASHBOARD,
-            method="send_hint_suggestion",
-            payload={
-                "id": f"{session_id}:{state['utterance_id']}:hint",
-                "question_id": state["question_id"],
-                "text": response.text,
-                "directness": response.directness.value,
-            },
+        emit_card(
+            hint_card(
+                f"{session_id}:{state['utterance_id']}:hint",
+                response.text,
+                response.directness.value,
+                state["question_id"],
+            )
         )
         return {}
 
@@ -1247,20 +1215,16 @@ def build_session_graph(
                 ACTION_TIMEOUT_S,
             )
         except Exception as e:
-            logger.warning("agent_action_failed", action="inspect_code", session_id=session_id, error=str(e))
+            logger.warning("peer_action_failed", action="inspect_code", session_id=session_id, error=str(e))
             return {}
         if mismatch:
-            emit(
-                EFFECT_DASHBOARD,
-                method="send_red_flag",
-                payload={
-                    "type": "code_mismatch",
-                    "statement": state["statement"],
-                    "explanation": mismatch["explanation"],
-                    "suggested_probe": mismatch["suggested_probe"],
-                    "confidence": mismatch["confidence"],
-                    "timestamp": datetime.now(UTC).isoformat(),
-                },
+            emit_card(
+                code_check_card(
+                    f"{session_id}:{state['utterance_id']}:code_check",
+                    state["statement"],
+                    mismatch,
+                    state["question_id"],
+                )
             )
         return {}
 
@@ -1293,17 +1257,21 @@ def build_session_graph(
     graph.add_conditional_edges("apply_events", dispatch, dispatch_targets)
     graph.add_edge("extract_facts", "merge_results")
     graph.add_edge("analyze", "merge_results")
-    if follow_ups:
-        actions = ["check_contradiction", "draft_hint", "inspect_code"]
-        graph.add_node("check_contradiction", check_contradiction, input_schema=ContradictionTask)
+    if peer:
+        actions = [
+            "check_claim",
+            "draft_hint",
+            "inspect_code",
+            "suggest_probes",
+            "draft_clarification",
+            "suggest_edge_cases",
+        ]
+        graph.add_node("check_claim", check_claim, input_schema=ClaimTask)
         graph.add_node("draft_hint", draft_hint, input_schema=HintTask)
         graph.add_node("inspect_code", inspect_code, input_schema=InspectTask)
-        if peer:
-            graph.add_node("suggest_probes", suggest_probes_node, input_schema=ProbeTask)
-            graph.add_node("verify_claim", verify_claim_node, input_schema=PeerUtteranceTask)
-            graph.add_node("draft_clarification", draft_clarification_node, input_schema=PeerUtteranceTask)
-            graph.add_node("suggest_edge_cases", suggest_edge_cases_node, input_schema=EdgeCaseTask)
-            actions += ["suggest_probes", "verify_claim", "draft_clarification", "suggest_edge_cases"]
+        graph.add_node("suggest_probes", suggest_probes_node, input_schema=ProbeTask)
+        graph.add_node("draft_clarification", draft_clarification_node, input_schema=PeerUtteranceTask)
+        graph.add_node("suggest_edge_cases", suggest_edge_cases_node, input_schema=EdgeCaseTask)
         graph.add_node("finish", finish)
         graph.add_conditional_edges("merge_results", plan_actions, [*actions, END])
         for action in actions:

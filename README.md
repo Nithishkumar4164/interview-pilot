@@ -16,7 +16,7 @@ Reduces cognitive load and bias for SDE interviewers with real-time transcriptio
 - **3-Tier Hierarchical Memory** — Working memory → rolling summary → fact store keeps context across long interviews without losing signal
 - **Progressive Hint System** — Three tiers (Nudge → Guide → Direct) plus runtime smart hints generated on demand
 - **Contradiction Detection** — Flags inconsistencies between candidate statements in real time
-- **Peer Interviewer Copilot** — Suggested probes, claim checks, pacing and coverage, a running scorecard, and ask-the-copilot (behind `PEER_INTERVIEWER_ENABLED`)
+- **Peer Interviewer Copilot** — Suggested probes, claim and contradiction checks, drafted hints, code checks, pacing and coverage, a running scorecard, and ask-the-copilot (behind `PEER_INTERVIEWER_ENABLED`)
 - **Meeting Capture** — The extension captures the meeting tab's audio and your microphone, and relays the tab's video to the dashboard without a screen-share picker; the video is pinned above the transcript
 - **Google Meet Controls** — Mute, camera, and present for the session's Meet tab from the dashboard's top bar; after capture starts, the extension switches back to the Interview Pilot tab
 - **Code Capture** — Snapshots the candidate's code from CoderPad, HackerRank, and LeetCode
@@ -215,8 +215,7 @@ Backend variables live in `apps/backend/.env` and are read with the `INTERVIEW_P
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | LLM providers; Anthropic is primary, OpenAI the fallback; with neither, a mock answers | — |
 | `DEV_LLM_PROVIDER` | Without keys: `mock` or `scripted` (deterministic, input-sensitive). `claude_code` runs every task on your local Claude Code login, keys or not (development only; `uv sync --extra claude-code`) | `mock` |
 | `DEEPGRAM_API_KEY` | Deepgram key for transcription | — |
-| `PEER_INTERVIEWER_ENABLED` | Copilot acts as a peer interviewer | `false` |
-| `AGENTIC_ROUTING_ENABLED` | Analysis chooses its own follow-ups | `false` |
+| `PEER_INTERVIEWER_ENABLED` | Copilot acts as a peer interviewer; off, only the rule-based contradiction check runs | `false` |
 | `REPORT_AGENTIC_SCORING` | Reports score each criterion with evidence tools | `false` |
 | `S3_ENDPOINT` | MinIO / S3 endpoint | `http://localhost:9000` |
 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` | MinIO / S3 credentials | `minioadmin` |

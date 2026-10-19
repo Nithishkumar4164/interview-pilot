@@ -61,10 +61,14 @@ async def replay() -> AsyncIterator:
 
 
 def _contradiction_flags(report: ReplayReport) -> list[dict]:
+    """Contradiction cards as {"claim", "new_statement"} (their "Earlier: ..." and "Now: ..." items)."""
     return [
-        e.payload
+        {
+            "claim": e.payload["items"][0].removeprefix("Earlier: "),
+            "new_statement": e.payload["items"][1].removeprefix("Now: "),
+        }
         for e in report.events
-        if e.method == "send_red_flag" and isinstance(e.payload, dict) and e.payload.get("type") == "contradiction"
+        if e.method == "send_copilot_card" and ":contradiction:" in e.payload["id"]
     ]
 
 
@@ -270,8 +274,9 @@ def test_audio_socket_for_an_ended_session_is_refused(live_session: str) -> None
 
 
 def test_a_used_suggested_hint_counts_in_the_report(live_session: str, monkeypatch) -> None:
-    """Before the fix, clicking Use on a suggested hint only set the hint analyses
-    score against: the report said no hints were given."""
+    """Before the fix, using a drafted hint only set the hint analyses score
+    against: the report said no hints were given. Drafted hints are copilot
+    cards now; marking one as given records it."""
     from fastapi.testclient import TestClient
     from sqlalchemy import delete, select
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -304,7 +309,8 @@ def test_a_used_suggested_hint_counts_in_the_report(live_session: str, monkeypat
 
     monkeypatch.setattr("src.main.get_report_runner", _NoResume)  # leave the dev DB's other reports alone
     suggestion = {
-        "type": "use_hint_suggestion",
+        "type": "use_copilot_card",
+        "kind": "hint",
         "id": f"{sid}:utt-3:hint",
         "question_id": "",  # the pipeline has no question id until the interviewer changes question
         "text": "What lookup would let you find the complement in constant time?",

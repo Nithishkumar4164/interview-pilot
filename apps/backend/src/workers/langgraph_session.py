@@ -226,7 +226,6 @@ class LangGraphSessionPipeline:
         clock: Callable[[], float] = time.monotonic,
         durability: Durability = "async",
         interim_throttle_s: float = INTERIM_THROTTLE_S,
-        agentic: bool | None = None,
         peer: bool | None = None,
         tick_interval_s: float = 0.0,
     ) -> None:
@@ -242,12 +241,10 @@ class LangGraphSessionPipeline:
         self._interim_throttle_s = interim_throttle_s
         from src.config import settings
 
-        if agentic is None:
-            agentic = settings.agentic_routing_enabled
         if peer is None:
             peer = settings.peer_interviewer_enabled
         self._peer = peer
-        self._graph = build_session_graph(failover_manager, session_id, agentic=agentic, peer=peer)
+        self._graph = build_session_graph(failover_manager, session_id, peer=peer)
         self._app: CompiledStateGraph | None = None
         self._config: RunnableConfig = {"configurable": {"thread_id": thread_id_for(session_id)}}
 

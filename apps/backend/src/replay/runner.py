@@ -54,7 +54,6 @@ PipelineFactory = Callable[[str, FailoverManager, PipelineTiming], SessionPipeli
 # outlasts the analysis it was triggered next to.
 REPLAY_LATENCY_MS: dict[str, float] = {
     "fact_extraction": 10,
-    "contradiction": 10,
     "hint": 20,
     "code_rating": 20,
     "code_analysis": 40,
@@ -377,8 +376,9 @@ def _summarize(events: list[CapturedEvent]) -> ReplaySummary:
             summary.analyses += 1
         elif e.method == "send_red_flag":
             summary.red_flags += 1
+        elif e.method == "send_copilot_card":
             payload = e.payload if isinstance(e.payload, dict) else {}
-            if payload.get("type") == "contradiction":
+            if ":contradiction:" in str(payload.get("id", "")):
                 summary.contradictions += 1
         elif e.method == "send_hint":
             summary.hints += 1

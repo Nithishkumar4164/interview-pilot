@@ -632,11 +632,6 @@ ul, ol {
   font-size: 0.85rem;
 }
 
-.flags-panel__item--contradiction,
-.flags-panel__item--code_mismatch {
-  border-left-color: var(--color-danger);
-}
-
 .flags-panel__kind {
   color: var(--color-text-secondary);
   font-size: 0.7rem;
@@ -646,49 +641,6 @@ ul, ol {
 
 .flags-panel__text {
   margin: var(--space-1) 0 0;
-}
-
-.flags-panel__detail,
-.flags-panel__probe {
-  margin: var(--space-1) 0 0;
-  color: var(--color-text-secondary);
-}
-
-.flags-panel__detail span,
-.flags-panel__probe span {
-  color: var(--color-text-muted);
-}
-
-.hint-panel__suggestion {
-  border: 1px solid var(--color-primary, #6366f1);
-  border-radius: var(--radius-md, 8px);
-  padding: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.hint-panel__suggestion-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.hint-panel__suggestion-label {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-secondary);
-}
-
-.hint-panel__suggestion-text {
-  margin: 0;
-  font-size: 0.9rem;
-}
-
-.hint-panel__suggestion-actions {
-  display: flex;
-  gap: var(--space-2);
 }
 
 .hint-panel {
@@ -4269,7 +4221,8 @@ ul, ol {
 }
 
 .copilot-card--pace,
-.copilot-card--stuck {
+.copilot-card--stuck,
+.copilot-card--hint {
   border-left-color: var(--color-info);
 }
 
@@ -4299,6 +4252,16 @@ ul, ol {
 .copilot-card__body {
   margin: 0;
   color: var(--color-text-secondary);
+}
+
+.copilot-card__probe {
+  margin: 0;
+  font-weight: 500;
+}
+
+.copilot-card__probe span {
+  color: var(--color-text-muted);
+  font-weight: 400;
 }
 
 .copilot-card__items {

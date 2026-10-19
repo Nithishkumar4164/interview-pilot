@@ -258,41 +258,38 @@ class TestAssembleContext:
 
 
 class TestContradictions:
-    def setup_method(self):
-        self.fm = _mock_failover_manager()
+    def _check(self, statement: str, facts: FactStore, checked: set[str] | None = None):
+        return check_contradictions(statement, facts, checked or set())
 
-    async def _check(self, statement: str, facts: FactStore, checked: set[str] | None = None):
-        return await check_contradictions(self.fm, "test-session", statement, facts, checked or set())
-
-    async def test_rule_based_experience_contradiction(self):
-        found, _ = await self._check(
+    def test_rule_based_experience_contradiction(self):
+        found, _ = self._check(
             "I've never used Django before", FactStore(claimed_experience=["I have experience with Python and Django"])
         )
         assert len(found) == 1
         assert found[0].detection_method == "rule_based"
         assert found[0].confidence == 0.8
 
-    async def test_rule_based_knowledge_contradiction(self):
-        found, _ = await self._check(
+    def test_rule_based_knowledge_contradiction(self):
+        found, _ = self._check(
             "I don't know Kubernetes at all", FactStore(claimed_experience=["I know Kubernetes well"])
         )
         assert len(found) == 1
 
-    async def test_no_contradiction(self):
-        found, _ = await self._check(
+    def test_no_contradiction(self):
+        found, _ = self._check(
             "I also have experience with Go", FactStore(claimed_experience=["I have experience with Python"])
         )
         assert found == []
 
-    async def test_skip_already_checked_pairs(self):
+    def test_skip_already_checked_pairs(self):
         facts = FactStore(claimed_experience=["I have experience with Python"])
-        found, checked = await self._check("I've never used Python", facts)
+        found, checked = self._check("I've never used Python", facts)
         assert len(found) == 1
-        again, _ = await self._check("I've never used Python", facts, checked)
+        again, _ = self._check("I've never used Python", facts, checked)
         assert again == []
 
-    async def test_empty_fact_store(self):
-        found, _ = await self._check("anything", FactStore())
+    def test_empty_fact_store(self):
+        found, _ = self._check("anything", FactStore())
         assert found == []
 
 

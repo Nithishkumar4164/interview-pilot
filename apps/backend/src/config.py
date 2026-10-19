@@ -56,13 +56,11 @@ class Settings(BaseSettings):
 
     # Upper bound on parallel LLM calls while generating one interview plan.
     plan_generation_max_concurrency: int = 4
-    # Session graph only: the analysis chooses follow-ups (contradiction check, hint draft, code check).
-    agentic_routing_enabled: bool = False
     # Reports: score each criterion with evidence tools, then one synthesis (single call if off).
     report_agentic_scoring: bool = False
     # Session graph: the copilot acts as a peer interviewer (suggested probes, claim checks,
-    # clarifications, interviewer coaching, pacing, coverage, scorecard, ask-the-copilot).
-    # Turns on the follow-up fan-out of agentic routing for its own actions.
+    # clarifications, drafted hints, code checks, edge cases, interviewer coaching, pacing,
+    # coverage, scorecard, ask-the-copilot). Off, only the rule-based contradiction check runs.
     peer_interviewer_enabled: bool = False
     # Price of a Sonnet token relative to an Opus token, for report cost accounting.
     # An assumption (1:5 held for earlier generations), not read from any price list.

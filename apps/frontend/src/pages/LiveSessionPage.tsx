@@ -212,14 +212,15 @@ export function LiveSessionPage() {
     return () => track.removeEventListener('ended', onEnded);
   }, [videoStream]);
 
-  // Meeting video sent by the extension when capture starts (no picker)
+  // Meeting video sent by the extension when capture starts (no picker).
+  // Imported video starts pinned above the transcript; clones float.
   const { sendMeetControl } = useExtensionChannel(sessionId ?? null, {
     onStream: (stream) => {
       setVideoStream((prev) => {
         prev?.getTracks().forEach((t) => t.stop());
         return stream;
       });
-      setOverlays((prev) => (prev.length > 0 ? prev : [{ id: crypto.randomUUID(), cropRegion: null, mode: 'floating' }]));
+      setOverlays((prev) => (prev.length > 0 ? prev : [{ id: crypto.randomUUID(), cropRegion: null, mode: 'docked' }]));
     },
     onMeetControls: setMeetControls,
   });
@@ -285,7 +286,7 @@ export function LiveSessionPage() {
         controller,
       } as DisplayMediaStreamOptions);
       setVideoStream(stream);
-      setOverlays([{ id: crypto.randomUUID(), cropRegion: null, mode: 'floating' }]);
+      setOverlays([{ id: crypto.randomUUID(), cropRegion: null, mode: 'docked' }]);
     } catch {
       // User cancelled the picker — do nothing
     }

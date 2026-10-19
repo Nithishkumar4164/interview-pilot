@@ -14,6 +14,7 @@ import { ChunkQueue, type QueuedChunk } from '../networking/chunk-queue';
 import { OfflineBuffer } from '../storage/offline-buffer';
 import { canonicalMeetingUrl, meetingCode } from '../meeting/meet-link';
 import { CAPTURE_BANNER_ID, injectCaptureBanner, removeCaptureBanner } from '../meeting/capture-banner';
+import { MEET_CONTROLS_MESSAGE, meetControls, type MeetControlAction, type MeetControlsState } from '../meeting/meet-controls';
 import { parsePairingToken, type Pairing } from '../auth/pairing';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -249,6 +250,8 @@ async function updateMeetingBadge(): Promise<void> {
     .catch(() => {
       // Not loaded yet (a just-opened tab): the tab's load completing shows it.
     });
+  // Report Meet's mic/camera/presenting state to the dashboard as it changes.
+  runMeetControls(tab.tabId, 'watch').catch(() => {});
   try {
     await chrome.action.setBadgeText({ tabId: tab.tabId, text: capturing ? 'REC' : '!' });
     await chrome.action.setBadgeBackgroundColor({ tabId: tab.tabId, color: capturing ? '#ef4444' : '#f59e0b' });
@@ -325,6 +328,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
       console.log('[InterviewPilot] Meet tab closed; stopping capture and pausing the session');
       stopAllCapture();
       await setMeetingTab(null);
+      reportMeetControls(NO_MEET_CONTROLS);
       await setSessionPaused(true);
     })
     .catch((err) => console.error('[InterviewPilot] Meet tab close handling failed:', err));
@@ -531,6 +535,82 @@ async function startCapture(tabId: number, streamId?: string): Promise<void> {
   await adoptMeetingTab(tabId);
   // Capture restarting after the Meet tab was closed picks the interview back up.
   await setSessionPaused(false);
+  // Started from the Meet tab: the interviewer works from the dashboard, so bring it back.
+  if (tabStreamId && (await getMeetingTab())?.tabId === tabId) await focusDashboardTab(tabId);
+}
+
+// ── The dashboard tab ─────────────────────────────────────────────────────
+//
+// The tab that paired (Connect extension on the live session page). Capture has
+// to be started with the Meet tab in front; once it is running, that tab comes
+// back to the front.
+
+interface DashboardTab {
+  tabId: number;
+  windowId: number;
+}
+
+async function setDashboardTab(tab: chrome.tabs.Tab | undefined): Promise<void> {
+  if (tab?.id === undefined) return;
+  const dashboardTab: DashboardTab = { tabId: tab.id, windowId: tab.windowId };
+  await chrome.storage.session.set({ dashboardTab });
+}
+
+async function focusDashboardTab(exceptTabId: number): Promise<void> {
+  const { dashboardTab } = await chrome.storage.session.get('dashboardTab');
+  const target = dashboardTab as DashboardTab | undefined;
+  if (!target || target.tabId === exceptTabId) return;
+  try {
+    await chrome.tabs.update(target.tabId, { active: true });
+    await chrome.windows.update(target.windowId, { focused: true });
+  } catch {
+    // The dashboard tab was closed; stay on Meet.
+  }
+}
+
+// ── Meeting controls ──────────────────────────────────────────────────────
+//
+// Mute, camera and present for the session's Meet tab, from the dashboard's
+// session bar. meetControls() runs inside the Meet tab and clicks Meet's own
+// buttons; a watcher it installs reports state changes back here, which are
+// relayed to the dashboard.
+
+const NO_MEET_CONTROLS: MeetControlsState = {
+  available: false,
+  mic: null,
+  camera: null,
+  presenting: false,
+  canPresent: false,
+};
+
+let lastMeetControls: MeetControlsState = NO_MEET_CONTROLS;
+
+function reportMeetControls(controls: MeetControlsState): void {
+  lastMeetControls = controls;
+  postToDashboard({ type: 'meet-controls', state: controls });
+}
+
+async function runMeetControls(tabId: number, action: MeetControlAction): Promise<MeetControlsState> {
+  const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: meetControls, args: [action] });
+  return (result?.result as MeetControlsState | undefined) ?? NO_MEET_CONTROLS;
+}
+
+/** A control from the dashboard. Presenting needs a real click in Meet, so it brings Meet forward with its button highlighted. */
+async function handleMeetControl(action: unknown): Promise<void> {
+  const meeting = await getMeetingTab();
+  if (!meeting) {
+    reportMeetControls(NO_MEET_CONTROLS);
+    return;
+  }
+  if (action === 'toggle-mic' || action === 'toggle-camera') {
+    reportMeetControls(await runMeetControls(meeting.tabId, action));
+  } else if (action === 'present') {
+    const tab = await chrome.tabs.update(meeting.tabId, { active: true });
+    if (tab) await chrome.windows.update(tab.windowId, { focused: true });
+    reportMeetControls(await runMeetControls(meeting.tabId, 'highlight-share'));
+  } else if (action === 'refresh') {
+    reportMeetControls(await runMeetControls(meeting.tabId, 'read'));
+  }
 }
 
 // ── Tab video for the dashboard ───────────────────────────────────────────
@@ -571,8 +651,16 @@ chrome.runtime.onConnectExternal.addListener((port) => {
     if (message?.type === 'hello' && typeof message.viewerId === 'string') {
       dashboardViewer = { port, viewerId: message.viewerId };
       if (message.wantsVideo && message.sessionId === state.sessionId) requestTabVideo(dashboardViewer);
+      // This worker may have restarted since the last report: read Meet afresh.
+      postToDashboard({ type: 'meet-controls', state: lastMeetControls });
+      handleMeetControl('refresh').catch(() => reportMeetControls(NO_MEET_CONTROLS));
     } else if (message?.type === 'tab-video-answer' && message.viewerId === dashboardViewer?.viewerId) {
       chrome.runtime.sendMessage({ type: 'offscreen:tab-video-answer', viewerId: message.viewerId, sdp: message.sdp });
+    } else if (message?.type === 'meet-control' && port === dashboardViewer?.port) {
+      handleMeetControl(message.action).catch((err) => {
+        console.error('[InterviewPilot] Meeting control failed:', err);
+        reportMeetControls(NO_MEET_CONTROLS);
+      });
     }
   });
   port.onDisconnect.addListener(() => {
@@ -629,6 +717,7 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
   }
   const backendUrl = typeof message.backendUrl === 'string' ? message.backendUrl : state.backendUrl;
   pairAndConnect(pairing, backendUrl, sender.origin);
+  setDashboardTab(sender.tab).catch(() => {});
   // The session's Meet link: open (or focus) that tab and track it for the session.
   const meetingUrl = canonicalMeetingUrl(typeof message.meetingUrl === 'string' ? message.meetingUrl : null);
   if (meetingUrl) {
@@ -641,6 +730,15 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
 // ── Message Handler ───────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === MEET_CONTROLS_MESSAGE && sender.tab?.id !== undefined) {
+    const fromTab = sender.tab.id;
+    getMeetingTab()
+      .then((meeting) => {
+        if (meeting?.tabId === fromTab) reportMeetControls(message.state as MeetControlsState);
+      })
+      .catch(() => {});
+    return false;
+  }
   switch (message.type) {
     case 'offscreen:ready':
       offscreenReady = true;

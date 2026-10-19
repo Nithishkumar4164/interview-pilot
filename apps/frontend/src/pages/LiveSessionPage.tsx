@@ -7,7 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ConnectExtension } from '@/components/auth/ConnectExtension';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useTimer } from '@/hooks/useTimer';
-import { useExtensionVideo } from '@/hooks/useExtensionVideo';
+import { useExtensionChannel, type MeetControlsState } from '@/hooks/useExtensionChannel';
 import { useSessionStore, getAllPlanQuestions } from '@/stores/session-store';
 import type { SessionStatus } from '@/stores/session-store';
 import { useHintStore } from '@/stores/hint-store';
@@ -59,6 +59,7 @@ export function LiveSessionPage() {
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   const [overlays, setOverlays] = useState<OverlayEntry[]>([]);
   const [focusAreas, setFocusAreas] = useState<string[]>([]);
+  const [meetControls, setMeetControls] = useState<MeetControlsState | null>(null);
 
   // Initialize WebSocket and timer
   const { send } = useWebSocket(sessionId ?? null);
@@ -207,12 +208,15 @@ export function LiveSessionPage() {
   }, [videoStream]);
 
   // Meeting video sent by the extension when capture starts (no picker)
-  useExtensionVideo(sessionId ?? null, (stream) => {
-    setVideoStream((prev) => {
-      prev?.getTracks().forEach((t) => t.stop());
-      return stream;
-    });
-    setOverlays((prev) => (prev.length > 0 ? prev : [{ id: crypto.randomUUID(), cropRegion: null, mode: 'floating' }]));
+  const { sendMeetControl } = useExtensionChannel(sessionId ?? null, {
+    onStream: (stream) => {
+      setVideoStream((prev) => {
+        prev?.getTracks().forEach((t) => t.stop());
+        return stream;
+      });
+      setOverlays((prev) => (prev.length > 0 ? prev : [{ id: crypto.randomUUID(), cropRegion: null, mode: 'floating' }]));
+    },
+    onMeetControls: setMeetControls,
   });
 
   // ── Overlay callbacks ──────────────────────────────────────────────
@@ -543,6 +547,8 @@ export function LiveSessionPage() {
           onEnd={handleEnd}
           onToggleVideo={handleToggleVideo}
           videoActive={!!videoStream}
+          meetControls={meetControls}
+          onMeetControl={sendMeetControl}
         />
 
         {!isPanel && <ConnectExtension sessionId={sessionId} />}

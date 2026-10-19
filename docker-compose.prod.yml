@@ -26,7 +26,9 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: copilot
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-copilot}
+      # No default: the container will refuse to start if this env var is
+      # unset or empty, preventing accidental prod boot with a weak password.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: interview_pilot
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -49,8 +51,10 @@ services:
   minio:
     image: minio/minio:latest
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      # No defaults: refuse to start if unset so prod never boots with the
+      # well-known ``minioadmin`` credentials.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
     command: server /data --console-address ":9001"
     volumes:
       - minio-data:/data

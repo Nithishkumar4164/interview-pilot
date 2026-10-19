@@ -1,0 +1,10 @@
+{
+ "order": 4,
+ "call": "ws ← copilot_reply",
+ "owner": "Pipeline → Dashboard",
+ "gives": "Answer, validated citations, or an error, keyed by the client's id",
+ "tag": "NEW",
+ "steps": [
+  7
+ ]
+}

@@ -167,7 +167,7 @@ Seven route groups serve the REST API:
 |---|---|---|
 | `auth` | `/api/auth` | JWT refresh, user profile, Google OAuth |
 | `sessions` | `/api/sessions` | Session lifecycle, pause/resume, hint progression |
-| `plans` | `/api/plans` | Plan CRUD, question swap/reorder, hint regeneration |
+| `questions` | `/api/sessions/{id}/questions` | Topic suggestions, question generation during the interview, the questionnaire |
 | `reports` | `/api/reports` | Report generation, listing, comparison, notes |
 | `upload` | `/api/upload` | Resume upload, extraction status, SSE streaming |
 | `history` | `/api/history` | Session history, filtering, pagination |
@@ -193,13 +193,15 @@ Bytes 12+:     bytes    PCM audio data (16-bit linear)
 
 ### 4.4 Service Layer (`src/services/`)
 
-The service layer encapsulates all business logic. Each service is independently testable and receives dependencies via constructor injection.
+The service layer holds the business logic as plain, independently testable functions (prompt assembly, LLM calls, parsing, heuristics). The real-time services keep no state of their own: session state lives in the LangGraph graphs (§4.8), whose nodes call these functions.
 
 #### Analysis Pipeline
 
 | Service | Responsibility |
 |---|---|
-| `analysis_service` | 6-dimension utterance evaluation |
+| `analysis_service` | 6-dimension utterance evaluation; the follow-up actions an analysis may choose (agentic and peer) |
+| `peer_interviewer` | Peer interviewer (`PEER_INTERVIEWER_ENABLED`): prompts and parsing for suggested probes, claim checks, clarifications, interviewer coaching and edge cases; the deterministic signals (talk share, monologue, pacing, stuck, coverage, difficulty); the scorecard notes; the one copilot-card shape |
+| `copilot_query` | Ask the copilot: a tool loop over the live session's evidence (the agentic report's index, built from pipeline state) with validated transcript citations |
 | `speaker_service` | 3-layer speaker identification |
 | `transcription_service` | Deepgram WebSocket orchestration |
 | `calibration_service` | Interview difficulty and time calibration |
@@ -228,7 +230,7 @@ The memory system maintains three tiers with token budgets to prevent context wi
 
 | Service | Responsibility |
 |---|---|
-| `plan_service` | Question generation, time allocation, phase structuring |
+| `question_service` | Topic suggestions and one-at-a-time question generation (hints, approaches, pitfalls) |
 | `hint_service` | 3-level progressive hints with timeout/auto-advance |
 | `runtime_hint_service` | On-demand hint generation from real-time context |
 
@@ -246,7 +248,8 @@ Level 3 (Direct)  →  Near-explicit answer, stops short of giving it away
 
 | Service | Responsibility |
 |---|---|
-| `report_generator` | 7-criterion post-interview assessment |
+| `report_generator` | 7-criterion post-interview assessment (single LLM call; the default) |
+| `report_agentic` | Per-criterion scoring with evidence tools and validated transcript citations, then one synthesis (`REPORT_AGENTIC_SCORING`, off by default) |
 
 Criteria: problem solving, code quality, communication, hint responsiveness, system design, resume verification, behavioral signals.
 
@@ -257,8 +260,7 @@ Criteria: problem solving, code quality, communication, hint responsiveness, sys
 | `auth_service` | JWT token creation and validation |
 | `resume_service` | PDF/DOCX text extraction |
 | `storage_service` | MinIO/S3 object storage |
-| `persistence_service` | Async queue-based batch writer (2s flush / 50-item batches) |
-| `session_state_service` | Periodic state snapshots for page recovery |
+| `persistence_service` | Async queue-based batch writer (2s flush / 50-item batches), idempotent inserts |
 
 ### 4.5 Repository Layer (`src/repositories/`)
 
@@ -280,7 +282,8 @@ SQLAlchemy 2.0+ models with async support:
 |---|---|
 | `User` | Auth user profile |
 | `InterviewSession` | Session metadata, status, timing |
-| `InterviewPlan` | Versioned question plans (JSON column) |
+| `SessionQuestion` | The questionnaire: each question used in a session, in order, with when it was asked |
+| `InterviewPlan` | Up-front question plans of older sessions (read-only) |
 | `Transcript` | Speech events with timing and speaker info |
 | `AnalysisEvent` | 6-dimension analysis results |
 | `HintEvent` | Hint display and acknowledgment tracking |
@@ -297,7 +300,20 @@ Background workers handle long-running or external-facing operations:
 |---|---|
 | `deepgram_worker` | Manages WebSocket to Deepgram Nova-2 (dual-channel, diarization, VAD) |
 | `mock_deepgram_worker` | Simulator for development and testing |
-| `analysis_worker` | Queues and processes real-time analysis requests |
+| `session_pipeline` | The `SessionPipeline` protocol handlers use, and its factory |
+| `langgraph_session` | `LangGraphSessionPipeline`: transport (dashboard pushes, transcript persistence), the per-session ingress queue, batching and the 3 s analysis rate limit, the effect sink, background summary compression and code-LLM refinement |
+
+### 4.8 Graphs (`src/graphs/`)
+
+LLM workflows are LangGraph graphs. Nodes read state, call the service functions through the `FailoverManager`, and return state updates; they never touch the dashboard or the DB directly. Side effects are streamed out (`get_stream_writer`) and performed by the owning pipeline, keyed so a resumed run cannot write a row twice.
+
+| Graph | Thread | Purpose |
+|---|---|---|
+| `session_graph` | `{session_id}` | Live interview: memory tiers, utterance analysis, fact extraction (in parallel), contradiction check, hint signal; optional agentic follow-ups (`AGENTIC_ROUTING_ENABLED`); optional peer interviewer (`PEER_INTERVIEWER_ENABLED`, §11.1) |
+| `code_graph` | `code:{session_id}` | Live code tracking on its own queue, so editor snapshots never wait behind an utterance analysis |
+| `report_graph` | `report:{report_id}` | Post-interview report; resumes after a restart without repeating finished steps |
+
+`checkpointer.py` owns the Postgres checkpointer (psycopg3 pool, plus a separate pool for per-run advisory locks) and `serde.py` the explicit allowlist of types that may be stored in checkpoints. Session threads are deleted when the session ends; report threads when the report is persisted.
 
 ---
 
@@ -320,7 +336,6 @@ Background workers handle long-running or external-facing operations:
 ```
 /                              SessionsPage         Interview history + new session entry
 /new                           DashboardPage         Resume upload + plan setup
-/session/:sessionId/plan       PlanReviewPage         Question review before go-live
 /session/:sessionId            LiveSessionPage        Real-time interview dashboard
 /reports                       ReportHistoryPage      Report archive + search
 /reports/compare               ReportComparisonPage   Side-by-side candidate comparison
@@ -346,11 +361,12 @@ Zustand stores are organized by feature domain. Each store is self-contained wit
 │  │ Hint history, │  │ Current plan, │  │ Identities,  │ │
 │  │ response qual.│  │ question order│  │ color assign. │ │
 │  └───────────────┘  └───────────────┘  └──────────────┘ │
-│  ┌───────────────┐                                       │
-│  │ offline-store │                                       │
-│  │ WS status,    │                                       │
-│  │ degradation   │                                       │
-│  └───────────────┘                                       │
+│  ┌───────────────┐  ┌───────────────┐                    │
+│  │ offline-store │  │ copilot-store │                    │
+│  │ WS status,    │  │ Copilot cards,│                    │
+│  │ degradation   │  │ coverage,     │                    │
+│  │               │  │ scorecard, Q&A│                    │
+│  └───────────────┘  └───────────────┘                    │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -366,7 +382,6 @@ Zustand stores are organized by feature domain. Each store is self-contained wit
 
 **DashboardPage** — Interview setup: resume upload (PDF/DOCX), candidate details, level selection (intern → principal), focus area configuration, LLM-powered plan generation.
 
-**PlanReviewPage** — Pre-interview planning: question tree view with timing, swap alternates, reorder, regenerate hints, transition to LIVE status.
 
 **LiveSessionPage** — Real-time interview dashboard: session timer, transcript panel with speaker coloring, 6-dimension analysis rings, hint panel with progressive levels, plan sidebar, speaker management.
 
@@ -513,13 +528,13 @@ Frontend                      Backend                       Storage
    │───────────────────────────►│  Extract text (LLM)         │
    │                            │  Store PDF in MinIO ────────►│
    │                            │                             │
-   │  POST /api/plans/create    │                             │
-   │───────────────────────────►│  Generate plan (LLM)        │
-   │◄───────────────────────────│  Persist to PostgreSQL      │
-   │                            │                             │
    │  POST /api/sessions/start  │                             │
    │───────────────────────────►│  Create session record      │
    │◄───────────────────────────│                             │
+   │                            │                             │
+   │  POST .../questions/generate                             │
+   │───────────────────────────►│  Generate a question (LLM)  │
+   │  POST .../questions        │  Log the used question ────►│
    │                            │                             │
    │  POST /api/reports/generate│                             │
    │───────────────────────────►│  Build report (LLM)         │
@@ -559,7 +574,8 @@ Frontend                      Backend                       Storage
 - **UUID primary keys** — Globally unique, safe for distributed generation
 - **JSON columns** — Flexible storage for plan structures, analysis dimensions, and report data without schema rigidity
 - **Async access** — All queries use `asyncpg` via SQLAlchemy's async engine, preventing I/O blocking on the event loop
-- **Cascade deletes** — Deleting a session removes all child records (transcripts, analysis, hints, snapshots)
+- **Cascade deletes** — Deleting a session removes all child records (transcripts, analysis, hints, code snapshots)
+- **Checkpoint tables** — `checkpoints`, `checkpoint_writes`, `checkpoint_blobs` and `checkpoint_migrations` belong to the LangGraph checkpointer (created by its `setup()`, excluded from Alembic)
 - **Alembic migrations** — Version-controlled schema evolution with 10+ migration files
 
 ### 9.3 Technology
@@ -585,8 +601,10 @@ The LLM subsystem uses an abstract interface to decouple business logic from pro
 │  (Abstract Interface)               │
 │                                     │
 │  + complete(prompt, config) → str   │
-│  + analyze(context, schema) → dict  │
-│  + health_check() → bool           │
+│  + analyze(context, config) → out   │
+│  + invoke_with_tools(system,        │
+│      messages, tools, config) → turn│
+│  + health_check() → status          │
 └──────────┬──────────────────────────┘
            │
     ┌──────┼──────────────────┐
@@ -599,18 +617,27 @@ The LLM subsystem uses an abstract interface to decouple business logic from pro
 └────────┘ └────────┘ └────────────┘
 ```
 
+`invoke_with_tools` runs one model turn of a provider-neutral tool conversation; `src/llm/tools.py` runs loops over it (step cap, forced final answer). Anthropic tool turns use prompt caching for the repeated system prompt and tools. The Anthropic provider omits `temperature` for models that reject it and ignores thinking blocks in responses.
+
 ### 10.2 Task-Based Routing
 
-Six task types are routed to provider pairs (primary + fallback):
+Each task type is routed to a provider pair (primary + fallback), in `src/llm/config.py`:
 
 | Task Type | Primary | Fallback | Model (Primary) |
 |---|---|---|---|
-| Real-time analysis | Anthropic | OpenAI | Claude Sonnet 4 |
-| Report generation | Anthropic | OpenAI | Claude Opus 4 |
-| Hint generation | Anthropic | OpenAI | Claude Sonnet 4 |
-| Summary compression | Anthropic | OpenAI | Claude Sonnet 4 |
-| Resume extraction | Anthropic | OpenAI | Claude Sonnet 4 |
-| Question generation | Anthropic | OpenAI | Claude Sonnet 4 |
+| Real-time analysis | Anthropic | OpenAI | `claude-sonnet-5` |
+| Code analysis / code rating | Anthropic | OpenAI | `claude-sonnet-5` |
+| Report generation (and agentic synthesis) | Anthropic | OpenAI | `claude-opus-5-5` |
+| Report criterion (agentic scoring) | Anthropic | OpenAI | `claude-sonnet-5` |
+| Peer interviewer (probes, claim checks, clarifications, edge cases) | Anthropic | OpenAI | `claude-sonnet-5` |
+| Interviewer coaching | Anthropic | OpenAI | `claude-haiku-5-5` |
+| Copilot query (ask the copilot) | Anthropic | OpenAI | `claude-sonnet-5` |
+| Hint generation | Anthropic | OpenAI | `claude-sonnet-5` |
+| Summary compression | Anthropic | OpenAI | `claude-sonnet-5` |
+| Resume extraction | Anthropic | OpenAI | `claude-sonnet-5` |
+| Question generation | Anthropic | OpenAI | `claude-sonnet-5` |
+
+`tests/test_live_models.py` (opt-in, `LIVE_LLM=1`) checks every configured model exists.
 
 ### 10.3 Health Monitoring & Failover
 
@@ -642,6 +669,8 @@ Six task types are routed to provider pairs (primary + fallback):
 
 The health monitor tracks consecutive failures and average latency per provider. When the primary exceeds the failure threshold, traffic is automatically routed to the fallback.
 
+Every call emits an `llm.analyze` / `llm.invoke_with_tools` OpenTelemetry span with provider, model, tokens, latency and failover (metadata only, never prompt text); spans are exported only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+
 **Exposed via:** `GET /health/providers`
 
 ---
@@ -651,51 +680,39 @@ The health monitor tracks consecutive failures and average latency per provider.
 ### 11.1 Audio → Analysis Pipeline
 
 ```
-Audio Frame (binary)
-       │
-       ▼
-┌──────────────────┐
-│ Deepgram Worker   │
-│                    │
-│ - Dual-channel WS │
-│ - Diarization     │
-│ - VAD             │
-│ - Smart formatting│
-└────────┬─────────┘
-         │ TranscriptEvent
-         ▼
-┌──────────────────┐     ┌──────────────────┐
-│ Speaker Service   │────►│ Memory Service    │
-│                    │     │                    │
-│ Layer 1: Channel   │     │ Tier 1: Working   │
-│ Layer 2: Diarize   │     │ Tier 2: Summary   │
-│ Layer 3: Calibrate │     │ Tier 3: Facts     │
-└────────┬─────────┘     └────────┬─────────┘
-         │                        │
-         ▼                        ▼
-┌──────────────────────────────────────────┐
-│           Analysis Service                │
-│                                           │
-│  6 Dimensions:                            │
-│  1. Relevance                             │
-│  2. Behavioral Signal                     │
-│  3. Contextual Consistency                │
-│  4. Hint Reception                        │
-│  5. Depth & Completeness                  │
-│  6. Communication Quality                 │
-│                                           │
-│  + Contradiction detection                │
-│  + Red flag identification                │
-└────────────────┬─────────────────────────┘
-                 │
-         ┌───────┴──────────┐
-         ▼                  ▼
-┌──────────────┐   ┌────────────────┐
-│ Persistence   │   │ Dashboard WS   │
-│ Service       │   │ Broadcaster    │
-│ (batch write) │   │ (real-time)    │
-└──────────────┘   └────────────────┘
+Audio Frame ──► Deepgram Worker ──► Speaker Service ──► TranscriptEvent
+                                                            │
+                                     LangGraphSessionPipeline (one per session)
+                                                            │
+        transport (not in the graph): dashboard push of every final,
+        interims throttled to 300 ms, speaker snapshots, transcript DB write
+                                                            │ finals only
+                                                            ▼
+               ingress queue ── batch + 3 s analysis rate limit ("analyze the latest")
+                                                            │ one run at a time
+                                                            ▼
+   SessionGraph (thread = session_id, Postgres checkpoints, durability="async")
+     apply_events ─┬─► extract_facts × long candidate utterances ─┐
+                   ├─► analyze (6 dimensions) ── push to dashboard ┴─► merge ─► follow-up ─► END
+                   └─► END                                             (contradictions, hint signal)
+
+   CodeGraph (thread code:{session_id}, own queue): editor snapshots → local heuristics
+     (progress, approach, stuck) → push + persist; LLM refinement runs in the background
+
+   Beside the graphs: summary compression (one at a time, lands as an ingress event)
 ```
+
+- **Memory tiers** (working memory 10, rolling summary, fact store) live in graph state; a question change resets working memory and code tracking.
+- **Effects** (dashboard pushes, DB writes) are streamed by nodes and performed by the pipeline; DB writes carry idempotency keys.
+- **Agentic routing** (`AGENTIC_ROUTING_ENABLED`, off by default): the analysis also chooses follow-ups (LLM contradiction check, a drafted hint shown as a "Suggested hint" card, a check of what the candidate says against their code); the rule-based contradiction pass always runs.
+- **Peer interviewer** (`PEER_INTERVIEWER_ENABLED`, off by default): the copilot listens to both sides and advises the interviewer, never the candidate. It uses the same follow-up fan-out (on its own when agentic routing is off) and one dashboard channel, `send_copilot_card`, with one payload shape for every whisper; the interviewer marks a card as asked (recorded as a `CopilotCardUsed` event, exported to the report) or dismisses it, and can mute kinds.
+  - *Chosen by the analysis, per candidate answer:* `suggest_probe` (1-3 follow-up questions aimed at the gaps found; also runs when the analysis reports missed key points), `verify_claim` (urgent card for a wrong or misleading technical claim, with the correction and a self-correct question), `clarify` (a reply to a candidate's unanswered question or misreading; also runs when the utterance reads as a question), `edge_cases` (inputs to trace by hand against the current code; also when the code heuristics suspect a bug; once per snapshot).
+  - *Listening to the interviewer:* the latest substantial interviewer turn of a batch (at most one per 20 s) goes to `coach_interviewer` on the cheap `INTERVIEWER_COACHING` task type (leading question, revealed answer, unclear, stacked, interrupting). Talk-share (60%+ of the last 250+ words, one nudge per 5 min) and monologue (120+ words) signals need no model.
+  - *The clock:* the pipeline enqueues a `Tick` every 30 s. The time steward compares the current question with its budget (the dashboard sends the remaining plan on `change_question`) and alerts once at 100% and 150%; the stuck countdown (code not moving, candidate quiet 60 s) sends a card and drafts a hint proactively, once per snapshot.
+  - *After each analysis, without a model:* a rubric coverage snapshot (`send_copilot_coverage`, evidence per report criterion from the dimensions and the question's plan category; the panel names the upcoming question that fills the first gap), the adaptive-difficulty signal (three strong answers: raise the bar; two weak or two direct hint signals: step down; once per key per question), and scorecard notes (`send_scorecard`: the quote plus the insight under the criterion the question speaks to; the interviewer adds their own via `add_scorecard_note`).
+  - *Ask the copilot:* `copilot_query` is answered request/response beside the graph by a tool loop (`COPILOT_QUERY`) over the live evidence index, with citations validated against the transcript.
+  - *Into the report:* `report_snapshot` carries `scorecard_notes` and `copilot_cards_used`; the single-call prompt lists them, and the agentic evidence index offers `get_scorecard_notes` only when a session has notes.
+- **Sessions end** by closing the pipeline and the transcription service; the session's checkpoint threads are deleted once the report has its inputs.
 
 ### 11.2 Batch Persistence
 
@@ -784,9 +801,11 @@ Automatic failover between Anthropic Claude (primary) and OpenAI GPT (fallback) 
 
 The frontend `useWebSocket` hook implements exponential backoff reconnection. The dashboard WebSocket recovers session state via a catch-up mechanism that replays missed events.
 
-### 13.5 Session State Snapshots
+### 13.5 Session State in Checkpoints
 
-`SessionStateService` periodically snapshots the full session state to Redis. If the frontend reloads or reconnects, `GET /api/sessions/{id}/state` returns the latest snapshot for immediate recovery — no event replay needed.
+The session and code graphs checkpoint their state to Postgres after every step. A new pipeline (after a backend restart, or on another worker) first finishes any run its thread left interrupted, then continues from the checkpointed memory, facts and question context. A per-run Postgres advisory lock keeps two processes from running the same session concurrently.
+
+`GET /api/sessions/{id}/state` builds its snapshot from those checkpoints, so any backend process serves it, current to the last run. Once a session ends its checkpoints are deleted and no snapshot is returned (the dashboard only uses it to restore a live session's question after a reload).
 
 ---
 
@@ -847,14 +866,14 @@ Reverse Proxy: Caddy (HTTPS via DuckDNS)
 
 ### 15.1 Authentication
 
-- **JWT-based** with access tokens (30 min TTL) and refresh tokens (7 day TTL)
-- **HS256** signing with configurable secret key
-- **Google OAuth 2.0** integration (optional)
-- `HTTPBearer` dependency on all protected FastAPI routes
+- **Google sign-in** (OIDC authorization code + PKCE), restricted to an email/domain allowlist; admins by email
+- **JWT** access tokens (HS256) in memory on the frontend; refresh token in an HttpOnly, SameSite=Strict cookie scoped to `/api/auth`
+- Owner-or-admin authorization on every session, plan and report (404 for others)
+- The Chrome extension uses a short-lived **pairing token** scoped to one session (audio/code sockets and that session's endpoints only)
 
 ### 15.2 Data Protection
 
-- Passwords hashed (not stored in plain text)
+- No passwords stored (Google sign-in only)
 - Environment-based secrets (never committed)
 - Non-root Docker containers in production
 - Internal-only Redis (no auth exposed externally)
@@ -879,9 +898,10 @@ Reverse Proxy: Caddy (HTTPS via DuckDNS)
 | E2E | Full pipeline | Transcript → analysis → hint → report lifecycle |
 
 **Test infrastructure:**
-- Mock LLM provider with controlled responses
-- Async database fixtures with transaction rollback
-- Factory-based test data generation
+- Mock LLM provider with controlled responses, and an input-sensitive **scripted** provider (deterministic, hash-derived answers; per-call-site latency; failure markers; tool use)
+- **Replay goldens** (`tests/scenarios`, `tests/golden`): scripted interviews replayed through the live pipeline, recording dashboard pushes, DB writes, every LLM prompt and the final state; originally recorded from the pre-LangGraph pipeline
+- Graph tests run on the real Postgres checkpointer (crash/resume with SIGKILL, idempotent writes, cross-process locking)
+- Async database fixtures; opt-in live-model tests (`LIVE_LLM=1`)
 
 ### 16.2 Frontend (Vitest + Testing Library)
 
@@ -906,7 +926,7 @@ Reverse Proxy: Caddy (HTTPS via DuckDNS)
 Interview Pilot is a production-grade, real-time interview assistance platform built on a modern async stack. Its architecture prioritizes:
 
 1. **Real-time performance** — Async-first backend, binary WebSocket protocol, batch persistence
-2. **Resilience** — 3-level offline degradation, LLM failover, auto-reconnect, state snapshots
+2. **Resilience** — 3-level offline degradation, LLM failover, auto-reconnect, checkpointed session state that survives restarts
 3. **Extensibility** — Interface-based LLM abstraction, modular service layer, shared type system
 4. **Developer experience** — Monorepo with Turborepo, hot reload, comprehensive CI/CD, type safety across all codebases
-5. **Separation of concerns** — 4-layer backend, feature-scoped frontend stores, dedicated extension workers
+5. **Separation of concerns** — 4-layer backend with LLM workflows as LangGraph graphs, feature-scoped frontend stores, dedicated extension workers

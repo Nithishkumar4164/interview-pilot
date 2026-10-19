@@ -1,0 +1,132 @@
+{
+ "scene": "s3",
+ "order": 1,
+ "name": "Leading question",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "rows",
+     "hl": "card",
+     "label": "Coaching card",
+     "items": [
+      {
+       "no": "Coaching",
+       "meta": "The question named the min-heap the candidate was expected to find",
+       "amt": "",
+       "due": "10:20",
+       "st": "grey",
+       "stl": "info",
+       "cb": "none"
+      }
+     ]
+    },
+    {
+     "t": "text",
+     "text": "Leading question"
+    },
+    {
+     "t": "text",
+     "text": "• Ask instead: \"How would you get the top k without sorting everything?\""
+    },
+    {
+     "t": "btn",
+     "text": "Done",
+     "kind": "off",
+     "sm": true
+    },
+    {
+     "t": "btn",
+     "text": "Dismiss",
+     "kind": "ghost",
+     "sm": true
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "i",
+  "p",
+  "g",
+  "l",
+  "w",
+  "d"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "i",
+   "to": "p",
+   "l": "final transcript line u-48 (interviewer)",
+   "t": "OLD",
+   "code": "{ \"id\": \"u-48\", \"speaker_role\": \"interviewer\", \"timestamp\": \"2026-10-16T10:20:10Z\",\n  \"text\": \"So you'd use a min-heap of size k there, right? That's what I'd do for the top-k part of this.\" }",
+   "what": "18 words from the interviewer."
+  },
+  {
+   "id": "m2",
+   "f": "p",
+   "to": "g",
+   "l": "apply_events: talk window + [interviewer, 18]",
+   "t": "MOD",
+   "what": "The window of the last 40 final utterances is updated. The talk-share rule (next situation) is checked here too and finds nothing yet."
+  },
+  {
+   "id": "m3",
+   "f": "g",
+   "to": "g",
+   "l": "dispatch: coaching_candidate",
+   "t": "NEW",
+   "what": "The latest interviewer turn of the batch with ≥ 12 words, and ≥ 20 s since `last_coaching_at`. It is sent alongside analyze and fact extraction, not after them."
+  },
+  {
+   "id": "m4",
+   "f": "g",
+   "to": "l",
+   "l": "coach_interviewer (Haiku, INTERVIEWER_COACHING)",
+   "t": "NEW",
+   "what": "A light model (`claude-haiku-5-5`), 300 tokens, temperature 0.1. It may only name clear problems with how the question was asked: leading, revealed answer, unclear, stacked, interrupting.",
+   "code": "system: \"Coach the interviewer of a live technical interview. Return JSON. ...\"\nuser:   <context>\n        ## Planned Question\n        Top-K frequent words in a stream\n        ## Interviewer's Latest Turn\n        [interviewer]: So you'd use a min-heap of size k there, right? ..."
+  },
+  {
+   "id": "m5",
+   "f": "l",
+   "to": "g",
+   "l": "issues: [leading_question]",
+   "res": true,
+   "code": "{ \"issues\": [ { \"kind\": \"leading_question\",\n  \"note\": \"The question named the min-heap the candidate was expected to find\",\n  \"suggestion\": \"Ask instead: How would you get the top k without sorting everything?\" } ] }",
+   "what": "Most turns come back with an empty list and no card. Unknown kinds are dropped; at most three issues are kept."
+  },
+  {
+   "id": "m6",
+   "f": "g",
+   "to": "g",
+   "l": "last_coaching_at = 10:20:10Z",
+   "t": "NEW",
+   "what": "Set whether or not the call succeeded, so a failing model does not get hammered every turn."
+  },
+  {
+   "id": "m7",
+   "f": "g",
+   "to": "w",
+   "l": "send_copilot_card (coaching, info)",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Title is the note, body the kind in plain words, items the suggestions. Coaching never relays anything to the candidate, so the panel shows Done instead of Mark as asked.",
+   "code": "{ \"id\": \"sess-7f3a:u-48:coaching\", \"kind\": \"coaching\", \"priority\": \"info\",\n  \"title\": \"The question named the min-heap ...\", \"body\": \"Leading question\",\n  \"items\": [\"Ask instead: How would you get the top k without sorting everything?\"],\n  \"probe\": \"\", \"source\": \"llm\" }"
+  },
+  {
+   "id": "m8",
+   "f": "w",
+   "to": "d",
+   "l": "copilot_card",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Coaching can be muted from the panel header; see suggestion 2 for what muting does not do."
+  }
+ ]
+}

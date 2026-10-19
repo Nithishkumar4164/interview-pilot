@@ -1,19 +1,38 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
+from typing import TypeVar
+
+from opentelemetry.trace import Span
 
 from src.llm.config import DEFAULT_TASK_MAPPINGS, TaskProviderMapping
 from src.llm.factory import ProviderFactory
 from src.llm.health import HealthMonitor
 from src.llm.interface import (
     AnalysisContext,
+    ChatMessage,
     ILLMProvider,
     LLMConfig,
     StructuredOutput,
     TaskType,
+    ToolSpec,
+    ToolTurn,
 )
 from src.utils.logging import get_logger
+from src.utils.tracing import get_tracer
 
 logger = get_logger("llm.failover")
+tracer = get_tracer("llm.failover")
+
+
+_R = TypeVar("_R", StructuredOutput, ToolTurn)
+
+
+def _record_result(span: Span, result: StructuredOutput | ToolTurn) -> None:
+    span.set_attribute("llm.provider", result.provider)
+    span.set_attribute("llm.model", result.model)
+    span.set_attribute("llm.input_tokens", result.input_tokens)
+    span.set_attribute("llm.output_tokens", result.output_tokens)
+    span.set_attribute("llm.latency_ms", result.latency_ms)
 
 
 class FailoverManager:
@@ -68,13 +87,15 @@ class FailoverManager:
             from_provider=mapping.primary_provider,
             to_provider=mapping.fallback_provider,
         )
-        self._failover_log.append({
-            "timestamp": datetime.now(UTC).isoformat(),
-            "task_type": task_type.value,
-            "from_provider": mapping.primary_provider,
-            "to_provider": mapping.fallback_provider,
-            "reason": "primary_unavailable",
-        })
+        self._failover_log.append(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "task_type": task_type.value,
+                "from_provider": mapping.primary_provider,
+                "to_provider": mapping.fallback_provider,
+                "reason": "primary_unavailable",
+            }
+        )
         return self._get_provider(mapping.fallback_provider, mapping.fallback_model), True
 
     async def analyze(
@@ -86,36 +107,102 @@ class FailoverManager:
         """Run an analysis call with automatic failover."""
         if config is None:
             config = LLMConfig()
+        cfg = config
+        return await self._call_with_failover(
+            "llm.analyze",
+            context.task_type,
+            config,
+            session_id,
+            lambda provider: provider.analyze(context, cfg),
+        )
 
-        provider, is_failover = self._select_provider(context.task_type)
-        try:
-            result = await provider.analyze(context, config)
-            self.health_monitor.record_success(provider.provider_name, result.latency_ms)
-            return result
-        except Exception as e:
-            self.health_monitor.record_failure(provider.provider_name)
-            logger.error(
-                "llm_call_failed",
-                provider=provider.provider_name,
-                task=context.task_type.value,
-                error=str(e),
-            )
-            # If we already failed over, re-raise
-            if is_failover:
-                raise
-            # Try failover
-            mapping = self._mappings[context.task_type]
-            fallback = self._get_provider(mapping.fallback_provider, mapping.fallback_model)
-            self._failover_log.append({
-                "timestamp": datetime.now(UTC).isoformat(),
-                "task_type": context.task_type.value,
-                "from_provider": mapping.primary_provider,
-                "to_provider": mapping.fallback_provider,
-                "reason": f"primary_error: {e!s}",
-            })
-            result = await fallback.analyze(context, config)
-            self.health_monitor.record_success(fallback.provider_name, result.latency_ms)
-            return result
+    async def invoke_with_tools(
+        self,
+        task_type: TaskType,
+        system: str,
+        messages: list[ChatMessage],
+        tools: list[ToolSpec],
+        config: LLMConfig | None = None,
+        session_id: str | None = None,
+        tool_choice: str = "auto",
+    ) -> ToolTurn:
+        """Run one turn of a tool conversation with automatic failover.
+
+        Failover is per turn: the conversation is provider-neutral, so a loop
+        can continue on the fallback provider after the primary fails.
+        """
+        if config is None:
+            config = LLMConfig()
+        cfg = config
+        return await self._call_with_failover(
+            "llm.invoke_with_tools",
+            task_type,
+            config,
+            session_id,
+            lambda provider: provider.invoke_with_tools(system, messages, tools, cfg, tool_choice),
+        )
+
+    async def _call_with_failover(
+        self,
+        span_name: str,
+        task_type: TaskType,
+        config: LLMConfig,
+        session_id: str | None,
+        call: Callable[[ILLMProvider], Awaitable[_R]],
+    ) -> _R:
+        # Metadata only: prompts carry candidate PII and never go on spans.
+        with tracer.start_as_current_span(
+            span_name,
+            attributes={
+                "llm.task_type": task_type.value,
+                "llm.max_tokens": config.max_tokens,
+                "session.id": session_id or "",
+            },
+        ) as span:
+            # start_as_current_span records the exception and sets ERROR status.
+            provider, is_failover = self._select_provider(task_type)
+            span.set_attribute("llm.failover", is_failover)
+            try:
+                result = await call(provider)
+                self.health_monitor.record_success(provider.provider_name, result.latency_ms)
+                _record_result(span, result)
+                return result
+            except Exception as e:
+                self.health_monitor.record_failure(provider.provider_name)
+                logger.error(
+                    "llm_call_failed",
+                    provider=provider.provider_name,
+                    task=task_type.value,
+                    error=str(e),
+                )
+                # If we already failed over, re-raise
+                if is_failover:
+                    raise
+                # Try failover
+                mapping = self._mappings[task_type]
+                fallback = self._get_provider(mapping.fallback_provider, mapping.fallback_model)
+                self._failover_log.append(
+                    {
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "task_type": task_type.value,
+                        "from_provider": mapping.primary_provider,
+                        "to_provider": mapping.fallback_provider,
+                        "reason": f"primary_error: {e!s}",
+                    }
+                )
+                span.add_event(
+                    "llm.failover",
+                    {
+                        "from_provider": mapping.primary_provider,
+                        "to_provider": mapping.fallback_provider,
+                        "reason": type(e).__name__,
+                    },
+                )
+                span.set_attribute("llm.failover", True)
+                result = await call(fallback)
+                self.health_monitor.record_success(fallback.provider_name, result.latency_ms)
+                _record_result(span, result)
+                return result
 
     async def complete(
         self,

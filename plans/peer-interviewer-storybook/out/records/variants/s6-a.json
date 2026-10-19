@@ -1,0 +1,95 @@
+{
+ "scene": "s6",
+ "order": 1,
+ "name": "Mark as asked",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "rows",
+     "label": "Follow-up card",
+     "items": [
+      {
+       "no": "Follow-up",
+       "meta": "Expected outline not covered: a heap for top-K",
+       "amt": "",
+       "due": "10:14",
+       "st": "proc",
+       "stl": "suggest",
+       "cb": "none"
+      }
+     ]
+    },
+    {
+     "t": "btn",
+     "hl": "btn",
+     "label": "Mark as asked",
+     "text": "Mark as asked",
+     "kind": "primary",
+     "sm": true
+    },
+    {
+     "t": "muted",
+     "hl": "gone",
+     "text": "After the tap the card leaves the list and the count drops."
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "i",
+  "d",
+  "w",
+  "p",
+  "g"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "i",
+   "to": "d",
+   "l": "taps Mark as asked",
+   "hl": "btn",
+   "what": "On probe, clarification, claim-check and edge-case cards. The other kinds show Done, which does the same thing."
+  },
+  {
+   "id": "m2",
+   "f": "d",
+   "to": "d",
+   "l": "markUsed: card removed, id remembered",
+   "hl": "gone",
+   "what": "The store drops the card and keeps its id in `usedIds` (last 100), so a resumed run re-sending the same card is ignored."
+  },
+  {
+   "id": "m3",
+   "f": "d",
+   "to": "w",
+   "l": "use_copilot_card",
+   "t": "NEW",
+   "what": "The text sent is the card's `probe`, else its first item, else its title: whatever the interviewer actually relayed.",
+   "code": "{ \"type\": \"use_copilot_card\", \"id\": \"sess-7f3a:u-41:probe\", \"kind\": \"probe\",\n  \"text\": \"You sort the whole map at the end. Is there a way to avoid sorting all n words when k is small?\",\n  \"question_id\": \"q2\" }"
+  },
+  {
+   "id": "m4",
+   "f": "w",
+   "to": "p",
+   "l": "handle_copilot_card_used",
+   "t": "NEW",
+   "what": "Enqueues a `CopilotCardUsed` event. Errors are logged and swallowed; the interviewer is never blocked."
+  },
+  {
+   "id": "m5",
+   "f": "p",
+   "to": "g",
+   "l": "CopilotCardUsed → copilot_cards_used",
+   "t": "NEW",
+   "what": "Appended once per card id, capped at 50, with the question id (falling back to the active one) and the time. It is state, so it survives a restart and reaches the report through `report_snapshot`.",
+   "code": "copilot_cards_used += [{ \"card_id\": \"sess-7f3a:u-41:probe\", \"kind\": \"probe\",\n  \"text\": \"You sort the whole map ...\", \"question_id\": \"q2\", \"at\": \"2026-10-16T10:14:30Z\" }]"
+  }
+ ]
+}

@@ -1,0 +1,106 @@
+"""The seam between transport (WebSocket/REST handlers) and the real-time pipeline.
+
+Handlers talk to a session's pipeline only through this Protocol, so the
+implementation (``LangGraphSessionPipeline``) can change without touching
+call sites.
+"""
+
+from collections.abc import Callable
+from typing import Protocol, runtime_checkable
+
+from src.llm.failover import FailoverManager
+from src.schemas.transcript import TranscriptEventSchema
+
+
+@runtime_checkable
+class SessionPipeline(Protocol):
+    session_id: str
+
+    # ── Inbound events ────────────────────────────────────────────────
+    async def on_transcript_event(self, event: TranscriptEventSchema) -> None: ...
+
+    async def on_question_change(
+        self,
+        question_text: str,
+        question_plan: dict,
+        question_index: int = 0,
+        *,
+        at: str | None = None,
+        remaining_questions: int = 0,
+        remaining_minutes: float = 0.0,
+    ) -> None: ...
+
+    def on_tick(self, at: str | None = None) -> None:
+        """The peer interviewer's clock (pacing and stuck checks)."""
+        ...
+
+    def set_active_hint(self, hint_text: str) -> None: ...
+
+    async def handle_runtime_hint_ack(self, data: dict) -> None: ...
+
+    async def handle_copilot_card_used(self, data: dict) -> None:
+        """The interviewer acted on a copilot card (peer interviewer)."""
+        ...
+
+    async def handle_scorecard_note(self, data: dict) -> None:
+        """The interviewer typed a scorecard note (peer interviewer)."""
+        ...
+
+    async def on_code_snapshot(self, code: str, language: str, source: str) -> None:
+        """A snapshot of the candidate's editor, from the code WebSocket."""
+        ...
+
+    # ── Request/response ──────────────────────────────────────────────
+    async def handle_runtime_hint_request(self, request_data: dict) -> dict: ...
+
+    async def handle_code_rating(self, data: dict) -> dict: ...
+
+    async def handle_copilot_query(self, data: dict) -> dict:
+        """Ask the copilot (peer interviewer): the reply payload for ``send_copilot_reply``."""
+        ...
+
+    # ── Reads ─────────────────────────────────────────────────────────
+    def get_recent_transcripts(self, limit: int = 50) -> list[dict]: ...
+
+    def get_transcripts_by_ids(self, transcript_ids: set[str]) -> list[dict]: ...
+
+    def report_snapshot(self) -> dict:
+        """Session-derived inputs for report generation (facts, summary, analyses, contradictions, code)."""
+        ...
+
+    def to_dict(self) -> dict: ...
+
+    def state_snapshot(self, hint_history: list[dict] | None = None) -> dict:
+        """The session-state snapshot (GET /state shape) for this session."""
+        ...
+
+    # ── Lifecycle ─────────────────────────────────────────────────────
+    async def drain(self) -> None: ...
+
+    async def wait_idle(self) -> None:
+        """Wait until all work triggered so far has finished (replay and tests)."""
+        ...
+
+    def stop(self) -> None: ...
+
+    async def close(self) -> None:
+        """The session ended: stop for good and release background work and stored state."""
+        ...
+
+
+def create_session_pipeline(
+    session_id: str,
+    failover_manager: FailoverManager,
+    get_speaker_snapshot: Callable[[], dict] | None = None,
+) -> SessionPipeline:
+    from src.config import settings
+    from src.dependencies import get_checkpointer
+    from src.workers.langgraph_session import TICK_INTERVAL_S, LangGraphSessionPipeline
+
+    return LangGraphSessionPipeline(
+        session_id,
+        failover_manager,
+        get_checkpointer(),
+        get_speaker_snapshot=get_speaker_snapshot,
+        tick_interval_s=TICK_INTERVAL_S if settings.peer_interviewer_enabled else 0.0,
+    )

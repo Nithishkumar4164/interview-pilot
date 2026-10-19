@@ -1,0 +1,669 @@
+"""Peer interviewer (PEER_INTERVIEWER_ENABLED): what the copilot says to the interviewer.
+
+Everything here is advice for the interviewer, never a message to the
+candidate. The session graph decides *when* to call these (the analysis
+chooses follow-up actions, deterministic signals fire on their own) and
+emits the results as copilot cards; this module owns the prompts, the
+parsing and the deterministic signal rules.
+
+LLM calls raise on provider errors: the graph node decides on retries and
+timeouts, and a failed follow-up never fails the run.
+"""
+
+import json
+from datetime import UTC, datetime
+from typing import Any
+
+from src.llm.failover import FailoverManager
+from src.llm.interface import AnalysisContext, LLMConfig, TaskType
+from src.schemas.analysis import EnhancedAnalysisResult
+from src.services.analysis_service import build_question_plan_context
+from src.utils.logging import get_logger
+
+logger = get_logger("peer_interviewer")
+
+# ── Copilot cards ──────────────────────────────────────────────────────────
+
+CARD_KINDS = ("probe", "claim_check", "clarification", "coaching", "pace", "stuck", "difficulty", "edge_cases")
+PRIORITIES = ("info", "suggest", "urgent")
+
+
+def copilot_card(
+    card_id: str,
+    kind: str,
+    title: str,
+    body: str,
+    *,
+    items: list[str] | None = None,
+    probe: str = "",
+    priority: str = "suggest",
+    source: str = "llm",
+    question_id: str = "",
+    timestamp: str = "",
+) -> dict[str, Any]:
+    """The one payload shape every whisper to the interviewer uses (``send_copilot_card``)."""
+    assert kind in CARD_KINDS and priority in PRIORITIES
+    return {
+        "id": card_id,
+        "kind": kind,
+        "priority": priority,
+        "title": title,
+        "body": body,
+        "items": list(items or []),
+        "probe": probe,
+        "question_id": question_id,
+        "source": source,
+        "timestamp": timestamp or datetime.now(UTC).isoformat(),
+    }
+
+
+def _parsed(content: str, parsed: dict | None) -> dict:
+    if isinstance(parsed, dict):
+        return parsed
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _analysis_summary(analysis: EnhancedAnalysisResult | None) -> str:
+    if analysis is None:
+        return ""
+    lines = [
+        f"Quality {analysis.answer_quality}/5, {'on track' if analysis.on_track else 'off track'}: {analysis.insight}"
+    ]
+    dims = analysis.dimensions
+    if dims is not None:
+        if dims.depth_completeness.key_points_missed:
+            lines.append("Missed: " + "; ".join(dims.depth_completeness.key_points_missed))
+        if dims.depth_completeness.key_points_covered:
+            lines.append("Covered: " + "; ".join(dims.depth_completeness.key_points_covered))
+        weakest = min(
+            (
+                ("relevance", dims.relevance.score),
+                ("depth", dims.depth_completeness.score),
+                ("communication", dims.communication_quality.score),
+                ("consistency", dims.contextual_consistency.score),
+            ),
+            key=lambda d: _SCORE_RANK.get(d[1].value, 2),
+        )
+        lines.append(f"Weakest dimension: {weakest[0]} ({weakest[1].value})")
+    return "\n".join(lines)
+
+
+_SCORE_RANK = {"poor": 0, "weak": 1, "adequate": 2, "good": 3, "excellent": 4}
+
+
+# ── Suggested probes ───────────────────────────────────────────────────────
+
+PROBES_SYSTEM_PROMPT = """Suggest follow-up questions for a live interview. Return JSON.
+
+You are a senior engineer sitting beside the interviewer. The candidate just answered. Propose 1-3 follow-up
+questions the interviewer could ask next, each aimed at something the answer left open: a gap in the expected
+outline, a claim that deserves evidence, or the weakest part of the answer. Prefer questions that make the
+candidate reason aloud over yes/no questions. Never reveal the expected answer in the question.
+
+Respond in JSON:
+{
+  "probes": [
+    {"question": "<what the interviewer can ask, in their voice>", "targets": "<the gap or claim it tests>", "why": "<one short reason>"}
+  ]
+}
+Return "probes": [] if the answer was complete and nothing is worth probing."""
+
+MAX_PROBES = 3
+
+
+async def suggest_probes(
+    failover: FailoverManager,
+    session_id: str,
+    context_text: str,
+    question_plan: dict | None,
+    analysis: EnhancedAnalysisResult | None,
+    speaker: str,
+    text: str,
+) -> list[dict[str, str]]:
+    """Up to three follow-up questions for the interviewer, or []. LLM errors propagate."""
+    summary = _analysis_summary(analysis)
+    user_content = (
+        f"{context_text}{build_question_plan_context(question_plan)}"
+        + (f"\n\n## Analysis Of This Answer\n{summary}" if summary else "")
+        + f"\n\n## Latest Utterance\n[{speaker}]: {text}"
+    )
+    result = await failover.analyze(
+        AnalysisContext(
+            system_prompt=PROBES_SYSTEM_PROMPT, user_content=user_content, task_type=TaskType.PEER_INTERVIEWER
+        ),
+        LLMConfig(max_tokens=500, temperature=0.4, response_format="json"),
+        session_id=session_id,
+    )
+    probes: list[dict[str, str]] = []
+    for item in _parsed(result.content, result.parsed).get("probes") or []:
+        if not isinstance(item, dict):
+            continue
+        question = str(item.get("question", "")).strip()
+        if question:
+            probes.append(
+                {"question": question, "targets": str(item.get("targets", "")), "why": str(item.get("why", ""))}
+            )
+    return probes[:MAX_PROBES]
+
+
+# ── Claim verification ─────────────────────────────────────────────────────
+
+CLAIM_SYSTEM_PROMPT = """Verify a technical claim made in a live interview. Return JSON.
+
+The candidate just stated something technical as fact: a complexity, a guarantee, how an algorithm, data
+structure, protocol or tool behaves. Decide whether it is right. Be strict about what was actually claimed and
+generous about imprecise wording. If the statement is an opinion, a plan, or cannot be checked, say so.
+
+Respond in JSON:
+{
+  "claim": "<the claim, in one sentence>",
+  "verdict": "<correct|incorrect|misleading|unverifiable>",
+  "confidence": <0.0-1.0>,
+  "correction": "<what is actually true, one or two sentences; empty if correct>",
+  "self_correct_probe": "<a question the interviewer can ask so the candidate finds the error themselves; empty if correct>"
+}"""
+
+CLAIM_MIN_CONFIDENCE = 0.6
+
+
+async def verify_claim(
+    failover: FailoverManager,
+    session_id: str,
+    context_text: str,
+    question_plan: dict | None,
+    speaker: str,
+    text: str,
+) -> dict[str, Any] | None:
+    """A wrong or misleading claim with its correction, or None. LLM errors propagate."""
+    user_content = (
+        f"{context_text}{build_question_plan_context(question_plan)}\n\n## Statement To Verify\n[{speaker}]: {text}"
+    )
+    result = await failover.analyze(
+        AnalysisContext(
+            system_prompt=CLAIM_SYSTEM_PROMPT, user_content=user_content, task_type=TaskType.PEER_INTERVIEWER
+        ),
+        LLMConfig(max_tokens=400, temperature=0.1, response_format="json"),
+        session_id=session_id,
+    )
+    data = _parsed(result.content, result.parsed)
+    verdict = str(data.get("verdict", "")).lower()
+    try:
+        confidence = float(data.get("confidence", 0) or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    if verdict not in ("incorrect", "misleading") or confidence < CLAIM_MIN_CONFIDENCE:
+        return None
+    return {
+        "claim": str(data.get("claim", "")) or text[:160],
+        "verdict": verdict,
+        "confidence": confidence,
+        "correction": str(data.get("correction", "")),
+        "self_correct_probe": str(data.get("self_correct_probe", "")),
+    }
+
+
+# ── Clarification watch ────────────────────────────────────────────────────
+
+CLARIFY_SYSTEM_PROMPT = """Draft a clarification for a live interview. Return JSON.
+
+Decide whether the candidate needs something cleared up right now: they asked a question the interviewer has
+not answered, or they seem to have misread the problem (wrong input assumptions, solving a different task).
+If so, draft the reply the interviewer can give. The reply clarifies the problem statement only; it must not
+hint at the solution.
+
+Respond in JSON:
+{
+  "needs_clarification": true/false,
+  "what_is_unclear": "<the open question or misunderstanding, one sentence; empty if none>",
+  "reply": "<what the interviewer can say, in their voice; empty if none>"
+}"""
+
+
+async def draft_clarification(
+    failover: FailoverManager,
+    session_id: str,
+    context_text: str,
+    question_plan: dict | None,
+    speaker: str,
+    text: str,
+) -> dict[str, str] | None:
+    """{"what_is_unclear", "reply"} when the candidate needs a clarification, else None. LLM errors propagate."""
+    user_content = (
+        f"{context_text}{build_question_plan_context(question_plan)}\n\n## Latest Utterance\n[{speaker}]: {text}"
+    )
+    result = await failover.analyze(
+        AnalysisContext(
+            system_prompt=CLARIFY_SYSTEM_PROMPT, user_content=user_content, task_type=TaskType.PEER_INTERVIEWER
+        ),
+        LLMConfig(max_tokens=300, temperature=0.2, response_format="json"),
+        session_id=session_id,
+    )
+    data = _parsed(result.content, result.parsed)
+    reply = str(data.get("reply", "")).strip()
+    if not data.get("needs_clarification") or not reply:
+        return None
+    return {"what_is_unclear": str(data.get("what_is_unclear", "")), "reply": reply}
+
+
+def looks_like_a_question(text: str) -> bool:
+    """A candidate utterance that is asking the interviewer something (cheap trigger for the clarification check)."""
+    stripped = text.strip()
+    return "?" in stripped or stripped.lower().startswith(("can i assume", "should i", "do you want", "is it okay if"))
+
+
+# ── Interviewer coaching ───────────────────────────────────────────────────
+
+COACHING_SYSTEM_PROMPT = """Coach the interviewer of a live technical interview. Return JSON.
+
+You see the interviewer's latest turn and the conversation before it. Point out only clear problems with how
+the question was asked, never with the candidate:
+  leading_question   - the question suggests the answer or the approach ("so you'd use a hash map, right?");
+  revealed_answer    - the interviewer gave away a key step of the expected solution;
+  unclear_question   - the question is ambiguous or missing constraints the candidate needs;
+  stacked_questions  - several questions at once, so the candidate can only answer one;
+  interrupting       - the interviewer cut off an answer that was still developing.
+Most turns are fine: return an empty list unless you are confident.
+
+Respond in JSON:
+{
+  "issues": [
+    {"kind": "<one of the kinds above>", "note": "<what happened, one sentence>", "suggestion": "<how to rephrase or recover, one sentence>"}
+  ]
+}"""
+
+COACHING_KINDS = ("leading_question", "revealed_answer", "unclear_question", "stacked_questions", "interrupting")
+COACHING_MIN_WORDS = 12  # shorter interviewer turns ("okay", "go on") are not worth a call
+COACHING_MIN_GAP_S = 20.0  # at most one coaching call per 20 s of interview time
+
+
+async def coach_interviewer(
+    failover: FailoverManager, session_id: str, context_text: str, question: str, text: str
+) -> list[dict[str, str]]:
+    """Problems with the interviewer's latest turn (usually none). LLM errors propagate."""
+    user_content = (
+        f"{context_text}"
+        + (f"\n\n## Planned Question\n{question}" if question else "")
+        + f"\n\n## Interviewer's Latest Turn\n[interviewer]: {text}"
+    )
+    result = await failover.analyze(
+        AnalysisContext(
+            system_prompt=COACHING_SYSTEM_PROMPT, user_content=user_content, task_type=TaskType.INTERVIEWER_COACHING
+        ),
+        LLMConfig(max_tokens=300, temperature=0.1, response_format="json"),
+        session_id=session_id,
+    )
+    issues: list[dict[str, str]] = []
+    for item in _parsed(result.content, result.parsed).get("issues") or []:
+        if not isinstance(item, dict) or item.get("kind") not in COACHING_KINDS:
+            continue
+        note = str(item.get("note", "")).strip()
+        if note:
+            issues.append({"kind": str(item["kind"]), "note": note, "suggestion": str(item.get("suggestion", ""))})
+    return issues[:3]
+
+
+# ── Deterministic coaching signals ─────────────────────────────────────────
+
+TALK_WINDOW_SIZE = 40  # utterances the talk-share window covers
+TALK_SHARE_MIN_WORDS = 250  # no judgment on talk share before this many words were spoken in the window
+TALK_SHARE_THRESHOLD = 0.6  # interviewer share of words that earns a nudge
+TALK_CARD_MIN_GAP_S = 300.0  # at most one talk-share nudge per 5 minutes
+MONOLOGUE_WORDS = 120  # one interviewer turn this long is a monologue
+
+
+def word_count(text: str) -> int:
+    return len(text.split())
+
+
+def talk_share(window: list[list]) -> tuple[float, int]:
+    """(interviewer share of words, total words) over ``window`` rows of ``[speaker, words]``."""
+    total = sum(int(w) for _, w in window)
+    if total == 0:
+        return 0.0, 0
+    interviewer = sum(int(w) for s, w in window if s == "interviewer")
+    return interviewer / total, total
+
+
+def seconds_between(earlier: str, later: str) -> float:
+    """Interview time between two ISO timestamps; infinite when either is missing or unparsable."""
+    try:
+        a = datetime.fromisoformat(earlier.replace("Z", "+00:00"))
+        b = datetime.fromisoformat(later.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return float("inf")
+    return (b - a).total_seconds()
+
+
+def talk_share_card(card_id: str, share: float, total: int, timestamp: str) -> dict[str, Any]:
+    pct = round(share * 100)
+    return copilot_card(
+        card_id,
+        "coaching",
+        f"You have spoken {pct}% of the last {total} words",
+        "Candidates reveal most when they do the talking. Hand the floor back with an open question.",
+        priority="info",
+        source="rule",
+        timestamp=timestamp,
+    )
+
+
+def monologue_card(card_id: str, words: int, timestamp: str) -> dict[str, Any]:
+    return copilot_card(
+        card_id,
+        "coaching",
+        f"That was a long turn ({words} words)",
+        "Check the candidate followed: ask them to restate the task in their own words before they start.",
+        priority="info",
+        source="rule",
+        timestamp=timestamp,
+    )
+
+
+# ── Time steward and stuck countdown ───────────────────────────────────────
+
+# (alert key, share of the question's time budget that triggers it); each fires once per question.
+PACE_THRESHOLDS: tuple[tuple[str, float], ...] = (("over", 1.0), ("far_over", 1.5))
+STUCK_QUIET_S = 60.0  # candidate silence (with code not moving) before the stuck countdown fires
+
+
+def pace_alert(elapsed_s: float, budget_s: float, sent: list[str]) -> str | None:
+    """The highest pace alert now due for this question that has not been sent yet, or None."""
+    if budget_s <= 0:
+        return None
+    due = None
+    for key, ratio in PACE_THRESHOLDS:
+        if elapsed_s >= budget_s * ratio and key not in sent:
+            due = key
+    return due
+
+
+def pace_card(
+    card_id: str,
+    key: str,
+    elapsed_s: float,
+    budget_s: float,
+    remaining_questions: int,
+    remaining_minutes: float,
+    question_id: str,
+    timestamp: str,
+) -> dict[str, Any]:
+    over_min = max(1, round((elapsed_s - budget_s) / 60))
+    budget_min = max(1, round(budget_s / 60))
+    if remaining_questions > 0:
+        plan_left = (
+            f"{remaining_questions} question{'s' if remaining_questions != 1 else ''} and "
+            f"{round(remaining_minutes)} min of plan left."
+        )
+    elif remaining_minutes > 0:
+        # Questions generated during the interview: nothing is planned ahead, only time is left.
+        plan_left = f"{round(remaining_minutes)} min of the interview left."
+    else:
+        plan_left = "This is the last planned question."
+    return copilot_card(
+        card_id,
+        "pace",
+        f"{over_min} min over this question's {budget_min} min budget",
+        f"{plan_left} Wrap up with what you have, or ask the short variant.",
+        priority="urgent" if key == "far_over" else "suggest",
+        source="rule",
+        question_id=question_id,
+        timestamp=timestamp,
+    )
+
+
+def stuck_card(card_id: str, quiet_s: float, question_id: str, timestamp: str) -> dict[str, Any]:
+    return copilot_card(
+        card_id,
+        "stuck",
+        f"Quiet for {round(quiet_s)} s and the code is not moving",
+        "A hint is being drafted (Smart Hints). Or ask them to talk through what they are trying now.",
+        priority="suggest",
+        source="rule",
+        question_id=question_id,
+        timestamp=timestamp,
+    )
+
+
+# ── Rubric coverage map ────────────────────────────────────────────────────
+
+# The report's criteria (report_generator.ALL_CRITERIA) and the plan categories that produce evidence for them.
+CRITERIA = (
+    "problem_solving",
+    "code_quality",
+    "communication",
+    "hint_responsiveness",
+    "system_design",
+    "resume_verification",
+    "behavioral",
+)
+CRITERION_CATEGORIES: dict[str, tuple[str, ...]] = {
+    "problem_solving": ("coding", "aptitude", "system_design"),
+    "code_quality": ("coding",),
+    "communication": (),
+    "hint_responsiveness": (),
+    "system_design": ("system_design",),
+    "resume_verification": ("behavioral",),
+    "behavioral": ("behavioral",),
+}
+COVERAGE_SOLID = 3  # evidence points from which a criterion counts as covered
+
+
+def coverage_increments(analysis: EnhancedAnalysisResult, category: str, has_code: bool) -> list[str]:
+    """Which criteria one analysis adds evidence to."""
+    if analysis.answer_quality <= 0:
+        return []  # a failed analysis is not evidence
+    hit = ["problem_solving"]
+    dims = analysis.dimensions
+    if dims is not None:
+        hit.append("communication")
+        if dims.hint_reception is not None:
+            hit.append("hint_responsiveness")
+        if dims.behavioral_signal.signals_detected or dims.behavioral_signal.flags:
+            hit.append("behavioral")
+    if category == "behavioral" and "behavioral" not in hit:
+        hit.append("behavioral")
+    if category == "system_design":
+        hit.append("system_design")
+    if category == "coding" and has_code:
+        hit.append("code_quality")
+    return hit
+
+
+def coverage_payload(counts: dict[str, int], claims: int, contradictions: int, timestamp: str) -> dict[str, Any]:
+    """The coverage snapshot the dashboard shows: evidence per criterion and the gaps."""
+    merged = {**{c: 0 for c in CRITERIA}, **counts}
+    merged["resume_verification"] = merged.get("resume_verification", 0) + claims + contradictions
+
+    def status(n: int) -> str:
+        return "none" if n == 0 else "thin" if n < COVERAGE_SOLID else "solid"
+
+    criteria = {c: {"evidence": merged[c], "status": status(merged[c])} for c in CRITERIA}
+    return {
+        "criteria": criteria,
+        "gaps": [c for c in CRITERIA if criteria[c]["status"] == "none"],
+        "timestamp": timestamp,
+    }
+
+
+# ── Adaptive difficulty ────────────────────────────────────────────────────
+
+DIFFICULTY_WINDOW = 3  # consecutive analyses on the current question that decide
+
+
+def difficulty_signal(recent: list[EnhancedAnalysisResult]) -> str | None:
+    """'cruising', 'struggling' or None from the last analyses of the current question."""
+    scored = [a for a in recent if a.answer_quality > 0][-DIFFICULTY_WINDOW:]
+    if len(scored) < DIFFICULTY_WINDOW:
+        return None
+    if all(a.answer_quality >= 4 and a.on_track for a in scored):
+        return "cruising"
+    weak = sum(1 for a in scored if a.answer_quality <= 2)
+    direct = sum(1 for a in scored if a.hint_signal == "direct")
+    if weak >= 2 or direct >= 2:
+        return "struggling"
+    return None
+
+
+def difficulty_card(card_id: str, key: str, question_plan: dict | None, timestamp: str) -> dict[str, Any]:
+    alternates = [str(a) for a in ((question_plan or {}).get("alternates") or []) if str(a).strip()][:2]
+    question_id = str((question_plan or {}).get("id") or "")
+    if key == "cruising":
+        return copilot_card(
+            card_id,
+            "difficulty",
+            "Candidate is cruising: raise the bar",
+            "Three strong answers in a row on this question. Add a constraint (streaming input, memory limit, "
+            "concurrency) or move to the harder variant.",
+            items=alternates,
+            priority="suggest",
+            source="rule",
+            question_id=question_id,
+            timestamp=timestamp,
+        )
+    return copilot_card(
+        card_id,
+        "difficulty",
+        "Candidate is struggling: step down",
+        "Several weak answers on this question. Give the next hint level, narrow the task, "
+        "or switch to the easier variant.",
+        items=alternates,
+        priority="suggest",
+        source="rule",
+        question_id=question_id,
+        timestamp=timestamp,
+    )
+
+
+# ── Live scorecard ─────────────────────────────────────────────────────────
+
+SCORECARD_SIZE = 60  # notes kept in state (the report gets them all through report_snapshot)
+QUOTE_CHARS = 200
+
+
+def _quote(text: str) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= QUOTE_CHARS else text[: QUOTE_CHARS - 1].rstrip() + "…"
+
+
+def primary_criterion(category: str) -> str:
+    """The report criterion an answer to a question of this plan category speaks to first."""
+    if category == "system_design":
+        return "system_design"
+    if category == "behavioral":
+        return "behavioral"
+    return "problem_solving"
+
+
+def scorecard_notes_from_analysis(
+    analysis: EnhancedAnalysisResult, category: str, utterance_text: str, question_id: str, utterance_id: str
+) -> list[dict[str, Any]]:
+    """Draft notes (with the verbatim quote) one analysis adds to the scorecard; [] for a failed analysis."""
+    if analysis.answer_quality <= 0:
+        return []
+    quote = _quote(utterance_text)
+    notes = [
+        {
+            "id": f"{utterance_id}:note",
+            "criterion": primary_criterion(category),
+            "quote": quote,
+            "note": analysis.insight,
+            "quality": analysis.answer_quality,
+            "question_id": question_id,
+            "utterance_id": utterance_id,
+            "source": "copilot",
+            "at": analysis.timestamp,
+        }
+    ]
+    if analysis.red_flags:
+        notes.append(
+            {
+                "id": f"{utterance_id}:flags",
+                "criterion": "behavioral",
+                "quote": quote,
+                "note": "Red flags: " + "; ".join(analysis.red_flags),
+                "quality": analysis.answer_quality,
+                "question_id": question_id,
+                "utterance_id": utterance_id,
+                "source": "copilot",
+                "at": analysis.timestamp,
+            }
+        )
+    return notes
+
+
+def interviewer_note(note_id: str, criterion: str, text: str, question_id: str, at: str) -> dict[str, Any] | None:
+    """A note the interviewer typed; None when it is empty or names an unknown criterion."""
+    text = text.strip()
+    if not text or criterion not in CRITERIA:
+        return None
+    return {
+        "id": note_id,
+        "criterion": criterion,
+        "quote": "",
+        "note": text,
+        "quality": None,
+        "question_id": question_id,
+        "utterance_id": "",
+        "source": "interviewer",
+        "at": at,
+    }
+
+
+def scorecard_payload(notes: list[dict[str, Any]], timestamp: str) -> dict[str, Any]:
+    return {"notes": list(notes), "timestamp": timestamp}
+
+
+# ── Edge-case whisper ──────────────────────────────────────────────────────
+
+EDGE_CASES_SYSTEM_PROMPT = """Suggest edge cases for a live coding interview. Return JSON.
+
+You see the question and the candidate's current code. Propose two or three concrete inputs the interviewer can
+ask the candidate to trace by hand, chosen to expose the most likely bug or missing case in THIS code (empty
+input, one element, duplicates, negatives, overflow, ties, cycles, unicode...). Each must have a definite
+expected output. Do not explain the fix; the point is for the candidate to find it.
+
+Respond in JSON:
+{
+  "edge_cases": [
+    {"input": "<the input, literally>", "expected": "<the correct output>", "exposes": "<what in the code it tests, a few words>"}
+  ]
+}"""
+
+MAX_EDGE_CASES = 3
+
+
+async def suggest_edge_cases(
+    failover: FailoverManager, session_id: str, question: str, code: str, language: str, bugs: list[str]
+) -> list[dict[str, str]]:
+    """Inputs to trace by hand against the candidate's code, or []. LLM errors propagate."""
+    user_content = (
+        f"## Question\n{question or '(not given)'}"
+        + ("\n\n## Suspected Bugs (from a heuristic pass)\n- " + "\n- ".join(bugs) if bugs else "")
+        + f"\n\n## Candidate's Code ({language})\n```{language}\n{code}\n```"
+    )
+    result = await failover.analyze(
+        AnalysisContext(
+            system_prompt=EDGE_CASES_SYSTEM_PROMPT, user_content=user_content, task_type=TaskType.PEER_INTERVIEWER
+        ),
+        LLMConfig(max_tokens=400, temperature=0.2, response_format="json"),
+        session_id=session_id,
+    )
+    cases: list[dict[str, str]] = []
+    for item in _parsed(result.content, result.parsed).get("edge_cases") or []:
+        if not isinstance(item, dict):
+            continue
+        given = str(item.get("input", "")).strip()
+        if given:
+            cases.append(
+                {"input": given, "expected": str(item.get("expected", "")), "exposes": str(item.get("exposes", ""))}
+            )
+    return cases[:MAX_EDGE_CASES]
+
+
+def edge_case_line(case: dict[str, str]) -> str:
+    line = f"{case['input']} → {case['expected']}" if case.get("expected") else case["input"]
+    return f"{line} ({case['exposes']})" if case.get("exposes") else line

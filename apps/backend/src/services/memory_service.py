@@ -8,15 +8,12 @@ Manages interview context across three memory tiers:
 Token budgets enforce context window limits per tier.
 """
 
-import asyncio
 import json
-from collections import deque
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Any
 
 from src.llm.failover import FailoverManager
 from src.llm.interface import AnalysisContext, LLMConfig, TaskType
-from src.schemas.transcript import SpeakerRole
 from src.utils.logging import get_logger
 from src.utils.token_budget import (
     BUDGET_FACT_STORE,
@@ -30,6 +27,9 @@ logger = get_logger("memory_service")
 
 # Tier 1 settings
 WORKING_MEMORY_SIZE = 10
+
+# Fact provenance kept for this many recent utterances (contradiction self-exclusion)
+CLAIM_PROVENANCE_SIZE = 20
 
 # Tier 2 settings — compress after this many new utterances
 SUMMARY_TRIGGER_COUNT = 20
@@ -75,13 +75,21 @@ class FactStore:
     key_numbers: list[str] = field(default_factory=list)
     hint_interactions: list[dict] = field(default_factory=list)
 
-    def merge(self, extracted: dict) -> None:
-        """Merge newly extracted facts, avoiding duplicates."""
-        for key in ("claimed_experience", "technical_positions", "behavioral_signals", "key_numbers"):
+    def merge(self, extracted: dict) -> list[str]:
+        """Merge newly extracted facts, avoiding duplicates. Returns the items that were new."""
+        added: list[str] = []
+        for key in (
+            "claimed_experience",
+            "technical_positions",
+            "behavioral_signals",
+            "key_numbers",
+        ):
             existing = getattr(self, key)
             for item in extracted.get(key, []):
                 if item and item not in existing:
                     existing.append(item)
+                    added.append(item)
+        return added
 
     def to_text(self) -> str:
         """Render fact store as concise text for the LLM context."""
@@ -118,340 +126,114 @@ class FactStore:
         )
 
 
-class MemoryService:
-    """Manages hierarchical interview context memory.
+# ── Used by the LangGraph session pipeline ─────────────────────────────────
 
-    Usage:
-        memory = MemoryService(session_id, failover_manager)
-        await memory.add_utterance(speaker, text, timestamp)
-        context = memory.assemble_context(question_text, hint_text)
+
+def should_extract_facts(speaker: str, text: str, is_final: bool) -> bool:
+    """Tier 3 holds the candidate's claims: substantial final candidate utterances only.
+
+    Interviewer utterances are not mined; their statements are not the
+    candidate's claims and must not be contradiction-checked against.
     """
+    return speaker == "candidate" and is_final and len(text.split()) > 20
 
-    def __init__(self, session_id: str, failover_manager: FailoverManager) -> None:
-        self.session_id = session_id
-        self._failover = failover_manager
 
-        # Tier 1: Working Memory
-        self._working_memory: deque[Utterance] = deque(maxlen=WORKING_MEMORY_SIZE)
+def format_utterances(utterances: Iterable[Utterance]) -> str:
+    return "\n".join(f"[{u.speaker}]: {u.text}" for u in utterances)
 
-        # Tier 2: Rolling Summary
-        self._rolling_summary: str = ""
-        self._unsummarized_buffer: list[Utterance] = []
 
-        # Tier 3: Fact Store
-        self.fact_store = FactStore()
+def assemble_context(
+    working_memory: Iterable[Utterance],
+    rolling_summary: str,
+    fact_store: FactStore,
+    question_text: str = "",
+    hint_text: str = "",
+) -> str:
+    """Assemble the full context for an LLM analysis call.
 
-        # Background task tracking
-        self._bg_compress_task: asyncio.Task | None = None
-        self._bg_extract_tasks: set[asyncio.Task] = set()
+    Returns a formatted string combining all tiers within token budgets.
+    """
+    parts = []
 
-        # Stats
-        self._total_utterances = 0
+    # Current question context (first for LLM primacy effect)
+    if question_text:
+        parts.append(f"## Current Question\n{question_text}")
 
-    async def add_utterance(
-        self,
-        speaker: str,
-        text: str,
-        timestamp: str,
-        is_final: bool = True,
-    ) -> None:
-        """Add a new utterance to the memory system.
+    # Active hints
+    if hint_text:
+        parts.append(f"## Active Hints\n{hint_text}")
 
-        Only sync operations run inline (deque append, buffer append).
-        LLM calls (compression, fact extraction) are scheduled as background tasks.
-        """
-        if not text.strip():
-            return
+    # Tier 3: Fact Store (most compressed, highest signal)
+    facts_text = truncate_to_budget(fact_store.to_text(), BUDGET_FACT_STORE)
+    if facts_text:
+        parts.append(f"## Key Facts\n{facts_text}")
 
-        utterance = Utterance(
-            speaker=speaker,
-            text=text,
-            timestamp=timestamp,
-            is_final=is_final,
+    # Tier 2: Rolling Summary
+    if rolling_summary:
+        summary = truncate_to_budget(rolling_summary, BUDGET_ROLLING_SUMMARY)
+        parts.append(f"## Interview Summary\n{summary}")
+
+    # Tier 1: Recent Utterances
+    recent_text = format_utterances(working_memory)
+    if recent_text:
+        recent_text = truncate_to_budget(recent_text, BUDGET_WORKING_MEMORY)
+        parts.append(f"## Recent Conversation\n{recent_text}")
+
+    return "\n\n".join(parts)
+
+
+async def compress_summary(
+    failover: FailoverManager,
+    session_id: str,
+    rolling_summary: str,
+    utterances: Sequence[Utterance],
+) -> str:
+    """Fold ``utterances`` into the rolling summary. Raises if the LLM call fails."""
+    user_content = (
+        f"Current summary:\n{rolling_summary or '(empty)'}\n\nNew utterances:\n{format_utterances(utterances)}"
+    )
+    result = await failover.analyze(
+        AnalysisContext(
+            system_prompt=SUMMARY_SYSTEM_PROMPT,
+            user_content=user_content,
+            task_type=TaskType.SUMMARY_COMPRESSION,
+        ),
+        LLMConfig(max_tokens=500, temperature=0.3),
+        session_id=session_id,
+    )
+    logger.debug(
+        "summary_compressed",
+        session_id=session_id,
+        summary_tokens=estimate_tokens(result.content),
+    )
+    return result.content
+
+
+async def extract_facts(failover: FailoverManager, session_id: str, speaker: str, text: str) -> dict | None:
+    """Extract structured facts from a substantial utterance. Never raises; None when nothing parsed."""
+    prompt = FACT_EXTRACTION_PROMPT.format(speaker=speaker, text=text)
+    try:
+        result = await failover.analyze(
+            AnalysisContext(
+                system_prompt="Extract factual claims from the utterance. Return valid JSON only.",
+                user_content=prompt,
+                task_type=TaskType.REAL_TIME_ANALYSIS,
+            ),
+            LLMConfig(max_tokens=300, temperature=0.2, response_format="json"),
+            session_id=session_id,
         )
-
-        # Tier 1: Add to working memory
-        self._working_memory.append(utterance)
-        self._total_utterances += 1
-
-        # Buffer for Tier 2
-        self._unsummarized_buffer.append(utterance)
-
-        # Tier 2: Schedule compression in background if buffer is large enough
-        if len(self._unsummarized_buffer) >= SUMMARY_TRIGGER_COUNT:
-            self._schedule_compress()
-
-        # Tier 3: Schedule fact extraction in background for substantial utterances
-        if is_final and len(text.split()) > 20:
-            self._schedule_extract_facts(speaker, text)
-
-    # ── Background Task Scheduling ─────────────────────────────────
-
-    def _is_compress_running(self) -> bool:
-        """Check if a background compression task is already in flight."""
-        return self._bg_compress_task is not None and not self._bg_compress_task.done()
-
-    def _schedule_compress(self) -> None:
-        """Snapshot the buffer and schedule compression in background.
-
-        Skips if a compression is already running to avoid overlapping LLM calls.
-        """
-        if self._is_compress_running():
-            return
-
-        # Snapshot and clear the buffer immediately (sync)
-        buffer_snapshot = list(self._unsummarized_buffer)
-        self._unsummarized_buffer.clear()
-
-        self._bg_compress_task = asyncio.create_task(
-            self._compress_summary_from_snapshot(buffer_snapshot)
+    except Exception as e:
+        logger.error(
+            "fact_extraction_failed",
+            session_id=session_id,
+            error=str(e),
         )
-
-    async def _compress_summary_from_snapshot(
-        self, buffer_snapshot: list[Utterance]
-    ) -> None:
-        """Run LLM compression on a provided buffer snapshot (background)."""
-        if not buffer_snapshot:
-            return
-
-        buffer_text = "\n".join(
-            f"[{u.speaker}]: {u.text}" for u in buffer_snapshot
-        )
-        user_content = (
-            f"Current summary:\n{self._rolling_summary or '(empty)'}\n\n"
-            f"New utterances:\n{buffer_text}"
-        )
-
-        try:
-            result = await self._failover.analyze(
-                AnalysisContext(
-                    system_prompt=SUMMARY_SYSTEM_PROMPT,
-                    user_content=user_content,
-                    task_type=TaskType.SUMMARY_COMPRESSION,
-                ),
-                LLMConfig(max_tokens=500, temperature=0.3),
-                session_id=self.session_id,
-            )
-            self._rolling_summary = result.content
-
-            logger.debug(
-                "summary_compressed",
-                session_id=self.session_id,
-                summary_tokens=estimate_tokens(self._rolling_summary),
-            )
-        except Exception as e:
-            # Re-prepend items to buffer for retry on next trigger
-            self._unsummarized_buffer = buffer_snapshot + self._unsummarized_buffer
-            logger.error(
-                "summary_compression_failed",
-                session_id=self.session_id,
-                error=str(e),
-            )
-
-    async def _compress_summary(self) -> None:
-        """Blocking compression of the unsummarized buffer.
-
-        Used only by drain() to ensure all data is flushed before shutdown.
-        """
-        if not self._unsummarized_buffer:
-            return
-
-        buffer_text = "\n".join(
-            f"[{u.speaker}]: {u.text}" for u in self._unsummarized_buffer
-        )
-
-        user_content = f"Current summary:\n{self._rolling_summary or '(empty)'}\n\nNew utterances:\n{buffer_text}"
-
-        try:
-            result = await self._failover.analyze(
-                AnalysisContext(
-                    system_prompt=SUMMARY_SYSTEM_PROMPT,
-                    user_content=user_content,
-                    task_type=TaskType.SUMMARY_COMPRESSION,
-                ),
-                LLMConfig(max_tokens=500, temperature=0.3),
-                session_id=self.session_id,
-            )
-            self._rolling_summary = result.content
-            self._unsummarized_buffer.clear()
-
-            logger.debug(
-                "summary_compressed",
-                session_id=self.session_id,
-                summary_tokens=estimate_tokens(self._rolling_summary),
-            )
-        except Exception as e:
-            logger.error(
-                "summary_compression_failed",
-                session_id=self.session_id,
-                error=str(e),
-            )
-            # Keep the buffer — will retry on next trigger
-
-    def _schedule_extract_facts(self, speaker: str, text: str) -> None:
-        """Schedule fact extraction as a background task."""
-        task = asyncio.create_task(self._extract_facts(speaker, text))
-        self._bg_extract_tasks.add(task)
-        task.add_done_callback(self._bg_extract_tasks.discard)
-
-    async def _extract_facts(self, speaker: str, text: str) -> None:
-        """Extract structured facts from a substantial utterance."""
-        prompt = FACT_EXTRACTION_PROMPT.format(speaker=speaker, text=text)
-        try:
-            result = await self._failover.analyze(
-                AnalysisContext(
-                    system_prompt="Extract factual claims from the utterance. Return valid JSON only.",
-                    user_content=prompt,
-                    task_type=TaskType.REAL_TIME_ANALYSIS,
-                ),
-                LLMConfig(max_tokens=300, temperature=0.2, response_format="json"),
-                session_id=self.session_id,
-            )
-            if result.parsed:
-                self.fact_store.merge(result.parsed)
-            else:
-                # Try parsing content directly
-                try:
-                    parsed = json.loads(result.content)
-                    self.fact_store.merge(parsed)
-                except json.JSONDecodeError:
-                    pass
-        except Exception as e:
-            logger.error(
-                "fact_extraction_failed",
-                session_id=self.session_id,
-                error=str(e),
-            )
-
-    def add_hint_interaction(self, hint_data: dict) -> None:
-        """Record a hint interaction in the fact store."""
-        self.fact_store.hint_interactions.append(hint_data)
-
-    async def reset_for_new_question(self) -> None:
-        """Reset memory for a new question transition.
-
-        1. Clear Tier 1 working memory immediately (sync)
-        2. Wait for any in-flight compression to finish (to not lose data)
-        3. Schedule compression of remaining buffer in background
-        4. Keep Tier 2 (rolling summary) and Tier 3 (fact store) intact
-        """
-        self._working_memory.clear()
-
-        # Wait for in-flight compression so we don't lose its result
-        if self._is_compress_running():
-            try:
-                await asyncio.wait_for(self._bg_compress_task, timeout=10.0)
-            except (asyncio.TimeoutError, Exception):
-                pass
-
-        # Schedule compression of remaining buffer in background
-        if self._unsummarized_buffer:
-            self._schedule_compress()
-
-        logger.info(
-            "memory_reset_for_new_question",
-            session_id=self.session_id,
-            summary_preserved=bool(self._rolling_summary),
-            facts_preserved=bool(self.fact_store.to_text()),
-        )
-
-    async def drain(self) -> None:
-        """Await all in-flight background tasks for safe shutdown.
-
-        Waits for compression and extraction tasks (with 10s timeout),
-        then flushes any remaining unsummarized buffer via blocking compression.
-        """
-        tasks: list[asyncio.Task] = []
-        if self._bg_compress_task and not self._bg_compress_task.done():
-            tasks.append(self._bg_compress_task)
-        tasks.extend(t for t in self._bg_extract_tasks if not t.done())
-
-        if tasks:
-            logger.info(
-                "memory_drain_waiting",
-                session_id=self.session_id,
-                task_count=len(tasks),
-            )
-            await asyncio.wait(tasks, timeout=10.0)
-
-        # Flush any remaining unsummarized utterances
-        if self._unsummarized_buffer:
-            await self._compress_summary()
-
-    # ── Context Assembly ──────────────────────────────────────────────
-
-    def assemble_context(
-        self,
-        question_text: str = "",
-        hint_text: str = "",
-    ) -> str:
-        """Assemble the full context for an LLM analysis call.
-
-        Returns a formatted string combining all tiers within token budgets.
-        """
-        parts = []
-
-        # Current question context (first for LLM primacy effect)
-        if question_text:
-            parts.append(f"## Current Question\n{question_text}")
-
-        # Active hints
-        if hint_text:
-            parts.append(f"## Active Hints\n{hint_text}")
-
-        # Tier 3: Fact Store (most compressed, highest signal)
-        facts_text = truncate_to_budget(
-            self.fact_store.to_text(), BUDGET_FACT_STORE
-        )
-        if facts_text:
-            parts.append(f"## Key Facts\n{facts_text}")
-
-        # Tier 2: Rolling Summary
-        if self._rolling_summary:
-            summary = truncate_to_budget(self._rolling_summary, BUDGET_ROLLING_SUMMARY)
-            parts.append(f"## Interview Summary\n{summary}")
-
-        # Tier 1: Recent Utterances
-        recent_text = "\n".join(
-            f"[{u.speaker}]: {u.text}" for u in self._working_memory
-        )
-        if recent_text:
-            recent_text = truncate_to_budget(recent_text, BUDGET_WORKING_MEMORY)
-            parts.append(f"## Recent Conversation\n{recent_text}")
-
-        return "\n\n".join(parts)
-
-    def get_working_memory_text(self) -> str:
-        """Get the current working memory as formatted text."""
-        return "\n".join(
-            f"[{u.speaker}]: {u.text}" for u in self._working_memory
-        )
-
-    # ── State Serialization ──────────────────────────────────────────
-
-    def to_dict(self) -> dict:
-        return {
-            "session_id": self.session_id,
-            "working_memory": [
-                {"speaker": u.speaker, "text": u.text, "timestamp": u.timestamp}
-                for u in self._working_memory
-            ],
-            "rolling_summary": self._rolling_summary,
-            "unsummarized_count": len(self._unsummarized_buffer),
-            "fact_store": self.fact_store.to_dict(),
-            "total_utterances": self._total_utterances,
-        }
-
-    @classmethod
-    def from_dict(
-        cls, data: dict, failover_manager: FailoverManager
-    ) -> "MemoryService":
-        service = cls(data["session_id"], failover_manager)
-        for u in data.get("working_memory", []):
-            service._working_memory.append(
-                Utterance(speaker=u["speaker"], text=u["text"], timestamp=u["timestamp"])
-            )
-        service._rolling_summary = data.get("rolling_summary", "")
-        service.fact_store = FactStore.from_dict(data.get("fact_store", {}))
-        service._total_utterances = data.get("total_utterances", 0)
-        return service
+        return None
+    if result.parsed:
+        return result.parsed
+    # Try parsing content directly
+    try:
+        parsed = json.loads(result.content)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None

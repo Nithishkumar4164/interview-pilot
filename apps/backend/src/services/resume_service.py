@@ -1,7 +1,7 @@
 import json
 
-from src.llm.interface import AnalysisContext, LLMConfig, TaskType
 from src.llm.failover import FailoverManager
+from src.llm.interface import AnalysisContext, LLMConfig, TaskType
 from src.services.storage_service import StorageService
 from src.utils.logging import get_logger
 from src.utils.text_extraction import (
@@ -17,6 +17,8 @@ RESUME_EXTRACTION_SYSTEM_PROMPT = """You are an expert resume analyzer. Extract 
 Return a JSON object with these exact fields:
 {
   "name": "Full name",
+  "email": "Email address, or null if the resume has none",
+  "phone": "Phone number as written, or null if the resume has none",
   "current_role": "Current or most recent job title",
   "years_experience": <number>,
   "companies": ["Company 1", "Company 2"],
@@ -45,6 +47,8 @@ Return a JSON object with these exact fields:
   ]
 }
 
+Copy name, email and phone exactly as the resume writes them; never invent contact details.
+
 Focus on extracting verifiable_claims — specific, measurable assertions that can be probed during an interview. For example:
 - "Improved API latency by 40%" → "What profiling tools did you use? What was the baseline latency?"
 - "Led a team of 8 engineers" → "How did you handle disagreements within the team? Can you describe your sprint process?"
@@ -53,18 +57,19 @@ Focus on extracting verifiable_claims — specific, measurable assertions that c
 Return ONLY valid JSON, no markdown fences or explanation."""
 
 
+# A full extraction of a detailed 5-job resume took 3,050 output tokens on
+# claude-sonnet-5 (2026-10-08); only generated tokens are billed.
+RESUME_EXTRACTION_MAX_TOKENS = 8000
+
+
 class ResumeService:
     """Orchestrates resume upload, text extraction, and LLM-powered structured extraction."""
 
-    def __init__(
-        self, storage: StorageService | None, llm: FailoverManager
-    ) -> None:
+    def __init__(self, storage: StorageService | None, llm: FailoverManager) -> None:
         self.storage = storage
         self.llm = llm
 
-    def upload_resume(
-        self, file_content: bytes, content_type: str, filename: str
-    ) -> str:
+    def upload_resume(self, file_content: bytes, content_type: str, filename: str) -> str:
         """Upload a resume file and return its reference ID."""
         return self.storage.upload_file(file_content, content_type, filename)
 
@@ -88,12 +93,20 @@ class ResumeService:
         )
 
         config = LLMConfig(
-            max_tokens=2000,
+            max_tokens=RESUME_EXTRACTION_MAX_TOKENS,
             temperature=0.3,
             response_format="json",
         )
 
         result = await self.llm.analyze(context, config)
+        if result.truncated:
+            logger.error(
+                "resume_extraction_truncated", max_tokens=config.max_tokens, output_tokens=result.output_tokens
+            )
+            raise ValueError(
+                f"Resume extraction was cut off at the {config.max_tokens}-token output limit; "
+                "the resume is too long to extract in one pass"
+            )
 
         if result.parsed:
             logger.info(
@@ -112,9 +125,9 @@ class ResumeService:
                 content = content.split("\n", 1)[1]
                 content = content.rsplit("```", 1)[0]
             return json.loads(content)
-        except (json.JSONDecodeError, IndexError):
+        except (json.JSONDecodeError, IndexError) as e:
             logger.error("resume_extraction_parse_failed", content=result.content[:500])
-            raise ValueError("Failed to parse LLM response as structured resume data")
+            raise ValueError("Failed to parse LLM response as structured resume data") from e
 
     async def process_resume(self, file_content: bytes) -> dict:
         """Full pipeline: extract text → extract structured data."""

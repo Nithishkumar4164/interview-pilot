@@ -9,22 +9,22 @@ Endpoints:
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.authz import authorized_session, get_user_principal
 from src.dependencies import get_db
 from src.models.plan import InterviewPlan
 from src.models.report import Report
+from src.models.session import InterviewSession
 from src.repositories.report_repo import ReportRepository
 from src.repositories.session_repo import SessionRepository
+from src.services.access_control import Principal
 from src.utils.logging import get_logger
 
 logger = get_logger("api.history")
 
 router = APIRouter(prefix="/history", tags=["history"])
-
-# Default dev user UUID
-_DEV_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
 
 
 def _extract_report_fields(reports: list) -> dict:
@@ -62,18 +62,16 @@ async def list_sessions(
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(get_user_principal),
 ) -> dict:
-    """List sessions for the current user with report/plan data."""
+    """List the caller's sessions (all sessions for admins) with report/plan data."""
     session_repo = SessionRepository(db)
-    sessions = await session_repo.get_sessions_enriched(_DEV_USER_ID)
-
-    # Apply status filter if provided
-    if status_filter:
-        sessions = [s for s in sessions if s.status == status_filter]
-
-    # Apply pagination
-    total = len(sessions)
-    sessions = sessions[offset : offset + limit]
+    sessions, total = await session_repo.get_sessions_enriched(
+        None if principal.is_admin else principal.user_id,
+        status_filter=status_filter,
+        limit=limit,
+        offset=offset,
+    )
 
     return {
         "sessions": [
@@ -87,6 +85,8 @@ async def list_sessions(
                 "ended_at": s.ended_at.isoformat() if s.ended_at else None,
                 "candidate_name": s.candidate_name,
                 "candidate_email": s.candidate_email,
+                "candidate_role": s.candidate_role,
+                "meeting_url": s.meeting_url,
                 "created_at": s.created_at.isoformat() if s.created_at else "",
                 **_extract_report_fields(s.reports),
                 "plan_id": _extract_plan_id(s.plans),
@@ -103,17 +103,10 @@ async def list_sessions(
 async def get_session_detail(
     session_id: str,
     db: AsyncSession = Depends(get_db),
+    session: InterviewSession = Depends(authorized_session),
 ) -> dict:
     """Get expanded detail for a session: plan, report summary, stats."""
-    sid = uuid.UUID(session_id)
-
-    session_repo = SessionRepository(db)
-    session = await session_repo.get_by_id(sid)
-    if session is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
+    sid = session.id
 
     # Plan data
     plan_result = await db.execute(
@@ -152,10 +145,7 @@ async def get_session_detail(
 
     # Report summary
     report_result = await db.execute(
-        select(Report)
-        .where(Report.session_id == sid)
-        .order_by(Report.created_at.desc())
-        .limit(1)
+        select(Report).where(Report.session_id == sid).order_by(Report.created_at.desc()).limit(1)
     )
     report = report_result.scalar_one_or_none()
 
@@ -166,18 +156,15 @@ async def get_session_detail(
             "id": str(report.id),
             "recommendation": report.recommendation,
             "confidence_level": report.confidence_level,
-            "scores": [
-                {"criterion": s.get("criterion", ""), "score": s.get("score", 0)}
-                for s in rd.get("scores", [])
-            ],
+            "scores": [{"criterion": s.get("criterion", ""), "score": s.get("score", 0)} for s in rd.get("scores", [])],
             "key_moments_count": len(rd.get("key_moments", [])),
             "strengths": rd.get("strengths", []),
             "areas_for_growth": rd.get("areas_for_growth", []),
         }
 
     # Stats — use count queries for efficiency
-    from src.models.transcript import Transcript
     from src.models.hint import HintEvent
+    from src.models.transcript import Transcript
 
     transcript_count_result = await db.execute(
         select(func.count(Transcript.id)).where(
@@ -194,9 +181,7 @@ async def get_session_detail(
     )
     analysis_count = analysis_count_result.scalar() or 0
 
-    hint_count_result = await db.execute(
-        select(func.count(HintEvent.id)).where(HintEvent.session_id == sid)
-    )
+    hint_count_result = await db.execute(select(func.count(HintEvent.id)).where(HintEvent.session_id == sid))
     hint_count = hint_count_result.scalar() or 0
 
     return {
@@ -215,6 +200,7 @@ async def get_session_detail(
 async def get_session_report(
     session_id: str,
     db: AsyncSession = Depends(get_db),
+    _session: InterviewSession = Depends(authorized_session),
 ) -> dict:
     """Get the report for a completed session."""
     report_repo = ReportRepository(db)

@@ -133,6 +133,8 @@ cd apps/frontend
 pnpm dev        # Start Vite dev server on :5173
 ```
 
+Open the dashboard at http://interviewpilot.localhost:5173. Chrome and macOS resolve any `*.localhost` name to this machine, so no `/etc/hosts` entry is needed; `http://localhost:5173` also works, but Google sign-in returns to the `GOOGLE_REDIRECT_URI` host, and a sign-in is kept per address.
+
 ### 7. Load the Chrome extension (optional)
 
 ```bash
@@ -144,6 +146,27 @@ Then in Chrome:
 1. Navigate to `chrome://extensions`
 2. Enable **Developer mode**
 3. Click **Load unpacked** and select `apps/extension/dist`
+
+#### Starting capture
+
+On the meeting tab, press **Alt+Shift+I** or click **Start Capture** in the extension popup to start tab audio and the microphone together. Chrome only allows tab capture after you invoke the extension on that tab, so pairing alone can't start it. If the shortcut does nothing, check that Chrome assigned it at `chrome://extensions/shortcuts` (it stays unset when another extension already uses the key).
+
+#### One-click pairing
+
+By default the dashboard shows a pairing code that you paste into the extension popup. To have **Connect extension** hand the code to the extension directly, give the dashboard the extension's ID:
+
+1. Copy the extension's ID from `chrome://extensions`
+2. Add it to `apps/frontend/.env.local`:
+   ```bash
+   VITE_EXTENSION_ID=<extension-id>
+   ```
+3. Reload the dashboard (Vite restarts itself when an `.env` file changes)
+
+An unpacked extension's ID is derived from the folder it was loaded from, so it changes on another machine or checkout. Set it again whenever you load the extension from a new path. The dashboard origin must also be listed under `externally_connectable` in `apps/extension/manifest.json` (`http://interviewpilot.localhost:5173`, `http://localhost:5173` and the production domain already are). If the ID is missing or wrong, the dashboard falls back to the pairing code.
+
+The backend and dashboard URLs need no setup with one-click pairing. The dashboard sends its own origin as the backend URL (`ws(s)://<dashboard host>`), and its server forwards `/ws` to the backend (the Vite proxy in dev, `apps/frontend/nginx.conf` in production). The extension takes the dashboard URL from the sender origin Chrome reports. Both are saved in the extension's local storage.
+
+With the pasted pairing code, the popup's URL fields default to `ws://localhost:8000` and `http://interviewpilot.localhost:5173`, which is right for local dev. For production, enter `wss://interviewpilot.duckdns.org` and `https://interviewpilot.duckdns.org` once per Chrome profile; they are remembered after the first connect.
 
 ---
 
@@ -160,7 +183,7 @@ Then in Chrome:
 | `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token TTL | No | `7` |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID | No | — |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | No | — |
-| `GOOGLE_REDIRECT_URI` | OAuth redirect URI | No | `http://localhost:5173/auth/callback` |
+| `GOOGLE_REDIRECT_URI` | OAuth redirect URI | No | `http://interviewpilot.localhost:5173/auth/callback` |
 | `ANTHROPIC_API_KEY` | Anthropic API key | Yes | — |
 | `OPENAI_API_KEY` | OpenAI API key | Yes | — |
 | `DEEPGRAM_API_KEY` | Deepgram API key | Yes | — |
@@ -169,9 +192,10 @@ Then in Chrome:
 | `S3_SECRET_KEY` | MinIO / S3 secret key | Yes | `minioadmin` |
 | `S3_BUCKET` | S3 bucket name | No | `interview-pilot` |
 | `BACKEND_URL` | Backend base URL | No | `http://localhost:8000` |
-| `FRONTEND_URL` | Frontend base URL | No | `http://localhost:5173` |
+| `FRONTEND_URL` | Frontend base URL | No | `http://interviewpilot.localhost:5173` |
 | `ENVIRONMENT` | Runtime environment | No | `development` |
 | `LOG_LEVEL` | Logging verbosity | No | `DEBUG` |
+| `VITE_EXTENSION_ID` | Chrome extension ID for one-click pairing (frontend, `apps/frontend/.env.local`; see [One-click pairing](#one-click-pairing)) | No | — |
 
 ---
 
@@ -292,7 +316,7 @@ interview-pilot/
 | `POST` | `/start` | Create a new interview session |
 | `GET` | `/{session_id}` | Get session metadata |
 | `GET` | `/{session_id}/state` | Get full session state for page recovery |
-| `POST` | `/{session_id}/go-live` | Transition from PLANNING to LIVE |
+| `POST` | `/{session_id}/go-live` | Start the interview (PLANNING to LIVE) |
 | `POST` | `/{session_id}/register-plan-hints` | Register pre-computed hints |
 | `PATCH` | `/{session_id}/pause` | Toggle pause/resume |
 | `POST` | `/{session_id}/end` | End session and trigger report |
@@ -300,16 +324,15 @@ interview-pilot/
 | `POST` | `/{session_id}/hints/next` | Get next progressive hint |
 | `POST` | `/{session_id}/hints/{hint_id}/ack` | Acknowledge hint delivery |
 
-#### Plans (`/api/plans`)
+#### Questions (`/api/sessions/{session_id}/questions`)
+Questions are generated during the interview, not planned up front.
+
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/create` | Generate interview plan for a session |
-| `GET` | `/{plan_id}` | Get plan by ID |
-| `PATCH` | `/{plan_id}/swap` | Swap question with alternate |
-| `PATCH` | `/{plan_id}/reorder` | Reorder questions in a phase |
-| `PATCH` | `/{plan_id}/remove` | Remove a question |
-| `PATCH` | `/{plan_id}/add` | Add a question |
-| `POST` | `/{plan_id}/regenerate-hints` | Regenerate hints for a question |
+| `POST` | `/topics` | Suggest topics for a category |
+| `POST` | `/generate` | Generate a draft question (hints, approaches, pitfalls); pass rejected drafts and feedback to regenerate |
+| `POST` | `` | Log the question the interviewer used to the questionnaire |
+| `GET` | `` | The questionnaire, in order |
 
 #### Reports (`/api/reports`)
 | Method | Path | Description |

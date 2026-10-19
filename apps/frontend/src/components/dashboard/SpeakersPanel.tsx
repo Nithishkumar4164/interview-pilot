@@ -7,8 +7,11 @@
 import { useState } from 'react';
 import { useSpeakerStore, type RootSpeaker, type SpeechVector } from '@/stores/speaker-store';
 import { useWSSend } from '@/contexts/WebSocketContext';
+import { PanelTitle } from './PanelTitle';
+import { usePaneHidden } from '@/stores/panel-store';
 
 export function SpeakersPanel() {
+  const hidden = usePaneHidden('speakers');
   const rootSpeakers = useSpeakerStore((s) => s.rootSpeakers);
   const speechVectors = useSpeakerStore((s) => s.speechVectors);
   const send = useWSSend();
@@ -63,9 +66,9 @@ export function SpeakersPanel() {
   };
 
   return (
-    <section className="speakers-panel" aria-label="Speakers">
-      <div className="speakers-panel__header">
-        <h3>Speakers</h3>
+    <section className="speakers-panel" hidden={hidden} aria-label="Speakers">
+      <div className="speakers-panel__header panel-header">
+        <PanelTitle id="speakers">Speakers</PanelTitle>
         <button
           className="btn btn--small btn--ghost"
           onClick={() => setShowCreateForm(!showCreateForm)}

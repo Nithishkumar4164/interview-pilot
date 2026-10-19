@@ -16,7 +16,7 @@ from src.llm.health import HealthMonitor
 from src.llm.interface import TaskType
 from src.schemas.hint import HintResponseMetricsSchema, HintResponseQuality
 from src.schemas.report import Recommendation
-from src.services.analysis_service import AnalysisResult
+from src.services.analysis_service import EnhancedAnalysisResult
 from src.services.contradiction_service import Contradiction
 from src.services.hint_service import ActiveHint
 from src.services.memory_service import FactStore
@@ -27,13 +27,15 @@ def _mock_failover_manager() -> FailoverManager:
     health = HealthMonitor()
     fm = FailoverManager(health)
     for task_type in TaskType:
-        fm.update_mapping(TaskProviderMapping(
-            task_type=task_type,
-            primary_provider="mock",
-            primary_model="mock-v1",
-            fallback_provider="mock",
-            fallback_model="mock-v1",
-        ))
+        fm.update_mapping(
+            TaskProviderMapping(
+                task_type=task_type,
+                primary_provider="mock",
+                primary_model="mock-v1",
+                fallback_provider="mock",
+                fallback_model="mock-v1",
+            )
+        )
     return fm
 
 
@@ -49,14 +51,21 @@ def _sample_input() -> ReportInput:
             key_numbers=["40% latency reduction"],
         ),
         analysis_results=[
-            AnalysisResult(answer_quality=4, on_track=True, insight="Good approach"),
-            AnalysisResult(answer_quality=3, on_track=True, insight="Adequate"),
-            AnalysisResult(answer_quality=5, on_track=True, insight="Excellent", red_flags=[]),
-            AnalysisResult(answer_quality=2, on_track=False, insight="Struggling", red_flags=["Incorrect complexity"]),
+            EnhancedAnalysisResult(answer_quality=4, on_track=True, insight="Good approach"),
+            EnhancedAnalysisResult(answer_quality=3, on_track=True, insight="Adequate"),
+            EnhancedAnalysisResult(answer_quality=5, on_track=True, insight="Excellent", red_flags=[]),
+            EnhancedAnalysisResult(
+                answer_quality=2,
+                on_track=False,
+                insight="Struggling",
+                red_flags=["Incorrect complexity"],
+            ),
         ],
         hint_events=[
             ActiveHint(
-                hint_id="h1", question_id="q1", level=1,
+                hint_id="h1",
+                question_id="q1",
+                level=1,
                 text="Think about data structures",
                 displayed_at="2024-01-01T00:10:00",
                 interviewer_used=True,
@@ -64,7 +73,9 @@ def _sample_input() -> ReportInput:
                 time_to_respond_ms=15000,
             ),
             ActiveHint(
-                hint_id="h2", question_id="q1", level=2,
+                hint_id="h2",
+                question_id="q1",
+                level=2,
                 text="A hash map could help",
                 displayed_at="2024-01-01T00:15:00",
                 interviewer_used=True,
@@ -150,6 +161,7 @@ class TestReportGenerator:
         report = await self.generator.generate(input_data)
 
         import uuid
+
         uuid.UUID(report.id)  # Should be valid UUID
 
 
@@ -202,6 +214,53 @@ class TestContextBuilding:
 
         assert "near_complete" in ctx
         assert "hash_map" in ctx
+
+    def test_parse_key_moment_missing_type_defaults_to_none(self):
+        # Regression: previously defaulted to "neutral" which is not in
+        # the documented enum (breakthrough|struggle|hint|contradiction|
+        # code_milestone|strong_answer|weak_answer). Missing/unknown type
+        # now becomes None so consumers fall back on sentiment.
+        llm_payload = {
+            "scores": [],
+            "key_moments": [
+                {
+                    "timestamp": "00:05:00",
+                    "title": "Candidate paused",
+                    "description": "Long silence before answering",
+                    "sentiment": "negative",
+                    "impact_on_assessment": "Minor",
+                    # type omitted
+                },
+                {
+                    "timestamp": "00:10:00",
+                    "title": "Invalid type",
+                    "description": "...",
+                    "sentiment": "positive",
+                    "impact_on_assessment": "Positive",
+                    "type": "some_bogus_type",
+                },
+                {
+                    "timestamp": "00:15:00",
+                    "title": "Known good",
+                    "description": "Right call",
+                    "sentiment": "positive",
+                    "impact_on_assessment": "Strong",
+                    "type": "breakthrough",
+                },
+            ],
+            "strengths": [],
+            "areas_for_growth": [],
+            "level_comparison": "",
+            "recommendation": "lean_hire",
+            "confidence_level": 0.7,
+        }
+        input_data = _sample_input()
+        report = self.generator._parse_report("", llm_payload, input_data)
+
+        assert len(report.key_moments) == 3
+        assert report.key_moments[0].type is None
+        assert report.key_moments[1].type is None
+        assert report.key_moments[2].type == "breakthrough"
 
 
 # ── Hint Score Computation ───────────────────────────────────────────
@@ -269,7 +328,8 @@ class TestFallbackReport:
         assert report.session_id == "test-session"
         assert report.recommendation == Recommendation.LEAN_HIRE
         assert report.confidence_level == 0.3
-        assert len(report.scores) == 4
+        # Schema currently has 7 criteria (see ARCHITECTURE.md §4.4).
+        assert len(report.scores) == 7
 
     def test_fallback_uses_analysis_average(self):
         input_data = _sample_input()

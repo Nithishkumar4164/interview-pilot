@@ -17,7 +17,11 @@
     "https://teams.microsoft.com/*",
     "https://*.coderpad.io/*",
     "https://*.hackerrank.com/*",
-    "https://*.leetcode.com/*"
+    "https://*.leetcode.com/*",
+    "http://interviewpilot.localhost:5173/*",
+    "http://localhost:5173/*",
+    "http://localhost:8000/*",
+    "https://interviewpilot.duckdns.org/*"
   ],
   "background": {
     "service_worker": "dist/background/service-worker.js",
@@ -29,6 +33,12 @@
   "action": {
     "default_popup": "dist/src/popup/index.html"
   },
+  "commands": {
+    "start-capture": {
+      "suggested_key": { "default": "Alt+Shift+I" },
+      "description": "Start tab audio and microphone capture on this tab"
+    }
+  },
   "content_scripts": [
     {
       "matches": [
@@ -39,6 +49,13 @@
       "js": ["dist/content/code-scraper.js"]
     }
   ],
+  "externally_connectable": {
+    "matches": [
+      "http://interviewpilot.localhost:5173/*",
+      "http://localhost:5173/*",
+      "https://interviewpilot.duckdns.org/*"
+    ]
+  },
   "web_accessible_resources": [
     {
       "resources": ["audio/audio-processor.js"],

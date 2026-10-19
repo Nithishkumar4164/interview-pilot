@@ -2,17 +2,22 @@ import json
 import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import openai
 
 from src.config import settings
 from src.llm.interface import (
     AnalysisContext,
+    ChatMessage,
     ILLMProvider,
     LLMConfig,
     ProviderHealthStatus,
     ProviderStatus,
     StructuredOutput,
+    ToolCall,
+    ToolSpec,
+    ToolTurn,
 )
 from src.utils.logging import get_logger
 
@@ -24,10 +29,35 @@ def _strip_code_fences(text: str) -> str:
     stripped = text.strip()
     if stripped.startswith("```"):
         first_newline = stripped.index("\n")
-        stripped = stripped[first_newline + 1:]
+        stripped = stripped[first_newline + 1 :]
     if stripped.endswith("```"):
         stripped = stripped[:-3]
     return stripped.strip()
+
+
+def to_openai_messages(system: str, messages: list[ChatMessage]) -> list[dict[str, Any]]:
+    """Neutral conversation -> Chat Completions messages (system first)."""
+    out: list[dict[str, Any]] = [{"role": "system", "content": system}]
+    for m in messages:
+        if m.role == "user":
+            out.append({"role": "user", "content": m.content})
+        elif m.role == "assistant":
+            msg: dict[str, Any] = {"role": "assistant", "content": m.content or None}
+            if m.tool_calls:
+                msg["tool_calls"] = [
+                    {
+                        "id": c.id,
+                        "type": "function",
+                        "function": {"name": c.name, "arguments": json.dumps(c.arguments)},
+                    }
+                    for c in m.tool_calls
+                ]
+            out.append(msg)
+        elif m.role == "tool":
+            out.append({"role": "tool", "tool_call_id": m.tool_call_id, "content": m.content})
+        else:
+            raise ValueError(f"unknown message role {m.role!r}")
+    return out
 
 
 class OpenAIProvider(ILLMProvider):
@@ -110,10 +140,66 @@ class OpenAIProvider(ILLMProvider):
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 latency_ms=latency,
+                truncated=response.choices[0].finish_reason == "length",
             )
         except openai.APIError as e:
             logger.error("llm_analyze_error", provider="openai", error=str(e))
             raise
+
+    async def invoke_with_tools(
+        self,
+        system: str,
+        messages: list[ChatMessage],
+        tools: list[ToolSpec],
+        config: LLMConfig,
+        tool_choice: str = "auto",
+    ) -> ToolTurn:
+        start = time.monotonic()
+        kwargs: dict[str, Any] = {}
+        if tools:
+            kwargs["tools"] = [
+                {
+                    "type": "function",
+                    "function": {"name": t.name, "description": t.description, "parameters": t.input_schema},
+                }
+                for t in tools
+            ]
+            kwargs["tool_choice"] = tool_choice
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                max_tokens=config.max_tokens,
+                temperature=config.temperature,
+                messages=cast(Any, to_openai_messages(system, messages)),
+                **kwargs,
+            )
+        except openai.APIError as e:
+            logger.error("llm_tools_error", provider="openai", error=str(e))
+            raise
+        latency = (time.monotonic() - start) * 1000
+        choice = response.choices[0]
+        calls = []
+        for c in choice.message.tool_calls or []:
+            fn = getattr(c, "function", None)
+            if fn is None:
+                continue
+            try:
+                arguments = json.loads(fn.arguments or "{}")
+            except json.JSONDecodeError:
+                arguments = {"_unparsed": fn.arguments}
+            calls.append(ToolCall(id=c.id, name=fn.name, arguments=arguments if isinstance(arguments, dict) else {}))
+        stop = {"tool_calls": "tool_use", "length": "max_tokens"}.get(choice.finish_reason or "", "end")
+        usage = response.usage
+        return ToolTurn(
+            text=choice.message.content or "",
+            tool_calls=calls,
+            stop_reason=stop,
+            model=self.model,
+            provider="openai",
+            input_tokens=usage.prompt_tokens if usage else 0,
+            output_tokens=usage.completion_tokens if usage else 0,
+            latency_ms=latency,
+        )
 
     async def health_check(self) -> ProviderStatus:
         start = time.monotonic()

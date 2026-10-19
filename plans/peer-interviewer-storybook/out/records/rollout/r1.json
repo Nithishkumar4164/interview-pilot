@@ -1,0 +1,5 @@
+{
+ "order": 1,
+ "title": "Backend, flag off",
+ "text": "Deploy as is. The new event types are registered for checkpoints, the analysis prompt is unchanged, no clock runs. Nothing is visible."
+}

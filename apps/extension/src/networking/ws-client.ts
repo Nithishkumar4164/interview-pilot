@@ -22,6 +22,13 @@ export interface WSClientOptions {
   maxRetries?: number;
   /** Heartbeat interval in ms (default: 15000) */
   heartbeatIntervalMs?: number;
+  /**
+   * Optional async token resolver. When set, the returned bearer token
+   * is appended as a `?token=` query parameter on the WebSocket URL so
+   * the server can authenticate the upgrade. Runs on every (re)connect
+   * so a refresh can be performed before the connection is established.
+   */
+  getAuthToken?: () => Promise<string | null> | string | null;
 }
 
 export interface WSClientEvents {
@@ -29,7 +36,15 @@ export interface WSClientEvents {
   onMessage?: (data: ArrayBuffer | string) => void;
   onError?: (error: Event) => void;
   onReconnectAttempt?: (attempt: number, delayMs: number) => void;
+  /**
+   * The server refused the session (close code 1008: ended, invalid token,
+   * not accessible). Reconnecting can't help, so the client stops.
+   */
+  onRefused?: (reason: string) => void;
 }
+
+/** RFC 6455 Policy Violation: the backend's close code for auth failures and ended sessions. */
+export const WS_REFUSED_CLOSE_CODE = 1008;
 
 /**
  * Audio chunk metadata header (prepended to binary audio frames).
@@ -101,6 +116,7 @@ export class WSClient {
       maxRetryMs: 30000,
       maxRetries: 20,
       heartbeatIntervalMs: 15000,
+      getAuthToken: () => null,
       ...options,
     };
     if (events) {
@@ -116,6 +132,14 @@ export class WSClient {
     return `${this.options.baseUrl}${this.options.endpoint}/${this.options.sessionId}`;
   }
 
+  private async buildUrl(): Promise<string> {
+    const base = this.url;
+    const token = await Promise.resolve(this.options.getAuthToken());
+    if (!token) return base;
+    const sep = base.includes('?') ? '&' : '?';
+    return `${base}${sep}token=${encodeURIComponent(token)}`;
+  }
+
   connect(): void {
     if (this.state === 'connected' || this.state === 'connecting') {
       return;
@@ -124,8 +148,17 @@ export class WSClient {
     this.intentionalClose = false;
     this.setState(this.retryCount > 0 ? 'reconnecting' : 'connecting');
 
+    this.buildUrl()
+      .then((url) => this.openSocket(url))
+      .catch((error) => {
+        this.events.onError?.(error as Event);
+        this.scheduleReconnect();
+      });
+  }
+
+  private openSocket(url: string): void {
     try {
-      this.ws = new WebSocket(this.url);
+      this.ws = new WebSocket(url);
       this.ws.binaryType = 'arraybuffer';
 
       this.ws.onopen = () => {
@@ -142,8 +175,15 @@ export class WSClient {
         this.events.onError?.(event);
       };
 
-      this.ws.onclose = () => {
+      this.ws.onclose = (event: CloseEvent) => {
         this.stopHeartbeat();
+        if (event.code === WS_REFUSED_CLOSE_CODE && !this.intentionalClose) {
+          this.intentionalClose = true;
+          this.ws = null;
+          this.setState('disconnected');
+          this.events.onRefused?.(event.reason);
+          return;
+        }
         if (!this.intentionalClose) {
           this.setState('reconnecting');
           this.scheduleReconnect();

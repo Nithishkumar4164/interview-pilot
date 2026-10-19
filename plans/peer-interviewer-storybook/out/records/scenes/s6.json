@@ -1,0 +1,10 @@
+{
+ "n": 6,
+ "short": "You act",
+ "title": "Acting on a card",
+ "lede": "Mark as asked tells the backend, so the report can tell copilot-prompted moves from your own. Dismiss and mute stay in the browser.",
+ "also": [
+  2
+ ],
+ "stack": false
+}

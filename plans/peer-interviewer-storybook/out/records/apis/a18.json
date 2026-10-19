@@ -1,0 +1,10 @@
+{
+ "order": 18,
+ "call": "report_snapshot · ReportInput",
+ "owner": "Pipeline → Report",
+ "gives": "copilot_cards_used and scorecard_notes reach the report prompt",
+ "tag": "MOD",
+ "steps": [
+  9
+ ]
+}

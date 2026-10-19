@@ -1,0 +1,10 @@
+{
+ "n": 1,
+ "short": "Switch on",
+ "title": "Turn the copilot on",
+ "lede": "One backend flag. With it on, every new session builds the peer graph and a 30-second clock, and the Copilot panel starts listening.",
+ "also": [
+  1
+ ],
+ "stack": false
+}

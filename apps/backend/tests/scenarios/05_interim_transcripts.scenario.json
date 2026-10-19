@@ -1,0 +1,91 @@
+{
+  "meta": {
+    "id": "05-interim-transcripts",
+    "description": "Deepgram-style interim transcripts precede each final, for both speakers.",
+    "tags": [
+      "interims",
+      "memory"
+    ]
+  },
+  "events": [
+    {
+      "type": "question_change",
+      "question_text": "Reverse a linked list.",
+      "question_index": 0,
+      "question_plan": {
+        "id": "q-rev",
+        "text": "Reverse a linked list",
+        "optimal_approaches": [
+          "iterative three pointers"
+        ]
+      }
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Can you reverse",
+      "channel": "tab",
+      "is_final": false
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Can you reverse a singly linked list",
+      "channel": "tab",
+      "is_final": false
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "interviewer",
+      "text": "Can you reverse a singly linked list in place?",
+      "channel": "tab"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Sure so I",
+      "channel": "microphone",
+      "is_final": false
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Sure so I would keep three",
+      "channel": "microphone",
+      "is_final": false
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Sure so I would keep three pointers previous current",
+      "channel": "microphone",
+      "is_final": false
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "Sure so I would keep three pointers, previous, current and next, and walk the list once flipping each next pointer.",
+      "channel": "microphone"
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "That makes it",
+      "channel": "microphone",
+      "is_final": false
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "That makes it linear time and constant",
+      "channel": "microphone",
+      "is_final": false
+    },
+    {
+      "type": "transcript",
+      "speaker_role": "candidate",
+      "text": "That makes it linear time and constant space, and I'd return previous at the end as the new head.",
+      "channel": "microphone"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+ "order": 13,
+ "call": "TaskType.INTERVIEWER_COACHING",
+ "owner": "LLM config → claude-haiku-5-5",
+ "gives": "Coaching on the interviewer's turns",
+ "tag": "NEW",
+ "steps": [
+  3
+ ]
+}

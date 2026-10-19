@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { panelUrl, type Pairing } from '../auth/pairing';
 
 interface ExtensionState {
   sessionId: string | null;
+  pairing: Pairing | null;
   frontendUrl: string;
   connectionState: 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 }
@@ -23,7 +25,8 @@ const STATUS_LABELS: Record<string, string> = {
 export function SidePanel() {
   const [state, setState] = useState<ExtensionState>({
     sessionId: null,
-    frontendUrl: 'http://localhost:5173',
+    pairing: null,
+    frontendUrl: 'http://interviewpilot.localhost:5173',
     connectionState: 'disconnected',
   });
 
@@ -33,7 +36,8 @@ export function SidePanel() {
       if (response) {
         setState({
           sessionId: response.sessionId,
-          frontendUrl: response.frontendUrl || 'http://localhost:5173',
+          pairing: response.pairing ?? null,
+          frontendUrl: response.frontendUrl || 'http://interviewpilot.localhost:5173',
           connectionState: response.connectionState,
         });
       }
@@ -44,7 +48,8 @@ export function SidePanel() {
       if (message.type === 'state-update') {
         setState({
           sessionId: message.state.sessionId,
-          frontendUrl: message.state.frontendUrl || 'http://localhost:5173',
+          pairing: message.state.pairing ?? null,
+          frontendUrl: message.state.frontendUrl || 'http://interviewpilot.localhost:5173',
           connectionState: message.state.connectionState,
         });
       }
@@ -53,10 +58,11 @@ export function SidePanel() {
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, []);
 
-  const isActive = state.sessionId && state.connectionState === 'connected';
+  const isActive = state.pairing && state.connectionState === 'connected';
 
-  if (isActive) {
-    const dashboardUrl = `${state.frontendUrl}/session/${state.sessionId}?panel=1`;
+  if (isActive && state.pairing) {
+    // The pairing token authenticates the embedded dashboard for this session only.
+    const dashboardUrl = panelUrl(state.frontendUrl, state.pairing);
     return (
       <iframe
         src={dashboardUrl}

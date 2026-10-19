@@ -3,16 +3,22 @@ import json
 import uuid
 from collections.abc import AsyncGenerator
 
-import redis.asyncio as aioredis
-from fastapi import APIRouter, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from starlette.responses import StreamingResponse
 
-from src.config import settings
+from src.api.authz import get_user_principal
 from src.dependencies import failover_manager
 from src.schemas.upload import ExtractionStatusResponse, UploadResponse
+from src.services.access_control import Principal
 from src.services.resume_service import ResumeService
-from src.services.storage_service import ALLOWED_CONTENT_TYPES, MAX_FILE_SIZE_BYTES, StorageService
+from src.services.storage_service import (
+    ALLOWED_CONTENT_TYPES,
+    MAX_FILE_SIZE_BYTES,
+    StorageService,
+    sanitize_filename,
+)
 from src.utils.logging import get_logger
+from src.utils.redis import get_redis
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 logger = get_logger("upload")
@@ -20,27 +26,26 @@ logger = get_logger("upload")
 _CACHE_PREFIX = "extraction:"
 _CACHE_TTL = 300  # 5 minutes
 
-_redis: aioredis.Redis | None = None
-
-
-async def _get_redis() -> aioredis.Redis:
-    global _redis
-    if _redis is None:
-        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-    return _redis
-
 
 async def _cache_set(reference_id: str, data: dict) -> None:
-    r = await _get_redis()
+    r = get_redis()
     await r.set(f"{_CACHE_PREFIX}{reference_id}", json.dumps(data), ex=_CACHE_TTL)
 
 
 async def _cache_get(reference_id: str) -> dict | None:
-    r = await _get_redis()
+    r = get_redis()
     raw = await r.get(f"{_CACHE_PREFIX}{reference_id}")
     if raw is None:
         return None
     return json.loads(raw)
+
+
+async def _authorized_entry(reference_id: str, principal: Principal) -> dict:
+    """The upload's cache entry if the caller uploaded it (or is admin); 404 otherwise."""
+    entry = await _cache_get(reference_id)
+    if entry is None or not (principal.is_admin or entry.get("owner") == str(principal.user_id)):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reference ID not found")
+    return entry
 
 
 def _get_resume_service() -> ResumeService:
@@ -57,6 +62,7 @@ def _get_resume_service() -> ResumeService:
 @router.post("/resume", response_model=UploadResponse)
 async def upload_resume(
     file: UploadFile,
+    principal: Principal = Depends(get_user_principal),
 ) -> UploadResponse:
     """Upload a resume (PDF or DOCX, max 10MB) and start extraction."""
     if file.content_type not in ALLOWED_CONTENT_TYPES:
@@ -70,35 +76,38 @@ async def upload_resume(
     if len(content) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large. Maximum size: {MAX_FILE_SIZE_BYTES // (1024*1024)}MB",
+            detail=f"File too large. Maximum size: {MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB",
         )
 
     service = _get_resume_service()
+    safe_name = sanitize_filename(file.filename)
 
     # Generate reference ID locally (skip S3 if unavailable)
     reference_id = str(uuid.uuid4())
     if service.storage is not None:
         try:
-            reference_id = service.upload_resume(content, file.content_type, file.filename or "resume")
+            reference_id = service.upload_resume(content, file.content_type, safe_name)
         except Exception as e:
             logger.warning("s3_upload_failed", error=str(e), detail="Continuing with local extraction only")
 
-    # Start extraction in background so the upload returns immediately
-    await _cache_set(reference_id, {"status": "processing"})
+    # Start extraction in background so the upload returns immediately.
+    # Every cache write records the uploader; status/stream check it.
+    owner = str(principal.user_id)
+    await _cache_set(reference_id, {"status": "processing", "owner": owner})
 
     async def _run_extraction() -> None:
         try:
             structured = await service.process_resume(content)
-            await _cache_set(reference_id, {"status": "completed", "data": structured})
+            await _cache_set(reference_id, {"status": "completed", "data": structured, "owner": owner})
         except Exception as e:
             logger.error("extraction_failed", error=str(e))
-            await _cache_set(reference_id, {"status": "failed", "error": str(e)})
+            await _cache_set(reference_id, {"status": "failed", "error": str(e), "owner": owner})
 
     asyncio.create_task(_run_extraction())
 
     return UploadResponse(
         reference_id=reference_id,
-        filename=file.filename or "resume",
+        filename=safe_name,
         file_type=file.content_type,
         size_bytes=len(content),
     )
@@ -107,15 +116,10 @@ async def upload_resume(
 @router.get("/{reference_id}/status", response_model=ExtractionStatusResponse)
 async def get_extraction_status(
     reference_id: str,
+    principal: Principal = Depends(get_user_principal),
 ) -> ExtractionStatusResponse:
     """Check the status of resume extraction."""
-    cache_entry = await _cache_get(reference_id)
-
-    if cache_entry is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Reference ID not found",
-        )
+    cache_entry = await _authorized_entry(reference_id, principal)
 
     return ExtractionStatusResponse(
         reference_id=reference_id,
@@ -158,14 +162,12 @@ async def _sse_event_generator(reference_id: str) -> AsyncGenerator[str, None]:
 
 
 @router.get("/{reference_id}/stream")
-async def stream_extraction_status(reference_id: str) -> StreamingResponse:
+async def stream_extraction_status(
+    reference_id: str,
+    principal: Principal = Depends(get_user_principal),
+) -> StreamingResponse:
     """Stream extraction status via Server-Sent Events."""
-    cache_entry = await _cache_get(reference_id)
-    if cache_entry is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Reference ID not found",
-        )
+    await _authorized_entry(reference_id, principal)
 
     return StreamingResponse(
         _sse_event_generator(reference_id),

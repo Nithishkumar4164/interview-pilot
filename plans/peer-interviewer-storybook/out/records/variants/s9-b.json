@@ -1,0 +1,125 @@
+{
+ "scene": "s9",
+ "order": 2,
+ "name": "Agentic scoring (REPORT_AGENTIC_SCORING)",
+ "wires": [
+  {
+   "cap": "Evidence tools available to the scorer",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Tools"
+    },
+    {
+     "t": "rows",
+     "items": [
+      {
+       "no": "search_transcript",
+       "meta": "find lines by words",
+       "amt": "",
+       "due": "",
+       "st": "grey",
+       "stl": "OLD",
+       "cb": "none"
+      },
+      {
+       "no": "read_transcript",
+       "meta": "read a range of lines",
+       "amt": "",
+       "due": "",
+       "st": "grey",
+       "stl": "OLD",
+       "cb": "none"
+      },
+      {
+       "no": "get_analyses · get_code_timeline",
+       "meta": "",
+       "amt": "",
+       "due": "",
+       "st": "grey",
+       "stl": "OLD",
+       "cb": "none"
+      },
+      {
+       "no": "get_contradictions · get_hints",
+       "meta": "",
+       "amt": "",
+       "due": "",
+       "st": "grey",
+       "stl": "OLD",
+       "cb": "none"
+      },
+      {
+       "no": "get_scorecard_notes",
+       "meta": "notes per criterion with quotes",
+       "amt": "",
+       "due": "",
+       "st": "ok",
+       "stl": "NEW",
+       "cb": "none"
+      }
+     ],
+     "hl": "tool",
+     "label": "Tool list"
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "p",
+  "r",
+  "l"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "p",
+   "to": "r",
+   "l": "report_snapshot()",
+   "t": "MOD",
+   "what": "Same snapshot."
+  },
+  {
+   "id": "m2",
+   "f": "r",
+   "to": "r",
+   "l": "EvidenceIndex(notes=scorecard notes)",
+   "t": "MOD",
+   "what": "The index the scorer's tools read now carries the notes."
+  },
+  {
+   "id": "m3",
+   "f": "r",
+   "to": "l",
+   "l": "scoring tool loop (tools_for(index))",
+   "t": "MOD",
+   "hl": "tool",
+   "what": "`get_scorecard_notes` is offered only when there are notes, so sessions without the flag see exactly today's tool list."
+  },
+  {
+   "id": "m4",
+   "f": "l",
+   "to": "r",
+   "l": "get_scorecard_notes(criterion=\"communication\")",
+   "res": true,
+   "what": "Optional filter by criterion. The executor returns the matching notes with their quotes and sources."
+  },
+  {
+   "id": "m5",
+   "f": "r",
+   "to": "l",
+   "l": "notes",
+   "res": true,
+   "code": "[ { \"criterion\": \"communication\", \"source\": \"interviewer\", \"note\": \"explained the trade-off clearly once prompted\", \"quote\": \"\" }, ... ]",
+   "what": "The scorer can quote the interviewer's own words as evidence."
+  },
+  {
+   "id": "m6",
+   "f": "l",
+   "to": "r",
+   "l": "scores with evidence",
+   "res": true,
+   "what": "As today, with the extra source."
+  }
+ ]
+}

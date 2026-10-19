@@ -1,0 +1,1057 @@
+{
+  "code_ratings": [
+    {
+      "approach_match": "novel",
+      "approach_name": "scripted-approach-28",
+      "complexity_actual": {
+        "space": "O(n)",
+        "time": "O(n)"
+      },
+      "complexity_expected": {
+        "space": "O(n)",
+        "time": "O(n)"
+      },
+      "complexity_match": true,
+      "correctness": "partially_correct",
+      "correctness_issues": [],
+      "improvement_areas": [],
+      "latency_ms": "<volatile>",
+      "overall_score": 4,
+      "pitfalls_avoided": [],
+      "pitfalls_hit": [],
+      "provider": "scripted",
+      "question_id": "q-two-sum",
+      "strengths": [
+        "scripted-strength"
+      ],
+      "summary": "scripted-code-summary-028"
+    }
+  ],
+  "dashboard_events": [
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "6703ab81-3dbc-528a-a476-7fde8e8ff4d5",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "Take your time and walk me through any approach that comes to mind.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "8c36f7f4-2853-5bd8-bb22-068afb9660df",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Hmm, I'm not entirely sure. I guess we could try every pair and check if they add up to the target, but that feels slow. Let me think.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 1,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [
+              "vagueness"
+            ],
+            "justification": "scripted",
+            "score": "good",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "high",
+            "confidence": "high",
+            "justification": "scripted",
+            "score": "adequate",
+            "structure": "high"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "weak"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "poor"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "none",
+            "justification": "scripted",
+            "score": "weak"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "adequate"
+          }
+        },
+        "hint_signal": "none",
+        "insight": "scripted-insight-2985",
+        "latency_ms": "<volatile>",
+        "on_track": false,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-985",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "8fdd413b-2eba-5bba-ac09-ad1da72e744f",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Okay so a nested loop would work, I think that's O of n squared. I'm trying to think if there's something better but I don't see it right now.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 4,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "adequate",
+            "signals_detected": []
+          },
+          "communication_quality": {
+            "clarity": "medium",
+            "confidence": "high",
+            "justification": "scripted",
+            "score": "excellent",
+            "structure": "high"
+          },
+          "contextual_consistency": {
+            "consistent": false,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "weak"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [],
+            "score": "excellent"
+          },
+          "hint_reception": {
+            "acted_on_hint": true,
+            "incorporation_level": "partial",
+            "justification": "scripted",
+            "score": "adequate"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "poor"
+          }
+        },
+        "hint_signal": "none",
+        "insight": "scripted-insight-1108",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-108",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "2b5bff5a-ad77-575b-b78a-bfc9c8d1fe7f",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "I'm still not seeing the trick. Should I just go ahead with the brute force and we can optimize after?",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 3,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "weak",
+            "signals_detected": []
+          },
+          "communication_quality": {
+            "clarity": "high",
+            "confidence": "medium",
+            "justification": "scripted",
+            "score": "adequate",
+            "structure": "high"
+          },
+          "contextual_consistency": {
+            "consistent": false,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [],
+            "score": "excellent"
+          },
+          "hint_reception": {
+            "acted_on_hint": true,
+            "incorporation_level": "full",
+            "justification": "scripted",
+            "score": "weak"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "good"
+          }
+        },
+        "hint_signal": "direct",
+        "insight": "scripted-insight-6752",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [
+          "scripted-red-flag-48"
+        ],
+        "suggestion_for_interviewer": "scripted-suggestion-752",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_red_flag",
+      "payload": {
+        "flags": [
+          "scripted-red-flag-48"
+        ],
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "direct",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "0ce415f4-5767-5c4a-8294-1805a86bd1e9",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Right, so let me just code up the nested loop version for now and we can come back to optimize.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 1,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [
+              "vagueness"
+            ],
+            "justification": "scripted",
+            "score": "adequate",
+            "signals_detected": []
+          },
+          "communication_quality": {
+            "clarity": "low",
+            "confidence": "low",
+            "justification": "scripted",
+            "score": "adequate",
+            "structure": "low"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "good"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [],
+            "score": "excellent"
+          },
+          "hint_reception": {
+            "acted_on_hint": true,
+            "incorporation_level": "partial",
+            "justification": "scripted",
+            "score": "excellent"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "excellent"
+          }
+        },
+        "hint_signal": "none",
+        "insight": "scripted-insight-7770",
+        "latency_ms": "<volatile>",
+        "on_track": false,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-770",
+        "timestamp": "<volatile>"
+      }
+    }
+  ],
+  "error": null,
+  "final_state": {
+    "analyses_run": 4,
+    "analysis": {
+      "analysis_count": 4,
+      "average_quality": 3.5,
+      "current_question": "Given an array of integers nums and an integer target, return the indices of the two numbers that add up to target.",
+      "recent_analyses": [
+        {
+          "answer_quality": 1,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [
+                "vagueness"
+              ],
+              "justification": "scripted",
+              "score": "good",
+              "signals_detected": [
+                "structured_thinking"
+              ]
+            },
+            "communication_quality": {
+              "clarity": "high",
+              "confidence": "high",
+              "justification": "scripted",
+              "score": "adequate",
+              "structure": "high"
+            },
+            "contextual_consistency": {
+              "consistent": true,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "weak"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [
+                "scripted-missed"
+              ],
+              "score": "poor"
+            },
+            "hint_reception": {
+              "acted_on_hint": false,
+              "incorporation_level": "none",
+              "justification": "scripted",
+              "score": "weak"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "adequate"
+            }
+          },
+          "hint_signal": "none",
+          "insight": "scripted-insight-2985",
+          "latency_ms": "<volatile>",
+          "on_track": false,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-985",
+          "timestamp": "<volatile>"
+        },
+        {
+          "answer_quality": 4,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "adequate",
+              "signals_detected": []
+            },
+            "communication_quality": {
+              "clarity": "medium",
+              "confidence": "high",
+              "justification": "scripted",
+              "score": "excellent",
+              "structure": "high"
+            },
+            "contextual_consistency": {
+              "consistent": false,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "weak"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [],
+              "score": "excellent"
+            },
+            "hint_reception": {
+              "acted_on_hint": true,
+              "incorporation_level": "partial",
+              "justification": "scripted",
+              "score": "adequate"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "poor"
+            }
+          },
+          "hint_signal": "none",
+          "insight": "scripted-insight-1108",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-108",
+          "timestamp": "<volatile>"
+        },
+        {
+          "answer_quality": 3,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "weak",
+              "signals_detected": []
+            },
+            "communication_quality": {
+              "clarity": "high",
+              "confidence": "medium",
+              "justification": "scripted",
+              "score": "adequate",
+              "structure": "high"
+            },
+            "contextual_consistency": {
+              "consistent": false,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "poor"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [],
+              "score": "excellent"
+            },
+            "hint_reception": {
+              "acted_on_hint": true,
+              "incorporation_level": "full",
+              "justification": "scripted",
+              "score": "weak"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "good"
+            }
+          },
+          "hint_signal": "direct",
+          "insight": "scripted-insight-6752",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "scripted",
+          "red_flags": [
+            "scripted-red-flag-48"
+          ],
+          "suggestion_for_interviewer": "scripted-suggestion-752",
+          "timestamp": "<volatile>"
+        },
+        {
+          "answer_quality": 1,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [
+                "vagueness"
+              ],
+              "justification": "scripted",
+              "score": "adequate",
+              "signals_detected": []
+            },
+            "communication_quality": {
+              "clarity": "low",
+              "confidence": "low",
+              "justification": "scripted",
+              "score": "adequate",
+              "structure": "low"
+            },
+            "contextual_consistency": {
+              "consistent": true,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "good"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [],
+              "score": "excellent"
+            },
+            "hint_reception": {
+              "acted_on_hint": true,
+              "incorporation_level": "partial",
+              "justification": "scripted",
+              "score": "excellent"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "excellent"
+            }
+          },
+          "hint_signal": "none",
+          "insight": "scripted-insight-7770",
+          "latency_ms": "<volatile>",
+          "on_track": false,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-770",
+          "timestamp": "<volatile>"
+        }
+      ],
+      "session_id": "02-stuck-candidate-needs-hints"
+    },
+    "contradictions": {
+      "contradictions": []
+    },
+    "events_processed": 5,
+    "memory": {
+      "fact_store": {
+        "behavioral_signals": [],
+        "claimed_experience": [],
+        "hint_interactions": [],
+        "key_numbers": [],
+        "technical_positions": [
+          "Okay so a nested loop would work, I think that's O of n squared.",
+          "I'm trying to think if there's something better but I don't see it right now."
+        ]
+      },
+      "rolling_summary": "scripted-summary-476323",
+      "session_id": "02-stuck-candidate-needs-hints",
+      "total_utterances": 5,
+      "unsummarized_count": 0,
+      "working_memory": [
+        {
+          "speaker": "interviewer",
+          "text": "Take your time and walk me through any approach that comes to mind.",
+          "timestamp": "<volatile>"
+        },
+        {
+          "speaker": "candidate",
+          "text": "Hmm, I'm not entirely sure. I guess we could try every pair and check if they add up to the target, but that feels slow. Let me think.",
+          "timestamp": "<volatile>"
+        },
+        {
+          "speaker": "candidate",
+          "text": "Okay so a nested loop would work, I think that's O of n squared. I'm trying to think if there's something better but I don't see it right now.",
+          "timestamp": "<volatile>"
+        },
+        {
+          "speaker": "candidate",
+          "text": "I'm still not seeing the trick. Should I just go ahead with the brute force and we can optimize after?",
+          "timestamp": "<volatile>"
+        },
+        {
+          "speaker": "candidate",
+          "text": "Right, so let me just code up the nested loop version for now and we can come back to optimize.",
+          "timestamp": "<volatile>"
+        }
+      ]
+    },
+    "session_id": "02-stuck-candidate-needs-hints"
+  },
+  "golden_version": 2,
+  "hint_responses": [
+    {
+      "directness": "subtle",
+      "generation_number": 1,
+      "hint_id": "<volatile>",
+      "is_regeneration": false,
+      "latency_ms": "<volatile>",
+      "provider": "scripted",
+      "question_id": "q-two-sum",
+      "regeneration_reason": null,
+      "text": "scripted-hint-4421"
+    },
+    {
+      "directness": "subtle",
+      "generation_number": 2,
+      "hint_id": "<volatile>",
+      "is_regeneration": false,
+      "latency_ms": "<volatile>",
+      "provider": "scripted",
+      "question_id": "q-two-sum",
+      "regeneration_reason": null,
+      "text": "scripted-hint-1762"
+    },
+    {
+      "directness": "subtle",
+      "generation_number": 3,
+      "hint_id": "<volatile>",
+      "is_regeneration": false,
+      "latency_ms": "<volatile>",
+      "provider": "scripted",
+      "question_id": "q-two-sum",
+      "regeneration_reason": null,
+      "text": "scripted-hint-7081"
+    }
+  ],
+  "llm_calls_by_kind": {
+    "code_rating": [
+      {
+        "max_tokens": 800,
+        "response_format": "json",
+        "system_prompt_sha": "01ff93424721",
+        "task_type": "code_rating",
+        "temperature": 0.2,
+        "user_content": "## Interview Question\nGiven an array of integers nums and an integer target, return the indices of the two numbers that add up to target.\n\n## Brute Force Approach\nName: nested_loops\nComplexity: {'time': 'O(n^2)', 'space': 'O(1)'}\nSteps: []\n\n## Optimal Approach 1\nName: hash_map\nComplexity: {'time': 'O(n)', 'space': 'O(n)'}\nSteps: []\n\n## Common Pitfalls\n- Using the same index twice\n\n## Candidate's Code (language: python)\n```python\ndef two_sum(nums, target):\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                return [i, j]\n    return []\n\n```"
+      }
+    ],
+    "fact_extraction": [
+      {
+        "max_tokens": 300,
+        "response_format": "json",
+        "system_prompt_sha": "34b139630de3",
+        "task_type": "real_time_analysis",
+        "temperature": 0.2,
+        "user_content": "Analyze this interview utterance and extract any factual claims into the following JSON structure. Only include categories with actual findings. Return valid JSON only.\n\n{\n  \"claimed_experience\": [\"list of specific claims about experience or skills\"],\n  \"technical_positions\": [\"list of technical opinions or approach preferences\"],\n  \"behavioral_signals\": [\"list of communication or behavioral observations\"],\n  \"key_numbers\": [\"list of specific metrics, numbers, or quantified claims\"]\n}\n\nUtterance (by candidate): Hmm, I'm not entirely sure. I guess we could try every pair and check if they add up to the target, but that feels slow. Let me think."
+      },
+      {
+        "max_tokens": 300,
+        "response_format": "json",
+        "system_prompt_sha": "34b139630de3",
+        "task_type": "real_time_analysis",
+        "temperature": 0.2,
+        "user_content": "Analyze this interview utterance and extract any factual claims into the following JSON structure. Only include categories with actual findings. Return valid JSON only.\n\n{\n  \"claimed_experience\": [\"list of specific claims about experience or skills\"],\n  \"technical_positions\": [\"list of technical opinions or approach preferences\"],\n  \"behavioral_signals\": [\"list of communication or behavioral observations\"],\n  \"key_numbers\": [\"list of specific metrics, numbers, or quantified claims\"]\n}\n\nUtterance (by candidate): Okay so a nested loop would work, I think that's O of n squared. I'm trying to think if there's something better but I don't see it right now."
+      }
+    ],
+    "hint": [
+      {
+        "max_tokens": 400,
+        "response_format": "json",
+        "system_prompt_sha": "701497686d91",
+        "task_type": "hint_generation",
+        "temperature": 0.5,
+        "user_content": "## Current Question\nTwo Sum\n\n## Expected Approaches\n- {'name': 'hash_map', 'expected_complexity': {'time': 'O(n)', 'space': 'O(n)'}}\n\n## Recent Candidate Transcript\n[interviewer]: Take your time and walk me through any approach that comes to mind.\n[candidate]: Hmm, I'm not entirely sure. I guess we could try every pair and check if they add up to the target, but that feels slow. Let me think.\n\n## Recent Analysis\n- Quality 1/5: scripted-insight-2985\n\n## Directness Level\nGenerate a subtle hint."
+      },
+      {
+        "max_tokens": 400,
+        "response_format": "json",
+        "system_prompt_sha": "701497686d91",
+        "task_type": "hint_generation",
+        "temperature": 0.5,
+        "user_content": "## Current Question\nTwo Sum\n\n## Expected Approaches\n- {'name': 'hash_map', 'expected_complexity': {'time': 'O(n)', 'space': 'O(n)'}}\n\n## Recent Candidate Transcript\n[interviewer]: Take your time and walk me through any approach that comes to mind.\n[candidate]: Hmm, I'm not entirely sure. I guess we could try every pair and check if they add up to the target, but that feels slow. Let me think.\n[candidate]: Okay so a nested loop would work, I think that's O of n squared. I'm trying to think if there's something better but I don't see it right now.\n\n## Recent Analysis\n- Quality 1/5: scripted-insight-2985\n- Quality 4/5: scripted-insight-1108\n\n## Directness Level\nGenerate a moderate hint."
+      },
+      {
+        "max_tokens": 400,
+        "response_format": "json",
+        "system_prompt_sha": "701497686d91",
+        "task_type": "hint_generation",
+        "temperature": 0.5,
+        "user_content": "## Current Question\nTwo Sum\n\n## Expected Approaches\n- {'name': 'hash_map', 'expected_complexity': {'time': 'O(n)', 'space': 'O(n)'}}\n\n## Recent Candidate Transcript\n[interviewer]: Take your time and walk me through any approach that comes to mind.\n[candidate]: Hmm, I'm not entirely sure. I guess we could try every pair and check if they add up to the target, but that feels slow. Let me think.\n[candidate]: Okay so a nested loop would work, I think that's O of n squared. I'm trying to think if there's something better but I don't see it right now.\n[candidate]: I'm still not seeing the trick. Should I just go ahead with the brute force and we can optimize after?\n\n## Recent Analysis\n- Quality 1/5: scripted-insight-2985\n- Quality 4/5: scripted-insight-1108\n- Quality 3/5: scripted-insight-6752\n\n## Directness Level\nGenerate a direct hint."
+      }
+    ],
+    "summary": [
+      {
+        "max_tokens": 500,
+        "response_format": null,
+        "system_prompt_sha": "84845177ca07",
+        "task_type": "summary_compression",
+        "temperature": 0.3,
+        "user_content": "Current summary:\n(empty)\n\nNew utterances:\n[interviewer]: Take your time and walk me through any approach that comes to mind.\n[candidate]: Hmm, I'm not entirely sure. I guess we could try every pair and check if they add up to the target, but that feels slow. Let me think.\n[candidate]: Okay so a nested loop would work, I think that's O of n squared. I'm trying to think if there's something better but I don't see it right now.\n[candidate]: I'm still not seeing the trick. Should I just go ahead with the brute force and we can optimize after?\n[candidate]: Right, so let me just code up the nested loop version for now and we can come back to optimize."
+      }
+    ],
+    "utterance_analysis": [
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nGiven an array of integers nums and an integer target, return the indices of the two numbers that add up to target.\n\n## Key Facts\n(No facts extracted yet)\n\n## Recent Conversation\n[interviewer]: Take your time and walk me through any approach that comes to mind.\n[candidate]: Hmm, I'm not entirely sure. I guess we could try every pair and check if they add up to the target, but that feels slow. Let me think.\n\n## Expected Answer Outline\nOptimal approaches: {'name': 'hash_map', 'expected_complexity': {'time': 'O(n)', 'space': 'O(n)'}}\nCommon pitfalls: Using the same index twice\nBrute-force approach: {'name': 'nested_loops', 'expected_complexity': {'time': 'O(n^2)', 'space': 'O(1)'}}\n\n## Latest Utterance\n[candidate]: Hmm, I'm not entirely sure. I guess we could try every pair and check if they add up to the target, but that feels slow. Let me think."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "5b5ee2c887a6",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nGiven an array of integers nums and an integer target, return the indices of the two numbers that add up to target.\n\n## Active Hints\nscripted-hint-4421\n\n## Key Facts\n(No facts extracted yet)\n\n## Recent Conversation\n[interviewer]: Take your time and walk me through any approach that comes to mind.\n[candidate]: Hmm, I'm not entirely sure. I guess we could try every pair and check if they add up to the target, but that feels slow. Let me think.\n[candidate]: Okay so a nested loop would work, I think that's O of n squared. I'm trying to think if there's something better but I don't see it right now.\n\n## Expected Answer Outline\nOptimal approaches: {'name': 'hash_map', 'expected_complexity': {'time': 'O(n)', 'space': 'O(n)'}}\nCommon pitfalls: Using the same index twice\nBrute-force approach: {'name': 'nested_loops', 'expected_complexity': {'time': 'O(n^2)', 'space': 'O(1)'}}\n\n## Latest Utterance\n[candidate]: Okay so a nested loop would work, I think that's O of n squared. I'm trying to think if there's something better but I don't see it right now."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "5b5ee2c887a6",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nGiven an array of integers nums and an integer target, return the indices of the two numbers that add up to target.\n\n## Active Hints\nscripted-hint-1762\n\n## Key Facts\nTechnical positions: Okay so a nested loop would work, I think that's O of n squared.; I'm trying to think if there's something better but I don't see it right now.\n\n## Recent Conversation\n[interviewer]: Take your time and walk me through any approach that comes to mind.\n[candidate]: Hmm, I'm not entirely sure. I guess we could try every pair and check if they add up to the target, but that feels slow. Let me think.\n[candidate]: Okay so a nested loop would work, I think that's O of n squared. I'm trying to think if there's something better but I don't see it right now.\n[candidate]: I'm still not seeing the trick. Should I just go ahead with the brute force and we can optimize after?\n\n## Expected Answer Outline\nOptimal approaches: {'name': 'hash_map', 'expected_complexity': {'time': 'O(n)', 'space': 'O(n)'}}\nCommon pitfalls: Using the same index twice\nBrute-force approach: {'name': 'nested_loops', 'expected_complexity': {'time': 'O(n^2)', 'space': 'O(1)'}}\n\n## Latest Utterance\n[candidate]: I'm still not seeing the trick. Should I just go ahead with the brute force and we can optimize after?"
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "5b5ee2c887a6",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nGiven an array of integers nums and an integer target, return the indices of the two numbers that add up to target.\n\n## Active Hints\nscripted-hint-7081\n\n## Key Facts\nTechnical positions: Okay so a nested loop would work, I think that's O of n squared.; I'm trying to think if there's something better but I don't see it right now.\n\n## Recent Conversation\n[interviewer]: Take your time and walk me through any approach that comes to mind.\n[candidate]: Hmm, I'm not entirely sure. I guess we could try every pair and check if they add up to the target, but that feels slow. Let me think.\n[candidate]: Okay so a nested loop would work, I think that's O of n squared. I'm trying to think if there's something better but I don't see it right now.\n[candidate]: I'm still not seeing the trick. Should I just go ahead with the brute force and we can optimize after?\n[candidate]: Right, so let me just code up the nested loop version for now and we can come back to optimize.\n\n## Expected Answer Outline\nOptimal approaches: {'name': 'hash_map', 'expected_complexity': {'time': 'O(n)', 'space': 'O(n)'}}\nCommon pitfalls: Using the same index twice\nBrute-force approach: {'name': 'nested_loops', 'expected_complexity': {'time': 'O(n^2)', 'space': 'O(1)'}}\n\n## Latest Utterance\n[candidate]: Right, so let me just code up the nested loop version for now and we can come back to optimize."
+      }
+    ]
+  },
+  "persisted": [
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "Take your time and walk me through any approach that comes to mind.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Hmm, I'm not entirely sure. I guess we could try every pair and check if they add up to the target, but that feels slow. Let me think.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 1,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [
+            "vagueness"
+          ],
+          "justification": "scripted",
+          "score": "good",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "high",
+          "confidence": "high",
+          "justification": "scripted",
+          "score": "adequate",
+          "structure": "high"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "weak"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "poor"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "none",
+          "justification": "scripted",
+          "score": "weak"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "adequate"
+        }
+      },
+      "hint_signal": "none",
+      "insight": "scripted-insight-2985",
+      "on_track": false,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-985",
+      "type": "analysis"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Okay so a nested loop would work, I think that's O of n squared. I'm trying to think if there's something better but I don't see it right now.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 4,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "adequate",
+          "signals_detected": []
+        },
+        "communication_quality": {
+          "clarity": "medium",
+          "confidence": "high",
+          "justification": "scripted",
+          "score": "excellent",
+          "structure": "high"
+        },
+        "contextual_consistency": {
+          "consistent": false,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "weak"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [],
+          "score": "excellent"
+        },
+        "hint_reception": {
+          "acted_on_hint": true,
+          "incorporation_level": "partial",
+          "justification": "scripted",
+          "score": "adequate"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "poor"
+        }
+      },
+      "hint_signal": "none",
+      "insight": "scripted-insight-1108",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-108",
+      "type": "analysis"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "I'm still not seeing the trick. Should I just go ahead with the brute force and we can optimize after?",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 3,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "weak",
+          "signals_detected": []
+        },
+        "communication_quality": {
+          "clarity": "high",
+          "confidence": "medium",
+          "justification": "scripted",
+          "score": "adequate",
+          "structure": "high"
+        },
+        "contextual_consistency": {
+          "consistent": false,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [],
+          "score": "excellent"
+        },
+        "hint_reception": {
+          "acted_on_hint": true,
+          "incorporation_level": "full",
+          "justification": "scripted",
+          "score": "weak"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "good"
+        }
+      },
+      "hint_signal": "direct",
+      "insight": "scripted-insight-6752",
+      "on_track": true,
+      "red_flags": [
+        "scripted-red-flag-48"
+      ],
+      "suggestion": "scripted-suggestion-752",
+      "type": "analysis"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Right, so let me just code up the nested loop version for now and we can come back to optimize.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 1,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [
+            "vagueness"
+          ],
+          "justification": "scripted",
+          "score": "adequate",
+          "signals_detected": []
+        },
+        "communication_quality": {
+          "clarity": "low",
+          "confidence": "low",
+          "justification": "scripted",
+          "score": "adequate",
+          "structure": "low"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "good"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [],
+          "score": "excellent"
+        },
+        "hint_reception": {
+          "acted_on_hint": true,
+          "incorporation_level": "partial",
+          "justification": "scripted",
+          "score": "excellent"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "excellent"
+        }
+      },
+      "hint_signal": "none",
+      "insight": "scripted-insight-7770",
+      "on_track": false,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-770",
+      "type": "analysis"
+    }
+  ],
+  "scenario_id": "02-stuck-candidate-needs-hints",
+  "session_state": {
+    "active_question_id": "q-two-sum",
+    "analysis_count": 4,
+    "code_snapshot_count": 0,
+    "coverage_tracker": {},
+    "facts": {
+      "behavioral_signals": [],
+      "claimed_experience": [],
+      "hint_interactions": [],
+      "key_numbers": [],
+      "technical_positions": [
+        "Okay so a nested loop would work, I think that's O of n squared.",
+        "I'm trying to think if there's something better but I don't see it right now."
+      ]
+    },
+    "hint_history": [],
+    "last_transcript_timestamp": null,
+    "plan_progress": {
+      "current_phase_index": 0,
+      "current_question_index": 0
+    },
+    "rolling_summary": "scripted-summary-476323",
+    "schema_version": 1,
+    "scores": {
+      "problem_solving": 2.2
+    },
+    "session_id": "02-stuck-candidate-needs-hints",
+    "transcript_count": 5
+  }
+}

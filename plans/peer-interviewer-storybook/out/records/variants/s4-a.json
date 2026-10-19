@@ -1,0 +1,121 @@
+{
+ "scene": "s4",
+ "order": 1,
+ "name": "Over the question's budget",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "rows",
+     "hl": "card",
+     "label": "Pacing card",
+     "items": [
+      {
+       "no": "Pacing · signal",
+       "meta": "1 min over this question's 15 min budget",
+       "amt": "",
+       "due": "10:30",
+       "st": "proc",
+       "stl": "suggest",
+       "cb": "none"
+      }
+     ]
+    },
+    {
+     "t": "text",
+     "text": "2 questions and 25 min of plan left. Wrap up with what you have, or ask the short variant."
+    },
+    {
+     "t": "btn",
+     "text": "Done",
+     "kind": "off",
+     "sm": true
+    },
+    {
+     "t": "btn",
+     "text": "Dismiss",
+     "kind": "ghost",
+     "sm": true
+    },
+    {
+     "t": "muted",
+     "text": "At 150% (22.5 min) a second card arrives, marked urgent."
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "d",
+  "w",
+  "p",
+  "g"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "d",
+   "to": "w",
+   "l": "change_question (earlier, at 10:14)",
+   "t": "MOD",
+   "what": "When the interviewer moved to Q2 the dashboard sent the plan's remainder along with the question. This is what the pace card quotes later.",
+   "code": "{ \"type\": \"change_question\", \"question_index\": 1,\n  \"question_plan\": { \"id\": \"q2\", \"time_minutes\": 15, \"alternates\": [...], ... },\n  \"remaining_questions\": 2, \"remaining_minutes\": 25 }"
+  },
+  {
+   "id": "m2",
+   "f": "w",
+   "to": "p",
+   "l": "on_question_change(..., remaining_*)",
+   "t": "MOD",
+   "what": "`QuestionChanged` gains `at` (now), `remaining_questions` and `remaining_minutes`. The graph resets `question_started_at`, the pace alerts sent, the stuck marker and the difficulty cards for the new question."
+  },
+  {
+   "id": "m3",
+   "f": "p",
+   "to": "p",
+   "l": "_tick_loop: sleep 30 s → on_tick()",
+   "t": "NEW",
+   "what": "Thirty-two ticks later. Each tick enqueues `Tick(at=now)` like any other ingress event; it joins whatever batch is open."
+  },
+  {
+   "id": "m4",
+   "f": "p",
+   "to": "g",
+   "l": "Tick(at=10:30:10Z)",
+   "t": "NEW",
+   "what": "Runs through `apply_events` with the current code context attached."
+  },
+  {
+   "id": "m5",
+   "f": "g",
+   "to": "g",
+   "l": "pace_alert: 16 min elapsed vs 15 min budget",
+   "t": "NEW",
+   "what": "Budget is `question_plan.time_minutes × 60`; elapsed is `at` minus `question_started_at`. Thresholds: `over` at 100%, `far_over` at 150%. The highest one due and not yet sent for this question fires. No budget on the plan means no pacing at all.",
+   "code": "pace_alert(elapsed_s=965, budget_s=900, sent=[])  # -> \"over\""
+  },
+  {
+   "id": "m6",
+   "f": "g",
+   "to": "w",
+   "l": "send_copilot_card (pace, suggest)",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Id `sess-7f3a:q2:pace:over`, so it cannot repeat for this question. On the last planned question the body says so instead of quoting the remainder.",
+   "code": "{ \"id\": \"sess-7f3a:q2:pace:over\", \"kind\": \"pace\", \"priority\": \"suggest\",\n  \"title\": \"1 min over this question's 15 min budget\",\n  \"body\": \"2 questions and 25 min of plan left. Wrap up with what you have, or ask the short variant.\",\n  \"source\": \"rule\", \"question_id\": \"q2\" }"
+  },
+  {
+   "id": "m7",
+   "f": "w",
+   "to": "d",
+   "l": "copilot_card",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Shown as Pacing with the signal badge. At 22.5 min the `far_over` card follows with priority `urgent`."
+  }
+ ]
+}

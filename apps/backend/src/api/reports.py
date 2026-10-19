@@ -10,41 +10,34 @@ Endpoints:
 
 import asyncio
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.dependencies import get_db, async_session_factory, failover_manager
+from src.api.authz import authorized_report, authorized_session, get_user_principal
+from src.dependencies import get_db
 from src.models.report import Report, ReportNote
+from src.models.session import InterviewSession
 from src.repositories.report_repo import ReportNoteRepository, ReportRepository
 from src.schemas.report import AddNoteRequest
+from src.services.access_control import Principal
 from src.utils.logging import get_logger
 
 logger = get_logger("api.reports")
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
-# Default dev user UUID
-_DEV_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
-
 
 @router.post("/generate/{session_id}")
 async def generate_report_for_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
+    session: InterviewSession = Depends(authorized_session),
 ) -> dict:
     """Retroactively generate a report for an ended session.
 
     Useful when the original report generation failed or was interrupted.
     """
-    from src.repositories.session_repo import SessionRepository
-
-    session_repo = SessionRepository(db)
-    session = await session_repo.get_by_id(uuid.UUID(session_id))
-
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found.")
 
     if session.status != "ended":
         raise HTTPException(status_code=400, detail="Session must be in 'ended' status.")
@@ -56,7 +49,7 @@ async def generate_report_for_session(
         return {"report_id": str(existing.id), "status": "already_exists"}
 
     # Calculate duration
-    duration_minutes = session.duration_minutes
+    duration_minutes: float = session.duration_minutes
     if session.started_at and session.ended_at:
         elapsed = (session.ended_at - session.started_at).total_seconds() / 60.0
         duration_minutes = round(elapsed, 1)
@@ -91,8 +84,6 @@ async def generate_report_for_session(
             report_id=report_id,
             session_id=session_id,
             snapshots=snapshots,
-            fm=failover_manager,
-            session_factory=async_session_factory,
         )
     )
 
@@ -104,11 +95,13 @@ async def list_reports(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(get_user_principal),
 ) -> dict:
-    """List all reports, ordered by creation date descending."""
+    """List the caller's reports (all reports for admins), newest first."""
+    owner_id = None if principal.is_admin else principal.user_id
     report_repo = ReportRepository(db)
-    reports = await report_repo.list_reports(limit=limit, offset=offset)
-    total = await report_repo.count_reports()
+    reports = await report_repo.list_reports(limit=limit, offset=offset, owner_id=owner_id)
+    total = await report_repo.count_reports(owner_id=owner_id)
 
     return {
         "reports": [
@@ -134,15 +127,22 @@ async def list_reports(
 async def compare_reports(
     ids: str = Query(..., description="Comma-separated report IDs"),
     db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(get_user_principal),
 ) -> dict:
     """Compare multiple reports side by side."""
-    report_ids = [uuid.UUID(id.strip()) for id in ids.split(",") if id.strip()]
+    try:
+        report_ids = list(dict.fromkeys(uuid.UUID(id.strip()) for id in ids.split(",") if id.strip()))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Report not found.") from None
 
     if len(report_ids) < 2:
         raise HTTPException(status_code=400, detail="At least 2 report IDs required for comparison.")
 
     report_repo = ReportRepository(db)
-    reports = await report_repo.get_multiple(report_ids)
+    reports = await report_repo.get_multiple(report_ids, owner_id=None if principal.is_admin else principal.user_id)
+    if len(reports) != len(report_ids):
+        # Missing and not-yours are indistinguishable on purpose.
+        raise HTTPException(status_code=404, detail="Report not found.")
 
     return {
         "reports": [
@@ -167,6 +167,7 @@ async def compare_reports(
 async def get_report_status(
     report_id: str,
     db: AsyncSession = Depends(get_db),
+    _report: Report = Depends(authorized_report),
 ) -> dict:
     """Get the generation status of a report."""
     report_repo = ReportRepository(db)
@@ -186,6 +187,7 @@ async def get_report_status(
 async def get_report(
     report_id: str,
     db: AsyncSession = Depends(get_db),
+    _report: Report = Depends(authorized_report),
 ) -> dict:
     """Get a generated interview report."""
     report_repo = ReportRepository(db)
@@ -198,10 +200,12 @@ async def get_report(
         )
 
     report_data = report.report_data or {}
+    session = await db.get(InterviewSession, report.session_id)
 
     return {
         "id": str(report.id),
         "session_id": str(report.session_id),
+        "meeting_url": session.meeting_url if session else None,
         "status": report.status,
         "assessment": {
             "recommendation": report.recommendation,
@@ -233,23 +237,15 @@ async def add_note(
     report_id: str,
     request: AddNoteRequest,
     db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(get_user_principal),
+    _report: Report = Depends(authorized_report),
 ) -> dict:
     """Add a note to a report."""
-    # Verify report exists
-    report_repo = ReportRepository(db)
-    report = await report_repo.get_by_id(uuid.UUID(report_id))
-
-    if report is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Report {report_id} not found.",
-        )
-
     note_repo = ReportNoteRepository(db)
     note = ReportNote(
         id=uuid.uuid4(),
         report_id=uuid.UUID(report_id),
-        user_id=_DEV_USER_ID,
+        user_id=principal.user_id,
         note_text=request.note_text,
     )
     await note_repo.create(note)

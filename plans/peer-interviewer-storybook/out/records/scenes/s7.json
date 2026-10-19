@@ -1,0 +1,10 @@
+{
+ "n": 7,
+ "short": "Ask",
+ "title": "Ask the copilot",
+ "lede": "A typed question is answered by the same tool loop the agentic report uses, over the live session, with checked transcript citations.",
+ "also": [
+  4
+ ],
+ "stack": false
+}

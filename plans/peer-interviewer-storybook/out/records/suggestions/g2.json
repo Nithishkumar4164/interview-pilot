@@ -1,0 +1,10 @@
+{
+ "order": 2,
+ "n": 2,
+ "where": "Steps 3 and 6",
+ "title": "Send mutes to the backend so a muted kind costs nothing",
+ "paras": [
+  "Muting is a `localStorage` filter. A muted **Coaching** kind still triggers a Haiku call for every substantial interviewer turn (at most one per 20 s), and muted probes still cost a Sonnet call per analysed answer. The cards are produced, sent and thrown away.",
+  "Add a `set_copilot_mutes` message that stores `muted_kinds` in graph state; `dispatch` and `peer_sends` skip a node whose only output is a muted kind. Keep the local filter for instant feedback. Deterministic signals can keep running since they are free."
+ ]
+}

@@ -5,6 +5,7 @@
  * and 6-dimension insight evaluations.
  */
 import { create } from 'zustand';
+import type { LiveFlag } from '@/lib/flags';
 
 // ── Dimension Types ──────────────────────────────────────────────────
 
@@ -104,7 +105,7 @@ export interface ScoreState {
 interface AnalysisStoreState {
   analyses: AnalysisEntry[];
   latestAnalysis: AnalysisEntry | null;
-  redFlags: Array<{ text: string; timestamp: string; type?: string }>;
+  redFlags: LiveFlag[];
   scores: ScoreState;
   codeRatingInput: string;
   codeRating: CodeRatingResult | null;
@@ -113,7 +114,7 @@ interface AnalysisStoreState {
   // Actions
   addAnalysis: (entry: AnalysisEntry) => void;
   restoreAnalyses: (entries: AnalysisEntry[]) => void;
-  addRedFlag: (flag: { text: string; timestamp: string; type?: string }) => void;
+  addRedFlags: (flags: LiveFlag[]) => void;
   updateScores: (scores: Partial<ScoreState>) => void;
   setCodeRatingInput: (input: string) => void;
   setCodeRating: (rating: CodeRatingResult | null) => void;
@@ -290,8 +291,8 @@ export const useAnalysisStore = create<AnalysisStoreState>((set) => ({
       };
     }),
 
-  addRedFlag: (flag) =>
-    set((s) => ({ redFlags: [...s.redFlags, flag].slice(-20) })),
+  addRedFlags: (flags) =>
+    set((s) => ({ redFlags: [...s.redFlags, ...flags].slice(-50) })),
 
   updateScores: (scores) =>
     set((s) => ({ scores: { ...s.scores, ...scores } })),

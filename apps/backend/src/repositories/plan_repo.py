@@ -30,21 +30,16 @@ class PlanRepository(BaseRepository[InterviewPlan]):
     async def get_plans_for_session(self, session_id: uuid.UUID) -> list[InterviewPlan]:
         """Get all plans for a session, ordered by version."""
         stmt = (
-            select(InterviewPlan)
-            .where(InterviewPlan.session_id == session_id)
-            .order_by(InterviewPlan.version.desc())
+            select(InterviewPlan).where(InterviewPlan.session_id == session_id).order_by(InterviewPlan.version.desc())
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
     async def deactivate_all(self, session_id: uuid.UUID) -> None:
         """Deactivate all plans for a session (before creating a new one)."""
-        stmt = (
-            select(InterviewPlan)
-            .where(
-                InterviewPlan.session_id == session_id,
-                InterviewPlan.is_active == True,  # noqa: E712
-            )
+        stmt = select(InterviewPlan).where(
+            InterviewPlan.session_id == session_id,
+            InterviewPlan.is_active == True,  # noqa: E712
         )
         result = await self.db.execute(stmt)
         for plan in result.scalars().all():

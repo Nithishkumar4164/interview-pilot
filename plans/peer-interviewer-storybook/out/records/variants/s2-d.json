@@ -1,0 +1,86 @@
+{
+ "scene": "s2",
+ "order": 4,
+ "name": "The model fails: nothing shown",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "empty",
+     "hl": "empty",
+     "label": "Empty state",
+     "title": "Listening.",
+     "text": "Suggestions appear here as the interview unfolds."
+    },
+    {
+     "t": "muted",
+     "text": "The analysis, scores and flags elsewhere on the page are unaffected."
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "k",
+  "p",
+  "g",
+  "l",
+  "w",
+  "d"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "k",
+   "to": "p",
+   "l": "final transcript line u-41",
+   "t": "OLD",
+   "what": "Same answer as the normal path."
+  },
+  {
+   "id": "m2",
+   "f": "p",
+   "to": "g",
+   "l": "run → analyze → merge_results",
+   "t": "MOD",
+   "what": "The analysis itself succeeds and reaches the dashboard as today."
+  },
+  {
+   "id": "m3",
+   "f": "g",
+   "to": "l",
+   "l": "suggest_probes (attempt 1)",
+   "t": "NEW",
+   "what": "Wrapped in `retry_transient` and a 20 s timeout (`ACTION_TIMEOUT_S`)."
+  },
+  {
+   "id": "m4",
+   "f": "l",
+   "to": "g",
+   "l": "503 / timeout",
+   "res": true,
+   "what": "A transient error is retried once; a timeout or a final error gives up."
+  },
+  {
+   "id": "m5",
+   "f": "g",
+   "to": "g",
+   "l": "log peer_action_failed, return {}",
+   "t": "NEW",
+   "what": "Every peer node catches everything, logs `peer_action_failed action=suggest_probe`, and returns an empty update. The run finishes normally; the follow-up is simply missing.",
+   "code": "WARNING peer_action_failed action=suggest_probe session_id=sess-7f3a error=\"timed out\""
+  },
+  {
+   "id": "m6",
+   "f": "g",
+   "to": "w",
+   "l": "(no copilot_card)",
+   "hl": "empty",
+   "what": "Nothing is sent, so nothing changes on the panel. The interviewer is not told a suggestion was lost."
+  }
+ ]
+}

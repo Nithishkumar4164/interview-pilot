@@ -1,0 +1,61 @@
+{
+ "scene": "s4",
+ "order": 3,
+ "name": "Nothing due",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "empty",
+     "hl": "empty",
+     "label": "Empty state",
+     "title": "Listening.",
+     "text": "Suggestions appear here as the interview unfolds."
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "p",
+  "g"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "p",
+   "to": "g",
+   "l": "Tick(at=10:15:40Z)",
+   "t": "NEW",
+   "what": "Ninety seconds into Q2; the candidate spoke 20 s ago."
+  },
+  {
+   "id": "m2",
+   "f": "g",
+   "to": "g",
+   "l": "apply_events: no threshold, no silence",
+   "t": "NEW",
+   "what": "Elapsed is well under the budget and the candidate is not quiet. State is written back unchanged except for bookkeeping."
+  },
+  {
+   "id": "m3",
+   "f": "g",
+   "to": "g",
+   "l": "dispatch → END",
+   "hl": "empty",
+   "what": "No Sends, no model calls, nothing for the dashboard."
+  },
+  {
+   "id": "m4",
+   "f": "g",
+   "to": "p",
+   "l": "checkpoint written",
+   "t": "NEW",
+   "what": "LangGraph still checkpoints the run. At one tick per 30 s that is about 120 runs and checkpoints per hour per session with nothing to show for most of them. See suggestion 3."
+  }
+ ]
+}

@@ -1,0 +1,588 @@
+{
+ "meta": {
+  "page": {
+   "eyebrow": "Interview Pilot · peer interviewer",
+   "title": "Peer interviewer storybook",
+   "intro": "Nine moments in a live interview with PEER_INTERVIEWER_ENABLED on. Each step shows the Copilot panel the interviewer sees and, next to it, every call made behind it: the websocket message, the graph node, the model call. The candidate never sees any of this.",
+   "rolloutTitle": "Flag off first, then one session at a time",
+   "rolloutLede": "Everything ships dark. The order below is the order to turn it on in."
+  },
+  "lanes": {
+   "lanes": {
+    "i": { "name": "Interviewer", "role": "at the dashboard" },
+    "k": { "name": "Candidate", "role": "speech, via STT" },
+    "d": { "name": "Dashboard", "role": "React, copilot store" },
+    "w": { "name": "WS handler", "role": "dashboard_handler" },
+    "p": { "name": "Pipeline", "role": "LangGraphSession" },
+    "g": { "name": "Session graph", "role": "session_graph.py" },
+    "l": { "name": "LLM", "role": "failover → Claude" },
+    "c": { "name": "Code graph", "role": "editor snapshots" },
+    "r": { "name": "Report", "role": "report_service" }
+   }
+  },
+  "theme": {
+   "brand": "Interview Pilot",
+   "font": "\"Inter\", system-ui, -apple-system, sans-serif",
+   "colors": {
+    "primary": "#6366f1", "on-primary": "#ffffff",
+    "ink": "#e4e6ed", "sub": "#9399b0", "line": "#2e3347", "bg": "#0f1117", "grey": "#242836",
+    "lav": "#232849", "lime": "#1f2e22", "mint": "#1b2f33",
+    "good": "#22c55e", "bad": "#ef4444", "bad-bg": "#3a1d1d",
+    "warn": "#f59e0b", "warn-bg": "#3a2e14", "amber": "#f59e0b", "amber-bg": "#3a2e14"
+   }
+  },
+  "nodes": {
+   "nodes": [
+    { "name": "Interviewer", "role": "browser", "note": "reads cards, marks them used, types notes and questions" },
+    { "name": "Dashboard", "role": "React + Zustand", "note": "CopilotPanel and copilot-store; mutes stay in the browser" },
+    { "name": "WS handler", "role": "FastAPI websocket", "note": "one loop per tab; broadcasts to every tab of the session" },
+    { "name": "Pipeline", "role": "LangGraphSessionPipeline", "note": "batches events, runs the graph, performs its effects, keeps the 30 s clock" },
+    { "name": "Session graph", "role": "LangGraph", "note": "apply_events → fan-out → merge_results → actions; peer nodes added when the flag is on" },
+    { "name": "LLM", "role": "FailoverManager", "note": "Sonnet for peer calls, Haiku for coaching, tool loop for questions", "plus": true },
+    { "name": "Code graph", "role": "separate graph", "note": "its latest values (code, snapshot id, is_stuck, bugs) ride into every session run" },
+    { "name": "Report", "role": "after the session", "note": "gets the scorecard and the cards that were used" }
+   ]
+  },
+  "context": {
+   "digest": "Feature: the peer interviewer. With PEER_INTERVIEWER_ENABLED (default off) the session graph also acts as a senior engineer beside the interviewer. Everything it produces is advice for the interviewer, delivered as copilot cards on one websocket channel (copilot_card), plus a rubric coverage map (copilot_coverage), a live scorecard (scorecard) and answers to typed questions (copilot_reply).\n\nFacts (checked in the code):\n- build_session_graph(failover, session_id, agentic, peer). Peer mode uses the fan-out shape even when AGENTIC_ROUTING_ENABLED is off; agentic actions are offered to the analysis only when that flag is on. Peer actions offered: suggest_probe, verify_claim, clarify, edge_cases. The analysis prompt is byte-identical to today's when no actions are offered.\n- Card kinds: probe, claim_check, clarification, coaching, pace, stuck, difficulty, edge_cases. Priorities info/suggest/urgent. source is llm or rule. Card id is '<session>:<utterance or snapshot or question>:<kind>' so a resumed run re-sending a card is deduped on the dashboard.\n- LLM calls: suggest_probes, verify_claim, draft_clarification, suggest_edge_cases use TaskType.PEER_INTERVIEWER (Sonnet). coach_interviewer uses TaskType.INTERVIEWER_COACHING (claude-haiku-5-5). answer_copilot_query uses TaskType.COPILOT_QUERY (Sonnet) through run_tool_loop, max 4 steps. Every peer node wraps the call in retry_transient and a 20 s timeout (ACTION_TIMEOUT_S); failures log peer_action_failed and emit nothing; the run is never failed by a peer action.\n- Triggers: probes run when the analysis chose suggest_probe OR key_points_missed is non-empty. Clarification runs when chosen OR looks_like_a_question(text) ('?' or starts with can i assume / should i / do you want / is it okay if). Claim check runs only when chosen; a card appears only for verdict incorrect/misleading with confidence ≥ 0.6. Edge cases run when chosen OR the code graph lists bugs, and only once per code snapshot id (edge_cases_for).\n- Coaching: interviewer final turns of ≥ 12 words, at most one call per 20 s of interview time (last_coaching_at). Rule signals with no model: monologue (one interviewer turn ≥ 120 words) and talk share (interviewer ≥ 60% of words over the last 40 utterances, once ≥ 250 words were spoken, at most one nudge per 5 min).\n- Clock: the pipeline enqueues Tick(at) every 30 s (TICK_INTERVAL_S) when the flag is on; replay and tests call on_tick directly. Pace: elapsed since QuestionChanged.at (or the first utterance) against question_plan.time_minutes × 60; alerts at 100% (suggest) and 150% (urgent), each once per question; the card quotes remaining_questions and remaining_minutes that the dashboard now sends with change_question. Stuck: code graph is_stuck AND candidate quiet ≥ 60 s AND snapshot not yet handled → stuck card and a Send to the existing draft_hint node (Smart Hints suggestion).\n- After every recorded analysis (no model): coverage_increments adds evidence per report criterion (problem_solving always; communication when dimensions exist; hint_responsiveness when hint_reception exists; behavioral on signals/flags or behavioral category; system_design for that category; code_quality for coding with code present); status none/thin/solid with solid at 3; resume_verification counts claimed experience + contradictions. scorecard_notes_from_analysis adds a note with a 200-char quote (and a red-flags note). difficulty_signal over the last 3 scored analyses: cruising (all ≥ 4 and on track) or struggling (≥ 2 weak or ≥ 2 direct hints), once per key per question; the card lists the plan's alternates.\n- Interviewer actions: use_copilot_card → CopilotCardUsed → copilot_cards_used (max 50, deduped) → report. add_scorecard_note → ScorecardNoteAdded → interviewer_note (unknown criterion or empty text dropped) → scorecard (max 60) → send_scorecard. Dismiss and mute are browser-only; mutes live in localStorage key copilot_muted_kinds.\n- Ask the copilot: handle_copilot_query is awaited inline in the dashboard websocket loop (same as rate_code and request_runtime_hint). live_evidence_index builds the report's EvidenceIndex from live values: transcript entries T1..Tn, analyses, code timeline, contradictions, hints, facts, summary, scorecard notes. Tools: search_transcript, read_transcript, get_analyses, get_code_timeline, get_contradictions, get_hints, and get_scorecard_notes only when notes exist. Citations are kept only for real entry ids; a quote that does not match the entry is blanked. The handler never raises: errors come back as {answer: 'Copilot unavailable: …', error}.\n- Report: report_snapshot adds copilot_cards_used and scorecard_notes; ReportInput gets scorecard_notes and copilot_usage; _build_context adds '## Interviewer Scorecard Notes' (all interviewer notes, last 20 copilot drafts with quotes) and '## Copilot Suggestions The Interviewer Used' (counts per kind, plus the line that relayed probes count as the interviewer's questions). Agentic scoring (REPORT_AGENTIC_SCORING) gets the get_scorecard_notes tool when notes exist.\n- Frontend: copilot-store keeps the 20 newest cards, dedupes by id, remembers used ids, mutes per kind; CopilotPanel sits at the top of the right column of LiveSessionPage; 'Mark as asked' for probe/clarification/claim_check/edge_cases, 'Done' for the rest. The frontend has no signal for the flag: the panel renders and says 'Listening.' even when the flag is off.\n\nDecisions taken: one flag for all of it; deterministic signals also run only under the flag; coaching on a light model; the panel is a full dashboard UI, not a toast; cards are one payload shape on one channel; peer actions never fail a run.\n\nOpen questions: hide the panel when the flag is off (needs a backend signal); send mutes to the backend so muted kinds skip their model calls; run copilot_query as a task so the websocket loop is not blocked; avoid a checkpoint write on every 30 s tick when nothing is due; a cheap trigger for claim checks beyond the analysis choosing it; which model for the Sonnet peer calls.\n\nTests: tests/test_peer_signals.py (unit), tests/test_peer_report.py (unit), tests/test_peer_interviewer.py (Postgres replay), apps/frontend/src/__tests__/copilot.test.tsx. Backend suite 448 passed with the same 10 pre-existing failures as before; frontend 96 passed."
+  }
+ },
+ "scenes": {
+  "s1": { "n": 1, "short": "Switch on", "title": "Turn the copilot on", "lede": "One backend flag. With it on, every new session builds the peer graph and a 30-second clock, and the Copilot panel starts listening.", "also": [1], "stack": false },
+  "s2": { "n": 2, "short": "Answer", "title": "The candidate answers", "lede": "A final transcript line runs through the graph. The analysis runs as before and may now name peer follow-ups; those run in parallel and arrive as cards.", "also": [5], "stack": false },
+  "s3": { "n": 3, "short": "You speak", "title": "The interviewer speaks", "lede": "Your own turns are coached by a cheap model, at most once per 20 seconds. Two talk-time signals need no model at all.", "also": [2], "stack": false },
+  "s4": { "n": 4, "short": "Clock", "title": "The clock ticks", "lede": "Every 30 seconds a Tick runs through the graph even when nobody speaks. It checks the question against its budget and the candidate against silence.", "also": [3], "stack": false },
+  "s5": { "n": 5, "short": "Evidence", "title": "Coverage, scorecard and difficulty", "lede": "No extra model calls. Each analysis adds evidence to the rubric map and a quoted note to the scorecard, and may trip the difficulty signal.", "also": [], "stack": false },
+  "s6": { "n": 6, "short": "You act", "title": "Acting on a card", "lede": "Mark as asked tells the backend, so the report can tell copilot-prompted moves from your own. Dismiss and mute stay in the browser.", "also": [2], "stack": false },
+  "s7": { "n": 7, "short": "Ask", "title": "Ask the copilot", "lede": "A typed question is answered by the same tool loop the agentic report uses, over the live session, with checked transcript citations.", "also": [4], "stack": false },
+  "s8": { "n": 8, "short": "Edge cases", "title": "Edge cases from the code", "lede": "When the code graph suspects a bug, or the analysis asks, the copilot proposes inputs to trace by hand. Once per code snapshot.", "also": [], "stack": false },
+  "s9": { "n": 9, "short": "Report", "title": "Into the report", "lede": "Scorecard notes and the cards you used ride along to the report. The classic prompt gets two sections; agentic scoring gets a tool.", "also": [], "stack": false }
+ },
+ "variants": {
+  "s1-a": {
+   "scene": "s1", "order": 1, "name": "Flag on",
+   "wires": [ { "cap": "Copilot panel, right column", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "btn", "text": "Mute…", "kind": "ghost", "sm": true },
+    { "t": "empty", "hl": "empty", "label": "Empty state", "title": "Listening.", "text": "Suggestions appear here as the interview unfolds." }
+   ] } ],
+   "lanes": ["i", "d", "w", "p", "g"],
+   "msgs": [
+    { "id": "m1", "f": "i", "to": "d", "l": "opens the live session", "what": "The interviewer opens the live session page. The Copilot panel is the first thing in the right column, above Speakers and Scores." },
+    { "id": "m2", "f": "d", "to": "w", "l": "ws /ws/dashboard/{session}", "t": "OLD", "what": "The existing dashboard websocket. The panel listens on it for four new message types: `copilot_card`, `copilot_coverage`, `scorecard`, `copilot_reply`." },
+    { "id": "m3", "f": "w", "to": "p", "l": "create_session_pipeline(...)", "t": "MOD", "what": "The production factory reads `settings.peer_interviewer_enabled` (env `INTERVIEW_PILOT_PEER_INTERVIEWER_ENABLED`). When on, it passes a 30 s tick interval; otherwise 0.", "code": "LangGraphSessionPipeline(\n  session_id, failover, checkpointer,\n  tick_interval_s=30.0 if settings.peer_interviewer_enabled else 0.0,\n)" },
+    { "id": "m4", "f": "p", "to": "g", "l": "build_session_graph(peer=True)", "t": "MOD", "what": "The graph gains nodes `coach_interviewer`, `suggest_probes`, `verify_claim`, `draft_clarification`, `suggest_edge_cases`, and the analysis prompt now lists the four peer actions it may choose. Peer mode uses the fan-out shape even when `AGENTIC_ROUTING_ENABLED` is off." },
+    { "id": "m5", "f": "p", "to": "p", "l": "starts the clock (every 30 s)", "t": "NEW", "what": "An asyncio task named `session-ticks:{session}` sleeps 30 s and enqueues `Tick(at=now)` while the pipeline runs. It is started with the consumer and cancelled on close." },
+    { "id": "m6", "f": "d", "to": "d", "l": "renders the panel: Listening.", "hl": "empty", "what": "Nothing has arrived yet. Coverage, scorecard and the ask box appear once their first payload lands." }
+   ]
+  },
+  "s1-b": {
+   "scene": "s1", "order": 2, "name": "Flag off (today's default)",
+   "wires": [ { "cap": "Copilot panel, right column", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "btn", "text": "Mute…", "kind": "ghost", "sm": true },
+    { "t": "empty", "hl": "empty", "label": "Empty state", "title": "Listening.", "text": "Suggestions appear here as the interview unfolds." },
+    { "t": "msg", "kind": "warn", "text": "Stays like this for the whole session: nothing will ever arrive." }
+   ] } ],
+   "lanes": ["i", "d", "w", "p", "g"],
+   "msgs": [
+    { "id": "m1", "f": "i", "to": "d", "l": "opens the live session", "what": "Same page, same panel." },
+    { "id": "m2", "f": "d", "to": "w", "l": "ws /ws/dashboard/{session}", "t": "OLD", "what": "Same websocket." },
+    { "id": "m3", "f": "w", "to": "p", "l": "create_session_pipeline(tick 0)", "t": "MOD", "what": "The flag is off, so no clock is started." },
+    { "id": "m4", "f": "p", "to": "g", "l": "build_session_graph(peer=False)", "t": "OLD", "what": "No peer nodes. With `AGENTIC_ROUTING_ENABLED` also off the graph is exactly today's: analyze, then the fixed contradiction follow-up. The analysis prompt is byte-identical to before this feature." },
+    { "id": "m5", "f": "d", "to": "d", "l": "panel still says Listening.", "hl": "empty", "what": "The frontend has no signal for the flag (checked: no flag read anywhere under `apps/frontend/src`). The panel renders on every session and waits for cards that never come. See suggestion 1." }
+   ]
+  },
+
+  "s2-a": {
+   "scene": "s2", "order": 1, "name": "Gaps found: suggested follow-ups",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "rows", "hl": "card", "label": "Follow-up card", "items": [ { "no": "Follow-up", "meta": "Expected outline not covered: a heap for top-K", "amt": "", "due": "10:14", "st": "proc", "stl": "suggest", "cb": "none" } ] },
+    { "t": "text", "text": "1. You sort the whole map at the end. Is there a way to avoid sorting all n words when k is small?" },
+    { "t": "text", "text": "2. What happens to your memory use if the stream is much larger than the distinct vocabulary?" },
+    { "t": "text", "text": "3. How would you break ties between words with the same count?" },
+    { "t": "btn", "text": "Mark as asked", "kind": "primary", "sm": true },
+    { "t": "btn", "text": "Dismiss", "kind": "ghost", "sm": true }
+   ] } ],
+   "lanes": ["k", "p", "g", "l", "w", "d"],
+   "msgs": [
+    { "id": "m1", "f": "k", "to": "p", "l": "final transcript line u-41", "t": "OLD", "what": "The candidate's answer arrives as a final transcript event, as today.", "code": "{ \"id\": \"u-41\", \"speaker_role\": \"candidate\", \"is_final\": true,\n  \"timestamp\": \"2026-10-16T10:14:05Z\",\n  \"text\": \"I'd keep a hash map of counts and then sort it by count; that's O(n log n) and it's fine for this size.\" }" },
+    { "id": "m2", "f": "p", "to": "g", "l": "run: UtteranceIn → apply_events", "t": "MOD", "what": "The batch runs through the graph. New in peer mode: the talk window gets `[candidate, 23]` and `last_candidate_at` becomes 10:14:05Z, for the talk-share and stuck checks later." },
+    { "id": "m3", "f": "g", "to": "g", "l": "dispatch → Send(analyze)", "t": "OLD", "what": "The utterance was chosen for analysis by the ingress, as before." },
+    { "id": "m4", "f": "g", "to": "l", "l": "analyze (offered actions listed)", "t": "MOD", "what": "The same analysis prompt plus a short list of follow-ups it may name: `suggest_probe`, `verify_claim`, `clarify`, `edge_cases` (and the agentic ones when that flag is on). Without any offered actions the prompt text is unchanged.", "code": "Also include \"next_actions\": a list (often empty) of follow-ups worth running now, chosen only from:\n  suggest_probe - ...\n  verify_claim - ...\n  clarify - ...\n  edge_cases - ...\nReturn \"next_actions\": [] when none apply." },
+    { "id": "m5", "f": "l", "to": "g", "l": "analysis: quality 3, heap missed", "res": true, "what": "The analysis scores the answer and lists what the expected outline wanted but did not hear.", "code": "{ \"answer_quality\": 3, \"on_track\": true,\n  \"dimensions\": { \"depth_completeness\": { \"key_points_missed\": [\"heap of size k\"] } },\n  \"next_actions\": [] }" },
+    { "id": "m6", "f": "g", "to": "g", "l": "merge_results → plan_actions → peer_sends", "t": "NEW", "what": "Decides which peer nodes run for this analysis. A probe is due when the analysis chose it **or** `key_points_missed` is non-empty (it is here, so the empty `next_actions` does not matter). A clarification runs when chosen or the text looks like a question. A claim check runs only when chosen." },
+    { "id": "m7", "f": "g", "to": "l", "l": "suggest_probes (Sonnet, PEER_INTERVIEWER)", "t": "NEW", "what": "One call, max 500 tokens, temperature 0.4, JSON. It gets the conversation context, the question plan, a summary of the analysis (quality, missed and covered points, weakest dimension) and the utterance.", "code": "system: \"Suggest follow-up questions for a live interview. Return JSON. ...\"\nuser:   <context> <question plan>\n        ## Analysis Of This Answer\n        Quality 3/5, on track: ... Missed: heap of size k ...\n        ## Latest Utterance\n        [candidate]: I'd keep a hash map ..." },
+    { "id": "m8", "f": "l", "to": "g", "l": "{ probes: [3] }", "res": true, "what": "Up to three questions in the interviewer's voice. Items without a question are dropped; more than three are cut.", "code": "{ \"probes\": [\n  { \"question\": \"You sort the whole map at the end. Is there a way to avoid sorting all n words when k is small?\", \"targets\": \"Expected outline not covered: a heap for top-K\", \"why\": \"the core optimisation\" },\n  { \"question\": \"What happens to your memory use if the stream is much larger than the distinct vocabulary?\", ... },\n  { \"question\": \"How would you break ties between words with the same count?\", ... } ] }" },
+    { "id": "m9", "f": "g", "to": "w", "l": "send_copilot_card (probe)", "t": "NEW", "hl": "card", "what": "Emitted as a dashboard effect from the node; the pipeline performs it after the run step. The card id is `sess-7f3a:u-41:probe`, so a resumed run re-sending it is harmless.", "code": "{ \"id\": \"sess-7f3a:u-41:probe\", \"kind\": \"probe\", \"priority\": \"suggest\",\n  \"title\": \"Suggested follow-ups\",\n  \"body\": \"Expected outline not covered: a heap for top-K\",\n  \"items\": [\"You sort the whole map ...\", \"What happens to your memory ...\", \"How would you break ties ...\"],\n  \"probe\": \"You sort the whole map ...\",\n  \"question_id\": \"q2\", \"source\": \"llm\", \"timestamp\": \"2026-10-16T10:14:09Z\" }" },
+    { "id": "m10", "f": "w", "to": "d", "l": "copilot_card", "t": "NEW", "hl": "card", "what": "Broadcast to every dashboard tab of the session. The store keeps the 20 newest cards, one per id, and ignores ids the interviewer already used.", "code": "{ \"type\": \"copilot_card\", \"session_id\": \"sess-7f3a\", \"payload\": { ...card } }" }
+   ]
+  },
+  "s2-b": {
+   "scene": "s2", "order": 2, "name": "Wrong claim: claim check (urgent)",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "rows", "hl": "card", "label": "Claim check card", "items": [ { "no": "Claim check", "meta": "Claim looks incorrect: heap insertion is O(1)", "amt": "", "due": "10:16", "st": "over", "stl": "urgent", "cb": "none" } ] },
+    { "t": "text", "text": "Insertion into a binary heap is O(log n); the overall pass is O(n log k), not linear." },
+    { "t": "msg", "kind": "note", "text": "Ask: \"Walk me through what happens inside the heap when you insert a new word.\"" },
+    { "t": "btn", "text": "Mark as asked", "kind": "primary", "sm": true },
+    { "t": "btn", "text": "Dismiss", "kind": "ghost", "sm": true }
+   ] } ],
+   "lanes": ["k", "p", "g", "l", "w", "d"],
+   "msgs": [
+    { "id": "m1", "f": "k", "to": "p", "l": "final transcript line u-44", "t": "OLD", "what": "The candidate states a complexity as fact.", "code": "{ \"id\": \"u-44\", \"speaker_role\": \"candidate\", \"text\": \"Heap insertion is O(1), so the whole thing is linear.\" }" },
+    { "id": "m2", "f": "p", "to": "g", "l": "run: UtteranceIn → apply_events", "t": "MOD", "what": "Same ingress as the normal path." },
+    { "id": "m3", "f": "g", "to": "l", "l": "analyze (offered actions listed)", "t": "MOD", "what": "The analysis sees a checkable claim and names `verify_claim`." },
+    { "id": "m4", "f": "l", "to": "g", "l": "analysis: next_actions [verify_claim]", "res": true, "code": "{ \"answer_quality\": 2, \"next_actions\": [\"verify_claim\"] }", "what": "The claim check is the one peer action with no deterministic trigger: it runs only when the analysis asks for it (see suggestion 5)." },
+    { "id": "m5", "f": "g", "to": "g", "l": "peer_sends → Send(verify_claim)", "t": "NEW", "what": "In parallel with the contradiction check and any probe." },
+    { "id": "m6", "f": "g", "to": "l", "l": "verify_claim (Sonnet, temperature 0.1)", "t": "NEW", "what": "Strict about what was claimed, generous about wording. Opinions and plans come back `unverifiable`.", "code": "system: \"Verify a technical claim made in a live interview. Return JSON. ...\"\nuser:   <context> <question plan>\n        ## Statement To Verify\n        [candidate]: Heap insertion is O(1), so the whole thing is linear." },
+    { "id": "m7", "f": "l", "to": "g", "l": "verdict incorrect, confidence 0.92", "res": true, "code": "{ \"claim\": \"heap insertion is O(1)\", \"verdict\": \"incorrect\", \"confidence\": 0.92,\n  \"correction\": \"Insertion into a binary heap is O(log n); the overall pass is O(n log k), not linear.\",\n  \"self_correct_probe\": \"Walk me through what happens inside the heap when you insert a new word.\" }", "what": "A card is made only for `incorrect` or `misleading` with confidence ≥ 0.6. Anything else returns None and nothing is shown." },
+    { "id": "m8", "f": "g", "to": "w", "l": "send_copilot_card (claim_check, urgent)", "t": "NEW", "hl": "card", "what": "The only card kind that defaults to `urgent`. Its `probe` is the self-correct question, so Mark as asked relays that, not the correction.", "code": "{ \"id\": \"sess-7f3a:u-44:claim_check\", \"kind\": \"claim_check\", \"priority\": \"urgent\",\n  \"title\": \"Claim looks incorrect: heap insertion is O(1)\",\n  \"body\": \"Insertion into a binary heap is O(log n); ...\",\n  \"probe\": \"Walk me through what happens inside the heap when you insert a new word.\", ... }" },
+    { "id": "m9", "f": "w", "to": "d", "l": "copilot_card", "t": "NEW", "hl": "card", "what": "Drawn with the urgent border at the top of the list." }
+   ]
+  },
+  "s2-c": {
+   "scene": "s2", "order": 3, "name": "Candidate asks: clarification draft",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "rows", "hl": "card", "label": "Clarification card", "items": [ { "no": "Clarify", "meta": "Candidate needs a clarification", "amt": "", "due": "10:18", "st": "proc", "stl": "suggest", "cb": "none" } ] },
+    { "t": "text", "text": "Whether the whole word set fits in memory." },
+    { "t": "msg", "kind": "note", "text": "Say: \"Yes, assume the distinct words fit in memory; the stream itself does not.\"" },
+    { "t": "btn", "text": "Mark as asked", "kind": "primary", "sm": true },
+    { "t": "btn", "text": "Dismiss", "kind": "ghost", "sm": true }
+   ] } ],
+   "lanes": ["k", "p", "g", "l", "w", "d"],
+   "msgs": [
+    { "id": "m1", "f": "k", "to": "p", "l": "final transcript line u-47", "t": "OLD", "code": "{ \"id\": \"u-47\", \"speaker_role\": \"candidate\", \"text\": \"Can I assume the words fit in memory?\" }", "what": "A question to the interviewer." },
+    { "id": "m2", "f": "p", "to": "g", "l": "run: UtteranceIn → apply_events", "t": "MOD", "what": "Same ingress." },
+    { "id": "m3", "f": "g", "to": "l", "l": "analyze (offered actions listed)", "t": "MOD", "what": "The analysis runs as usual; here it chose nothing." },
+    { "id": "m4", "f": "l", "to": "g", "l": "analysis: next_actions []", "res": true, "what": "Not needed: the cheap trigger below fires anyway." },
+    { "id": "m5", "f": "g", "to": "g", "l": "peer_sends: looks_like_a_question → clarify", "t": "NEW", "what": "`looks_like_a_question` is true for a `?` or an opening like *can i assume*, *should i*, *do you want*, *is it okay if*. The clarification check runs even when the analysis did not ask for it." },
+    { "id": "m6", "f": "g", "to": "l", "l": "draft_clarification (Sonnet, temperature 0.2)", "t": "NEW", "what": "Asked to decide whether something needs clearing up right now, and to draft a reply that clarifies the problem statement only, never the solution.", "code": "system: \"Draft a clarification for a live interview. Return JSON. ...\"\nuser:   <context> <question plan>\n        ## Latest Utterance\n        [candidate]: Can I assume the words fit in memory?" },
+    { "id": "m7", "f": "l", "to": "g", "l": "needs_clarification true + reply", "res": true, "code": "{ \"needs_clarification\": true,\n  \"what_is_unclear\": \"Whether the whole word set fits in memory.\",\n  \"reply\": \"Yes, assume the distinct words fit in memory; the stream itself does not.\" }", "what": "`needs_clarification: false` or an empty reply means no card." },
+    { "id": "m8", "f": "g", "to": "w", "l": "send_copilot_card (clarification)", "t": "NEW", "hl": "card", "what": "Body is what is unclear; `probe` is the reply to say aloud." },
+    { "id": "m9", "f": "w", "to": "d", "l": "copilot_card", "t": "NEW", "hl": "card", "what": "Mark as asked sends the reply text back as the used card." }
+   ]
+  },
+  "s2-d": {
+   "scene": "s2", "order": 4, "name": "The model fails: nothing shown",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "empty", "hl": "empty", "label": "Empty state", "title": "Listening.", "text": "Suggestions appear here as the interview unfolds." },
+    { "t": "muted", "text": "The analysis, scores and flags elsewhere on the page are unaffected." }
+   ] } ],
+   "lanes": ["k", "p", "g", "l", "w", "d"],
+   "msgs": [
+    { "id": "m1", "f": "k", "to": "p", "l": "final transcript line u-41", "t": "OLD", "what": "Same answer as the normal path." },
+    { "id": "m2", "f": "p", "to": "g", "l": "run → analyze → merge_results", "t": "MOD", "what": "The analysis itself succeeds and reaches the dashboard as today." },
+    { "id": "m3", "f": "g", "to": "l", "l": "suggest_probes (attempt 1)", "t": "NEW", "what": "Wrapped in `retry_transient` and a 20 s timeout (`ACTION_TIMEOUT_S`)." },
+    { "id": "m4", "f": "l", "to": "g", "l": "503 / timeout", "res": true, "what": "A transient error is retried once; a timeout or a final error gives up." },
+    { "id": "m5", "f": "g", "to": "g", "l": "log peer_action_failed, return {}", "t": "NEW", "what": "Every peer node catches everything, logs `peer_action_failed action=suggest_probe`, and returns an empty update. The run finishes normally; the follow-up is simply missing.", "code": "WARNING peer_action_failed action=suggest_probe session_id=sess-7f3a error=\"timed out\"" },
+    { "id": "m6", "f": "g", "to": "w", "l": "(no copilot_card)", "hl": "empty", "what": "Nothing is sent, so nothing changes on the panel. The interviewer is not told a suggestion was lost." }
+   ]
+  },
+
+  "s3-a": {
+   "scene": "s3", "order": 1, "name": "Leading question",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "rows", "hl": "card", "label": "Coaching card", "items": [ { "no": "Coaching", "meta": "The question named the min-heap the candidate was expected to find", "amt": "", "due": "10:20", "st": "grey", "stl": "info", "cb": "none" } ] },
+    { "t": "text", "text": "Leading question" },
+    { "t": "text", "text": "• Ask instead: \"How would you get the top k without sorting everything?\"" },
+    { "t": "btn", "text": "Done", "kind": "off", "sm": true },
+    { "t": "btn", "text": "Dismiss", "kind": "ghost", "sm": true }
+   ] } ],
+   "lanes": ["i", "p", "g", "l", "w", "d"],
+   "msgs": [
+    { "id": "m1", "f": "i", "to": "p", "l": "final transcript line u-48 (interviewer)", "t": "OLD", "code": "{ \"id\": \"u-48\", \"speaker_role\": \"interviewer\", \"timestamp\": \"2026-10-16T10:20:10Z\",\n  \"text\": \"So you'd use a min-heap of size k there, right? That's what I'd do for the top-k part of this.\" }", "what": "18 words from the interviewer." },
+    { "id": "m2", "f": "p", "to": "g", "l": "apply_events: talk window + [interviewer, 18]", "t": "MOD", "what": "The window of the last 40 final utterances is updated. The talk-share rule (next situation) is checked here too and finds nothing yet." },
+    { "id": "m3", "f": "g", "to": "g", "l": "dispatch: coaching_candidate", "t": "NEW", "what": "The latest interviewer turn of the batch with ≥ 12 words, and ≥ 20 s since `last_coaching_at`. It is sent alongside analyze and fact extraction, not after them." },
+    { "id": "m4", "f": "g", "to": "l", "l": "coach_interviewer (Haiku, INTERVIEWER_COACHING)", "t": "NEW", "what": "A light model (`claude-haiku-5-5`), 300 tokens, temperature 0.1. It may only name clear problems with how the question was asked: leading, revealed answer, unclear, stacked, interrupting.", "code": "system: \"Coach the interviewer of a live technical interview. Return JSON. ...\"\nuser:   <context>\n        ## Planned Question\n        Top-K frequent words in a stream\n        ## Interviewer's Latest Turn\n        [interviewer]: So you'd use a min-heap of size k there, right? ..." },
+    { "id": "m5", "f": "l", "to": "g", "l": "issues: [leading_question]", "res": true, "code": "{ \"issues\": [ { \"kind\": \"leading_question\",\n  \"note\": \"The question named the min-heap the candidate was expected to find\",\n  \"suggestion\": \"Ask instead: How would you get the top k without sorting everything?\" } ] }", "what": "Most turns come back with an empty list and no card. Unknown kinds are dropped; at most three issues are kept." },
+    { "id": "m6", "f": "g", "to": "g", "l": "last_coaching_at = 10:20:10Z", "t": "NEW", "what": "Set whether or not the call succeeded, so a failing model does not get hammered every turn." },
+    { "id": "m7", "f": "g", "to": "w", "l": "send_copilot_card (coaching, info)", "t": "NEW", "hl": "card", "what": "Title is the note, body the kind in plain words, items the suggestions. Coaching never relays anything to the candidate, so the panel shows Done instead of Mark as asked.", "code": "{ \"id\": \"sess-7f3a:u-48:coaching\", \"kind\": \"coaching\", \"priority\": \"info\",\n  \"title\": \"The question named the min-heap ...\", \"body\": \"Leading question\",\n  \"items\": [\"Ask instead: How would you get the top k without sorting everything?\"],\n  \"probe\": \"\", \"source\": \"llm\" }" },
+    { "id": "m8", "f": "w", "to": "d", "l": "copilot_card", "t": "NEW", "hl": "card", "what": "Coaching can be muted from the panel header; see suggestion 2 for what muting does not do." }
+   ]
+  },
+  "s3-b": {
+   "scene": "s3", "order": 2, "name": "Talk-share nudge (no model)",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "rows", "hl": "card", "label": "Talk-share card", "items": [ { "no": "Coaching · signal", "meta": "You have spoken 63% of the last 310 words", "amt": "", "due": "10:23", "st": "grey", "stl": "info", "cb": "none" } ] },
+    { "t": "text", "text": "Candidates reveal most when they do the talking. Hand the floor back with an open question." },
+    { "t": "btn", "text": "Done", "kind": "off", "sm": true },
+    { "t": "btn", "text": "Dismiss", "kind": "ghost", "sm": true }
+   ] } ],
+   "lanes": ["i", "p", "g", "w", "d"],
+   "msgs": [
+    { "id": "m1", "f": "i", "to": "p", "l": "final transcript line u-52 (interviewer, 40 words)", "t": "OLD", "what": "Another interviewer turn. The transcript is unchanged; only what the graph does with it is new." },
+    { "id": "m2", "f": "p", "to": "g", "l": "apply_events: talk_share over the window", "t": "NEW", "what": "Over the last 40 final utterances: 310 words spoken, 196 by the interviewer, 63%. The rule needs ≥ 250 words in the window, share ≥ 60%, and ≥ 5 min since the last nudge (`last_talk_card_at`). No model is involved.", "code": "talk_window = [[\"candidate\", 23], [\"interviewer\", 18], ..., [\"interviewer\", 40]]\nshare, total = talk_share(talk_window)   # 0.63, 310" },
+    { "id": "m3", "f": "g", "to": "w", "l": "send_copilot_card (coaching, source rule)", "t": "NEW", "hl": "card", "what": "Same card shape, `source: \"rule\"`, which the panel shows as a small *signal* badge. A single interviewer turn of ≥ 120 words sends a sibling card, *That was a long turn*.", "code": "{ \"id\": \"sess-7f3a:u-52:talk_share\", \"kind\": \"coaching\", \"priority\": \"info\",\n  \"title\": \"You have spoken 63% of the last 310 words\",\n  \"body\": \"Candidates reveal most when they do the talking. Hand the floor back with an open question.\",\n  \"source\": \"rule\", \"timestamp\": \"2026-10-16T10:23:40Z\" }" },
+    { "id": "m4", "f": "g", "to": "g", "l": "last_talk_card_at = 10:23:40Z", "t": "NEW", "what": "Five minutes of quiet on this signal before the next nudge, however the share moves." },
+    { "id": "m5", "f": "w", "to": "d", "l": "copilot_card", "t": "NEW", "hl": "card", "what": "Shown with the signal badge." }
+   ]
+  },
+  "s3-c": {
+   "scene": "s3", "order": 3, "name": "Short turn: no call",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "empty", "hl": "empty", "label": "Empty state", "title": "Listening.", "text": "Suggestions appear here as the interview unfolds." }
+   ] } ],
+   "lanes": ["i", "p", "g", "l"],
+   "msgs": [
+    { "id": "m1", "f": "i", "to": "p", "l": "final transcript line: \"Okay, go on.\"", "t": "OLD", "what": "Three words." },
+    { "id": "m2", "f": "p", "to": "g", "l": "apply_events: talk window + [interviewer, 3]", "t": "NEW", "what": "Still counted toward talk share." },
+    { "id": "m3", "f": "g", "to": "g", "l": "coaching_candidate → None", "t": "NEW", "what": "Fewer than 12 words, so no coaching Send. The same happens for a long turn within 20 s of the last coached one: only the newest substantial turn in a batch is ever sent." },
+    { "id": "m4", "f": "g", "to": "l", "l": "(no coaching call)", "hl": "empty", "what": "This is the common case. Most interviewer turns cost nothing." }
+   ]
+  },
+
+  "s4-a": {
+   "scene": "s4", "order": 1, "name": "Over the question's budget",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "rows", "hl": "card", "label": "Pacing card", "items": [ { "no": "Pacing · signal", "meta": "1 min over this question's 15 min budget", "amt": "", "due": "10:30", "st": "proc", "stl": "suggest", "cb": "none" } ] },
+    { "t": "text", "text": "2 questions and 25 min of plan left. Wrap up with what you have, or ask the short variant." },
+    { "t": "btn", "text": "Done", "kind": "off", "sm": true },
+    { "t": "btn", "text": "Dismiss", "kind": "ghost", "sm": true },
+    { "t": "muted", "text": "At 150% (22.5 min) a second card arrives, marked urgent." }
+   ] } ],
+   "lanes": ["d", "w", "p", "g"],
+   "msgs": [
+    { "id": "m1", "f": "d", "to": "w", "l": "change_question (earlier, at 10:14)", "t": "MOD", "what": "When the interviewer moved to Q2 the dashboard sent the plan's remainder along with the question. This is what the pace card quotes later.", "code": "{ \"type\": \"change_question\", \"question_index\": 1,\n  \"question_plan\": { \"id\": \"q2\", \"time_minutes\": 15, \"alternates\": [...], ... },\n  \"remaining_questions\": 2, \"remaining_minutes\": 25 }" },
+    { "id": "m2", "f": "w", "to": "p", "l": "on_question_change(..., remaining_*)", "t": "MOD", "what": "`QuestionChanged` gains `at` (now), `remaining_questions` and `remaining_minutes`. The graph resets `question_started_at`, the pace alerts sent, the stuck marker and the difficulty cards for the new question." },
+    { "id": "m3", "f": "p", "to": "p", "l": "_tick_loop: sleep 30 s → on_tick()", "t": "NEW", "what": "Thirty-two ticks later. Each tick enqueues `Tick(at=now)` like any other ingress event; it joins whatever batch is open." },
+    { "id": "m4", "f": "p", "to": "g", "l": "Tick(at=10:30:10Z)", "t": "NEW", "what": "Runs through `apply_events` with the current code context attached." },
+    { "id": "m5", "f": "g", "to": "g", "l": "pace_alert: 16 min elapsed vs 15 min budget", "t": "NEW", "what": "Budget is `question_plan.time_minutes × 60`; elapsed is `at` minus `question_started_at`. Thresholds: `over` at 100%, `far_over` at 150%. The highest one due and not yet sent for this question fires. No budget on the plan means no pacing at all.", "code": "pace_alert(elapsed_s=965, budget_s=900, sent=[])  # -> \"over\"" },
+    { "id": "m6", "f": "g", "to": "w", "l": "send_copilot_card (pace, suggest)", "t": "NEW", "hl": "card", "what": "Id `sess-7f3a:q2:pace:over`, so it cannot repeat for this question. On the last planned question the body says so instead of quoting the remainder.", "code": "{ \"id\": \"sess-7f3a:q2:pace:over\", \"kind\": \"pace\", \"priority\": \"suggest\",\n  \"title\": \"1 min over this question's 15 min budget\",\n  \"body\": \"2 questions and 25 min of plan left. Wrap up with what you have, or ask the short variant.\",\n  \"source\": \"rule\", \"question_id\": \"q2\" }" },
+    { "id": "m7", "f": "w", "to": "d", "l": "copilot_card", "t": "NEW", "hl": "card", "what": "Shown as Pacing with the signal badge. At 22.5 min the `far_over` card follows with priority `urgent`." }
+   ]
+  },
+  "s4-b": {
+   "scene": "s4", "order": 2, "name": "Stuck: a card and a drafted hint",
+   "wires": [
+    { "cap": "Copilot panel", "blocks": [
+     { "t": "title", "text": "Copilot" },
+     { "t": "rows", "hl": "card", "label": "Stuck card", "items": [ { "no": "Stuck · signal", "meta": "Quiet for 74 s and the code is not moving", "amt": "", "due": "10:33", "st": "proc", "stl": "suggest", "cb": "none" } ] },
+     { "t": "text", "text": "A hint is being drafted (Smart Hints). Or ask them to talk through what they are trying now." },
+     { "t": "btn", "text": "Done", "kind": "off", "sm": true }
+    ] },
+    { "cap": "Hint panel (existing), a moment later", "blocks": [
+     { "t": "title", "text": "Smart Hints" },
+     { "t": "msg", "hl": "hint", "kind": "note", "text": "Suggested hint: \"What would you need to keep for each word to avoid re-counting?\"" },
+     { "t": "btn", "text": "Use this hint", "kind": "primary", "sm": true }
+    ] }
+   ],
+   "lanes": ["c", "p", "g", "l", "w", "d"],
+   "msgs": [
+    { "id": "m1", "f": "c", "to": "p", "l": "code values: is_stuck, snapshot sn-18", "t": "OLD", "what": "The code graph already decides `is_stuck` from the editor snapshots. The pipeline reads its latest values; nothing new runs in the code graph.", "code": "_code_context() -> { \"code\": \"def top_k(...)...\", \"language\": \"python\",\n  \"snapshot_id\": \"sn-18\", \"is_stuck\": true, \"bugs\": [] }" },
+    { "id": "m2", "f": "p", "to": "g", "l": "Tick(at=10:33:20Z) + code_context", "t": "NEW", "what": "Every run carries the code context in; the tick is what makes the check happen with nobody talking." },
+    { "id": "m3", "f": "g", "to": "g", "l": "quiet 74 s since last candidate line", "t": "NEW", "what": "`last_candidate_at` (10:32:06Z) against `at`. Fires when `is_stuck`, quiet ≥ 60 s, and this snapshot id has not been handled (`stuck_hint_for`). A missing timestamp counts as infinite quiet and is ignored." },
+    { "id": "m4", "f": "g", "to": "w", "l": "send_copilot_card (stuck)", "t": "NEW", "hl": "card", "what": "Id `sess-7f3a:sn-18:stuck`: one per snapshot. When the candidate types again a new snapshot id makes the countdown eligible once more.", "code": "{ \"id\": \"sess-7f3a:sn-18:stuck\", \"kind\": \"stuck\", \"priority\": \"suggest\",\n  \"title\": \"Quiet for 74 s and the code is not moving\",\n  \"body\": \"A hint is being drafted (Smart Hints). Or ask them to talk through what they are trying now.\",\n  \"source\": \"rule\", \"question_id\": \"q2\" }" },
+    { "id": "m5", "f": "g", "to": "g", "l": "dispatch: stuck_hint_due → Send(draft_hint)", "t": "NEW", "what": "The existing Smart Hints node, reused. The task id is `stuck:sn-18` so its suggestion is distinguishable from analysis-driven ones." },
+    { "id": "m6", "f": "g", "to": "l", "l": "draft_hint (existing hint prompt)", "t": "OLD", "what": "Same prompt, context and hint ladder as a hint chosen after an analysis." },
+    { "id": "m7", "f": "l", "to": "g", "l": "hint text", "res": true, "what": "A level-appropriate hint." },
+    { "id": "m8", "f": "g", "to": "w", "l": "send_hint_suggestion", "t": "OLD", "hl": "hint", "what": "The hint goes where hints always go: the Hint panel, not the Copilot panel. Using it there records it as a hint given." },
+    { "id": "m9", "f": "w", "to": "d", "l": "copilot_card, then hint_suggestion", "t": "NEW", "hl": "card", "what": "Two panels update a few seconds apart." }
+   ]
+  },
+  "s4-c": {
+   "scene": "s4", "order": 3, "name": "Nothing due",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "empty", "hl": "empty", "label": "Empty state", "title": "Listening.", "text": "Suggestions appear here as the interview unfolds." }
+   ] } ],
+   "lanes": ["p", "g"],
+   "msgs": [
+    { "id": "m1", "f": "p", "to": "g", "l": "Tick(at=10:15:40Z)", "t": "NEW", "what": "Ninety seconds into Q2; the candidate spoke 20 s ago." },
+    { "id": "m2", "f": "g", "to": "g", "l": "apply_events: no threshold, no silence", "t": "NEW", "what": "Elapsed is well under the budget and the candidate is not quiet. State is written back unchanged except for bookkeeping." },
+    { "id": "m3", "f": "g", "to": "g", "l": "dispatch → END", "hl": "empty", "what": "No Sends, no model calls, nothing for the dashboard." },
+    { "id": "m4", "f": "g", "to": "p", "l": "checkpoint written", "t": "NEW", "what": "LangGraph still checkpoints the run. At one tick per 30 s that is about 120 runs and checkpoints per hour per session with nothing to show for most of them. See suggestion 3." }
+   ]
+  },
+
+  "s5-a": {
+   "scene": "s5", "order": 1, "name": "Evidence lands",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "chips", "hl": "coverage", "label": "Coverage chips", "on": -1, "items": ["Problem solving · solid", "Code quality · thin", "Communication · thin", "Hint response · none", "System design · none", "Resume check · none", "Behavioral · none"] },
+    { "t": "text", "text": "No evidence yet for **Hint response**. Q3 covers it: Design a rate limiter for a public API…" },
+    { "t": "rows", "hl": "scorecard", "label": "Scorecard toggle", "items": [ { "no": "Scorecard", "meta": "4 notes", "amt": "", "due": "", "st": "grey", "stl": "collapsed", "cb": "none" } ] }
+   ] } ],
+   "lanes": ["g", "w", "d"],
+   "msgs": [
+    { "id": "m1", "f": "g", "to": "g", "l": "merge_results → peer_after_analysis", "t": "NEW", "what": "Runs when an analysis is recorded, before `plan_actions` fans out. Pure bookkeeping; no model call." },
+    { "id": "m2", "f": "g", "to": "g", "l": "coverage_increments: +3 criteria", "t": "NEW", "what": "For a quality-3 answer on a coding question with code in the editor: `problem_solving`, `communication` (dimensions present) and `code_quality` (coding + code). `hint_responsiveness` needs a hint-reception dimension; `behavioral` needs signals or flags or a behavioral question; `system_design` that category. A failed analysis (quality 0) adds nothing.", "code": "coverage_counts = { \"problem_solving\": 3, \"communication\": 2, \"code_quality\": 1 }" },
+    { "id": "m3", "f": "g", "to": "w", "l": "send_copilot_coverage", "t": "NEW", "hl": "coverage", "what": "`resume_verification` is topped up with claimed-experience facts and contradictions found so far. Status: 0 none, 1 to 2 thin, 3 or more solid.", "code": "{ \"criteria\": { \"problem_solving\": { \"evidence\": 3, \"status\": \"solid\" },\n                \"code_quality\": { \"evidence\": 1, \"status\": \"thin\" },\n                \"communication\": { \"evidence\": 2, \"status\": \"thin\" },\n                \"hint_responsiveness\": { \"evidence\": 0, \"status\": \"none\" }, ... },\n  \"gaps\": [\"hint_responsiveness\", \"system_design\", \"resume_verification\", \"behavioral\"],\n  \"timestamp\": \"2026-10-16T10:14:08Z\" }" },
+    { "id": "m4", "f": "w", "to": "d", "l": "copilot_coverage", "t": "NEW", "hl": "coverage", "what": "The strip colours a chip per criterion. For the first gap it looks through the plan's later questions for one whose category feeds that criterion and names it. `hint_responsiveness` has no category, so in practice the next named gap is usually system design or behavioral." },
+    { "id": "m5", "f": "g", "to": "w", "l": "send_scorecard (all notes)", "t": "NEW", "hl": "scorecard", "what": "One draft note per analysed answer with a 200-character quote, plus a red-flags note when the analysis raised any. Notes are keyed `u-41:note` and `u-41:flags`; a re-run never duplicates them. The list is capped at 60 in state.", "code": "{ \"notes\": [ { \"id\": \"u-41:note\", \"criterion\": \"problem_solving\", \"quality\": 3,\n    \"quote\": \"I'd keep a hash map of counts and then sort it by count; that's O(n log n) ...\",\n    \"note\": \"Correct but not optimal; did not reach the heap approach.\",\n    \"question_id\": \"q2\", \"utterance_id\": \"u-41\", \"source\": \"copilot\", \"at\": \"...\" }, ... ],\n  \"timestamp\": \"2026-10-16T10:14:08Z\" }" },
+    { "id": "m6", "f": "w", "to": "d", "l": "scorecard", "t": "NEW", "hl": "scorecard", "what": "Replaces the panel's scorecard wholesale. Collapsed by default with a count; open, it groups notes by criterion with the quotes." }
+   ]
+  },
+  "s5-b": {
+   "scene": "s5", "order": 2, "name": "Cruising: raise the bar",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "rows", "hl": "card", "label": "Difficulty card", "items": [ { "no": "Difficulty · signal", "meta": "Candidate is cruising: raise the bar", "amt": "", "due": "10:26", "st": "ok", "stl": "suggest", "cb": "none" } ] },
+    { "t": "text", "text": "Three strong answers in a row on this question. Add a constraint (streaming input, memory limit, concurrency) or move to the harder variant." },
+    { "t": "text", "text": "• Top-K with a fixed memory cap (Misra–Gries)" },
+    { "t": "text", "text": "• Top-K over a sliding window" },
+    { "t": "btn", "text": "Done", "kind": "off", "sm": true }
+   ] } ],
+   "lanes": ["g", "w", "d"],
+   "msgs": [
+    { "id": "m1", "f": "g", "to": "g", "l": "recent_insights: last 3 all ≥ 4 and on track", "t": "NEW", "what": "`recent_insights` is per question (reset on `QuestionChanged`). The signal looks at the last three scored analyses." },
+    { "id": "m2", "f": "g", "to": "g", "l": "difficulty_signal → cruising", "t": "NEW", "what": "Sent once per key per question (`difficulty_sent`). Three more strong answers do not repeat it.", "code": "difficulty_signal(recent)  # all quality >= 4 and on_track -> \"cruising\"" },
+    { "id": "m3", "f": "g", "to": "w", "l": "send_copilot_card (difficulty)", "t": "NEW", "hl": "card", "what": "Items are the question plan's `alternates` (up to two), which the dashboard now includes in `change_question`.", "code": "{ \"id\": \"sess-7f3a:q2:difficulty:cruising\", \"kind\": \"difficulty\",\n  \"title\": \"Candidate is cruising: raise the bar\",\n  \"items\": [\"Top-K with a fixed memory cap (Misra–Gries)\", \"Top-K over a sliding window\"],\n  \"source\": \"rule\", \"question_id\": \"q2\" }" },
+    { "id": "m4", "f": "w", "to": "d", "l": "copilot_card", "t": "NEW", "hl": "card", "what": "Shown as Difficulty with the signal badge." }
+   ]
+  },
+  "s5-c": {
+   "scene": "s5", "order": 3, "name": "Struggling: step down",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "rows", "hl": "card", "label": "Difficulty card", "items": [ { "no": "Difficulty · signal", "meta": "Candidate is struggling: step down", "amt": "", "due": "10:26", "st": "over", "stl": "suggest", "cb": "none" } ] },
+    { "t": "text", "text": "Several weak answers on this question. Give the next hint level, narrow the task, or switch to the easier variant." },
+    { "t": "text", "text": "• Top-K with a fixed memory cap (Misra–Gries)" },
+    { "t": "btn", "text": "Done", "kind": "off", "sm": true }
+   ] } ],
+   "lanes": ["g", "w", "d"],
+   "msgs": [
+    { "id": "m1", "f": "g", "to": "g", "l": "recent_insights: 2 of 3 weak, or 2 direct hints", "t": "NEW", "what": "Weak is quality ≤ 2. A `hint_signal` of `direct` on two of the three also counts, so a candidate who keeps asking outright is caught even with middling scores." },
+    { "id": "m2", "f": "g", "to": "g", "l": "difficulty_signal → struggling", "t": "NEW", "what": "Both keys can fire on one question, each once." },
+    { "id": "m3", "f": "g", "to": "w", "l": "send_copilot_card (difficulty)", "t": "NEW", "hl": "card", "what": "Same shape, the step-down text, the same alternates list." },
+    { "id": "m4", "f": "w", "to": "d", "l": "copilot_card", "t": "NEW", "hl": "card", "what": "Shown as Difficulty." }
+   ]
+  },
+
+  "s6-a": {
+   "scene": "s6", "order": 1, "name": "Mark as asked",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "rows", "label": "Follow-up card", "items": [ { "no": "Follow-up", "meta": "Expected outline not covered: a heap for top-K", "amt": "", "due": "10:14", "st": "proc", "stl": "suggest", "cb": "none" } ] },
+    { "t": "btn", "hl": "btn", "label": "Mark as asked", "text": "Mark as asked", "kind": "primary", "sm": true },
+    { "t": "muted", "hl": "gone", "text": "After the tap the card leaves the list and the count drops." }
+   ] } ],
+   "lanes": ["i", "d", "w", "p", "g"],
+   "msgs": [
+    { "id": "m1", "f": "i", "to": "d", "l": "taps Mark as asked", "hl": "btn", "what": "On probe, clarification, claim-check and edge-case cards. The other kinds show Done, which does the same thing." },
+    { "id": "m2", "f": "d", "to": "d", "l": "markUsed: card removed, id remembered", "hl": "gone", "what": "The store drops the card and keeps its id in `usedIds` (last 100), so a resumed run re-sending the same card is ignored." },
+    { "id": "m3", "f": "d", "to": "w", "l": "use_copilot_card", "t": "NEW", "what": "The text sent is the card's `probe`, else its first item, else its title: whatever the interviewer actually relayed.", "code": "{ \"type\": \"use_copilot_card\", \"id\": \"sess-7f3a:u-41:probe\", \"kind\": \"probe\",\n  \"text\": \"You sort the whole map at the end. Is there a way to avoid sorting all n words when k is small?\",\n  \"question_id\": \"q2\" }" },
+    { "id": "m4", "f": "w", "to": "p", "l": "handle_copilot_card_used", "t": "NEW", "what": "Enqueues a `CopilotCardUsed` event. Errors are logged and swallowed; the interviewer is never blocked." },
+    { "id": "m5", "f": "p", "to": "g", "l": "CopilotCardUsed → copilot_cards_used", "t": "NEW", "what": "Appended once per card id, capped at 50, with the question id (falling back to the active one) and the time. It is state, so it survives a restart and reaches the report through `report_snapshot`.", "code": "copilot_cards_used += [{ \"card_id\": \"sess-7f3a:u-41:probe\", \"kind\": \"probe\",\n  \"text\": \"You sort the whole map ...\", \"question_id\": \"q2\", \"at\": \"2026-10-16T10:14:30Z\" }]" }
+   ]
+  },
+  "s6-b": {
+   "scene": "s6", "order": 2, "name": "Add a scorecard note",
+   "wires": [ { "cap": "Copilot panel · Scorecard open", "blocks": [
+    { "t": "title", "text": "Scorecard" },
+    { "t": "text", "text": "**Communication**" },
+    { "t": "text", "hl": "note", "label": "Interviewer note", "text": "you: explained the trade-off clearly once prompted" },
+    { "t": "text", "text": "**Problem solving**" },
+    { "t": "text", "text": "Correct but not optimal; did not reach the heap approach. (3/5)" },
+    { "t": "input", "hl": "input", "label": "Note input", "text": "Add a note…", "filled": false },
+    { "t": "btn", "text": "Add", "kind": "off", "sm": true }
+   ] } ],
+   "lanes": ["i", "d", "w", "p", "g"],
+   "msgs": [
+    { "id": "m1", "f": "i", "to": "d", "l": "picks Communication, types, taps Add", "hl": "input", "what": "A criterion dropdown and one line of text under the scorecard." },
+    { "id": "m2", "f": "d", "to": "w", "l": "add_scorecard_note", "t": "NEW", "what": "The dashboard attaches the current plan question's id.", "code": "{ \"type\": \"add_scorecard_note\", \"criterion\": \"communication\",\n  \"text\": \"explained the trade-off clearly once prompted\", \"question_id\": \"q2\" }" },
+    { "id": "m3", "f": "w", "to": "p", "l": "handle_scorecard_note", "t": "NEW", "what": "Enqueues `ScorecardNoteAdded` with a fresh uuid as the note id." },
+    { "id": "m4", "f": "p", "to": "g", "l": "ScorecardNoteAdded → interviewer_note", "t": "NEW", "what": "Empty text or a criterion outside the seven report criteria is dropped silently. Otherwise the note joins the scorecard with `source: \"interviewer\"`, no quote and no quality." },
+    { "id": "m5", "f": "g", "to": "w", "l": "send_scorecard (all notes)", "t": "NEW", "hl": "note", "what": "The whole scorecard is re-sent, so every tab of the session sees the note." },
+    { "id": "m6", "f": "w", "to": "d", "l": "scorecard", "t": "NEW", "hl": "note", "what": "The note appears under its criterion prefixed *you:*. There is no optimistic insert: the note shows only once the round trip completes." }
+   ]
+  },
+  "s6-c": {
+   "scene": "s6", "order": 3, "name": "Dismiss or mute",
+   "wires": [ { "cap": "Copilot panel · Mute… open", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "radio", "hl": "mutes", "label": "Muted kinds", "on": 3, "items": [ { "label": "Follow-up", "side": "" }, { "label": "Claim check", "side": "" }, { "label": "Clarify", "side": "" }, { "label": "Coaching", "side": "muted" }, { "label": "Pacing", "side": "" }, { "label": "Stuck", "side": "" }, { "label": "Difficulty", "side": "" }, { "label": "Edge cases", "side": "" } ] },
+    { "t": "muted", "text": "Muted kinds are hidden on this browser only." }
+   ] } ],
+   "lanes": ["i", "d", "w"],
+   "msgs": [
+    { "id": "m1", "f": "i", "to": "d", "l": "taps Dismiss on a card", "what": "The card is dropped from the store. Nothing is sent; the backend never learns the card was unwanted." },
+    { "id": "m2", "f": "i", "to": "d", "l": "ticks Coaching under Mute…", "hl": "mutes", "what": "The kind is added to `mutedKinds`, saved in `localStorage` under `copilot_muted_kinds`. Cards of that kind still arrive and are still stored; they are filtered out of the list." },
+    { "id": "m3", "f": "d", "to": "w", "l": "(nothing sent)", "what": "Muting is per browser. The graph keeps calling Haiku for coaching every 20 s of interviewer talk and keeps computing the talk-share nudge. See suggestion 2." }
+   ]
+  },
+
+  "s7-a": {
+   "scene": "s7", "order": 1, "name": "Answered with citations",
+   "wires": [ { "cap": "Copilot panel · Ask the copilot", "blocks": [
+    { "t": "title", "text": "Ask the copilot" },
+    { "t": "text", "text": "**What did they say about memory limits?**" },
+    { "t": "text", "hl": "reply", "label": "Reply", "text": "They asked whether the distinct words fit in memory and, once told yes, kept a plain dict of counts; they have not discussed what happens if the vocabulary does not fit." },
+    { "t": "muted", "text": "T14 04:12 candidate · T15 04:20 interviewer" },
+    { "t": "input", "hl": "input", "label": "Question input", "text": "Ask the copilot… e.g. what did they say about Kafka?", "filled": false },
+    { "t": "btn", "text": "Ask", "kind": "off", "sm": true }
+   ] } ],
+   "lanes": ["i", "d", "w", "p", "l"],
+   "msgs": [
+    { "id": "m1", "f": "i", "to": "d", "l": "types a question, taps Ask", "hl": "input", "what": "One question at a time: while a reply is pending the input is disabled." },
+    { "id": "m2", "f": "d", "to": "d", "l": "askCopilot: pending reply in the thread", "what": "A client-made uuid identifies the exchange. The thread shows *Thinking…* under the question." },
+    { "id": "m3", "f": "d", "to": "w", "l": "copilot_query", "t": "NEW", "code": "{ \"type\": \"copilot_query\", \"id\": \"b1e4…\", \"question\": \"What did they say about memory limits?\" }", "what": "On the dashboard websocket." },
+    { "id": "m4", "f": "w", "to": "p", "l": "handle_copilot_query (awaited inline)", "t": "NEW", "what": "The handler awaits the answer in the websocket loop, the same way `rate_code` and `request_runtime_hint` do today. Other messages from this tab queue behind it. See suggestion 4." },
+    { "id": "m5", "f": "p", "to": "p", "l": "live_evidence_index from live values", "t": "NEW", "what": "The report's `EvidenceIndex`, built from memory instead of the database: final transcript lines numbered T1…Tn with elapsed times, the analysis digest, the code timeline, contradictions, hint interactions, facts, the rolling summary and the scorecard notes. The question text is capped at 500 characters." },
+    { "id": "m6", "f": "p", "to": "l", "l": "run_tool_loop (COPILOT_QUERY, ≤ 4 steps)", "t": "MOD", "what": "The shared tool loop with the report's read-only tools: `search_transcript`, `read_transcript`, `get_analyses`, `get_code_timeline`, `get_contradictions`, `get_hints`, and `get_scorecard_notes` only when notes exist. Sonnet, 1500 tokens, temperature 0.2.", "code": "system: \"You are the interviewer's copilot in a live interview. ...\"\nuser:   <index overview>\n        Current question: Top-K frequent words in a stream\n        The interviewer asks: What did they say about memory limits?" },
+    { "id": "m7", "f": "l", "to": "p", "l": "search_transcript(\"memory\") → T14, T15", "res": true, "what": "Tools run in-process against the index; no database and no network." },
+    { "id": "m8", "f": "l", "to": "p", "l": "{ answer, citations }", "res": true, "code": "{ \"answer\": \"They asked whether the distinct words fit in memory and, once told yes, kept a plain dict of counts; ...\",\n  \"citations\": [ { \"entry_id\": \"T14\", \"quote\": \"Can I assume the words fit in memory?\" },\n                 { \"entry_id\": \"T15\", \"quote\": \"assume the distinct words fit\" } ] }", "what": "After the fourth step the loop tells the model to stop using tools and answer. If the JSON is missing, the raw text is the answer." },
+    { "id": "m9", "f": "p", "to": "p", "l": "validate citations against the transcript", "t": "NEW", "what": "A citation whose entry id does not exist is dropped. One whose quote is not found in that entry keeps the pointer and loses the quote. At most six." },
+    { "id": "m10", "f": "p", "to": "w", "l": "reply payload", "t": "NEW", "code": "{ \"id\": \"b1e4…\", \"question\": \"What did they say about memory limits?\", \"at\": \"...\",\n  \"answer\": \"They asked whether ...\",\n  \"citations\": [ { \"entry_id\": \"T14\", \"elapsed\": \"04:12\", \"speaker\": \"candidate\", \"quote\": \"Can I assume the words fit in memory?\" }, ... ],\n  \"turns\": 3, \"tool_calls\": 2 }", "what": "Returned to the handler, which broadcasts it." },
+    { "id": "m11", "f": "w", "to": "d", "l": "copilot_reply", "t": "NEW", "hl": "reply", "what": "Matched to the pending exchange by id. The thread keeps the last 20 replies and shows the last three. Hovering a citation shows the quote." }
+   ]
+  },
+  "s7-b": {
+   "scene": "s7", "order": 2, "name": "Model unavailable",
+   "wires": [ { "cap": "Copilot panel · Ask the copilot", "blocks": [
+    { "t": "title", "text": "Ask the copilot" },
+    { "t": "text", "text": "**What did they say about memory limits?**" },
+    { "t": "msg", "hl": "reply", "kind": "crit", "text": "Copilot unavailable: all providers failed" },
+    { "t": "input", "text": "Ask the copilot… e.g. what did they say about Kafka?", "filled": false },
+    { "t": "btn", "text": "Ask", "kind": "off", "sm": true }
+   ] } ],
+   "lanes": ["d", "w", "p", "l"],
+   "msgs": [
+    { "id": "m1", "f": "d", "to": "w", "l": "copilot_query", "t": "NEW", "what": "Same request." },
+    { "id": "m2", "f": "w", "to": "p", "l": "handle_copilot_query", "t": "NEW", "what": "Same handler." },
+    { "id": "m3", "f": "p", "to": "l", "l": "run_tool_loop", "t": "MOD", "what": "The failover tries its providers in turn." },
+    { "id": "m4", "f": "l", "to": "p", "l": "raises", "res": true, "what": "Every provider failed, or the loop hit an error it does not retry." },
+    { "id": "m5", "f": "p", "to": "w", "l": "reply with error", "t": "NEW", "hl": "reply", "code": "{ \"id\": \"b1e4…\", \"question\": \"...\", \"answer\": \"Copilot unavailable: all providers failed\",\n  \"citations\": [], \"error\": \"all providers failed\" }", "what": "The handler never raises. An empty question comes back the same way with `error: \"empty\"` (the UI already prevents sending one)." },
+    { "id": "m6", "f": "w", "to": "d", "l": "copilot_reply", "t": "NEW", "hl": "reply", "what": "The thread entry turns red with the message and the input is enabled again. The interviewer can retry straight away." }
+   ]
+  },
+
+  "s8-a": {
+   "scene": "s8", "order": 1, "name": "A bug is suspected",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "rows", "hl": "card", "label": "Edge-case card", "items": [ { "no": "Edge cases", "meta": "Ask them to trace these by hand", "amt": "", "due": "10:36", "st": "proc", "stl": "suggest", "cb": "none" } ] },
+    { "t": "text", "text": "Suspected: off-by-one when k exceeds the number of distinct words" },
+    { "t": "text", "text": "• [] → [] (empty input)" },
+    { "t": "text", "text": "• [\"a\"] with k=3 → [\"a\"] (k larger than the vocabulary)" },
+    { "t": "text", "text": "• [\"b\",\"a\",\"b\",\"a\"] with k=1 → [\"a\"] (tie-break order)" },
+    { "t": "btn", "text": "Mark as asked", "kind": "primary", "sm": true },
+    { "t": "btn", "text": "Dismiss", "kind": "ghost", "sm": true }
+   ] } ],
+   "lanes": ["c", "g", "l", "w", "d"],
+   "msgs": [
+    { "id": "m1", "f": "c", "to": "g", "l": "code_context: snapshot sn-21, 1 suspected bug", "t": "OLD", "what": "The code graph's heuristic pass already lists suspected bugs on each snapshot. The pipeline attaches its latest values to every session run.", "code": "code_context = { \"code\": \"def top_k(words, k): ...\", \"language\": \"python\",\n  \"snapshot_id\": \"sn-21\", \"is_stuck\": false,\n  \"bugs\": [\"off-by-one when k exceeds the number of distinct words\"] }" },
+    { "id": "m2", "f": "g", "to": "g", "l": "peer_sends: edge cases due", "t": "NEW", "what": "After the next analysis. Due when the analysis chose `edge_cases` **or** the bug list is non-empty, there is code, and this snapshot id differs from `edge_cases_for`." },
+    { "id": "m3", "f": "g", "to": "l", "l": "suggest_edge_cases (Sonnet)", "t": "NEW", "what": "Gets the question, the suspected bugs and the code. Asked for two or three literal inputs with definite expected outputs, and told not to explain the fix.", "code": "## Question\nTop-K frequent words in a stream\n\n## Suspected Bugs (from a heuristic pass)\n- off-by-one when k exceeds the number of distinct words\n\n## Candidate's Code (python)\n```python\ndef top_k(words, k): ...\n```" },
+    { "id": "m4", "f": "l", "to": "g", "l": "{ edge_cases: [3] }", "res": true, "code": "{ \"edge_cases\": [\n  { \"input\": \"[]\", \"expected\": \"[]\", \"exposes\": \"empty input\" },\n  { \"input\": \"[\\\"a\\\"] with k=3\", \"expected\": \"[\\\"a\\\"]\", \"exposes\": \"k larger than the vocabulary\" },\n  { \"input\": \"[\\\"b\\\",\\\"a\\\",\\\"b\\\",\\\"a\\\"] with k=1\", \"expected\": \"[\\\"a\\\"]\", \"exposes\": \"tie-break order\" } ] }", "what": "Items without an input are dropped; at most three kept." },
+    { "id": "m5", "f": "g", "to": "g", "l": "edge_cases_for = sn-21", "t": "NEW", "what": "Set before the result is known, so a failed or empty call still closes this snapshot." },
+    { "id": "m6", "f": "g", "to": "w", "l": "send_copilot_card (edge_cases)", "t": "NEW", "hl": "card", "what": "Body names the first two suspected bugs; items are `input → expected (exposes)`; the probe asks the candidate to trace the first input.", "code": "{ \"id\": \"sess-7f3a:sn-21:edge_cases\", \"kind\": \"edge_cases\",\n  \"title\": \"Ask them to trace these by hand\",\n  \"body\": \"Suspected: off-by-one when k exceeds the number of distinct words\",\n  \"items\": [\"[] → [] (empty input)\", \"[\\\"a\\\"] with k=3 → [\\\"a\\\"] (k larger than the vocabulary)\", ...],\n  \"probe\": \"Can you walk me through what your code does for []?\", \"question_id\": \"q2\" }" },
+    { "id": "m7", "f": "w", "to": "d", "l": "copilot_card", "t": "NEW", "hl": "card", "what": "Mark as asked relays the probe." }
+   ]
+  },
+  "s8-b": {
+   "scene": "s8", "order": 2, "name": "Same snapshot: skipped",
+   "wires": [ { "cap": "Copilot panel", "blocks": [
+    { "t": "title", "text": "Copilot" },
+    { "t": "empty", "hl": "empty", "label": "Empty state", "title": "No new card", "text": "The earlier edge-case card is still there, or was dealt with." }
+   ] } ],
+   "lanes": ["c", "g", "l"],
+   "msgs": [
+    { "id": "m1", "f": "c", "to": "g", "l": "code_context: still snapshot sn-21", "t": "OLD", "what": "The candidate has not typed since." },
+    { "id": "m2", "f": "g", "to": "g", "l": "peer_sends: sn-21 == edge_cases_for → no Send", "t": "NEW", "what": "Even if the analysis chose `edge_cases` again. The next snapshot id reopens it." },
+    { "id": "m3", "f": "g", "to": "l", "l": "(no call)", "hl": "empty", "what": "One model call per snapshot, at most." }
+   ]
+  },
+
+  "s9-a": {
+   "scene": "s9", "order": 1, "name": "Classic report prompt",
+   "wires": [ { "cap": "Report prompt (what the model reads)", "blocks": [
+    { "t": "title", "text": "Report context" },
+    { "t": "text", "hl": "notes", "label": "Scorecard section", "text": "**## Interviewer Scorecard Notes**" },
+    { "t": "text", "text": "- [communication] (interviewer) explained the trade-off clearly once prompted" },
+    { "t": "text", "text": "- [problem_solving] 3/5 Correct but not optimal; did not reach the heap approach. \"I'd keep a hash map of counts…\"" },
+    { "t": "text", "hl": "usage", "label": "Usage section", "text": "**## Copilot Suggestions The Interviewer Used**" },
+    { "t": "text", "text": "- clarification: 1, edge_cases: 1, probe: 2" },
+    { "t": "text", "text": "- Probes the interviewer relayed count as the interviewer's questions, not the candidate's initiative." }
+   ] } ],
+   "lanes": ["p", "r", "l"],
+   "msgs": [
+    { "id": "m1", "f": "p", "to": "r", "l": "report_snapshot()", "t": "MOD", "what": "The session's derived inputs now include `copilot_cards_used` and `scorecard_notes`, straight from graph state.", "code": "{ ..., \"copilot_cards_used\": [ { \"card_id\": \"...:u-41:probe\", \"kind\": \"probe\", ... } ],\n  \"scorecard_notes\": [ { \"id\": \"u-41:note\", \"criterion\": \"problem_solving\", ... }, { \"id\": \"n-9\", \"source\": \"interviewer\", ... } ] }" },
+    { "id": "m2", "f": "r", "to": "r", "l": "load_inputs → ReportInput", "t": "MOD", "what": "`ReportInput` gains `scorecard_notes` and `copilot_usage`. Older snapshots without the keys load as empty lists." },
+    { "id": "m3", "f": "r", "to": "r", "l": "_build_context: two new sections", "t": "MOD", "hl": "notes", "what": "All interviewer notes, then the last 20 copilot drafts with their quotes. Then usage counts per kind and the sentence that relayed probes are the interviewer's questions, so the model does not credit the candidate with raising them." },
+    { "id": "m4", "f": "r", "to": "l", "l": "generate report (existing prompt)", "t": "OLD", "hl": "usage", "what": "Same report task; the context is just longer." },
+    { "id": "m5", "f": "l", "to": "r", "l": "report", "res": true, "what": "Scores, key moments and recommendation as before." }
+   ]
+  },
+  "s9-b": {
+   "scene": "s9", "order": 2, "name": "Agentic scoring (REPORT_AGENTIC_SCORING)",
+   "wires": [ { "cap": "Evidence tools available to the scorer", "blocks": [
+    { "t": "title", "text": "Tools" },
+    { "t": "rows", "items": [
+     { "no": "search_transcript", "meta": "find lines by words", "amt": "", "due": "", "st": "grey", "stl": "OLD", "cb": "none" },
+     { "no": "read_transcript", "meta": "read a range of lines", "amt": "", "due": "", "st": "grey", "stl": "OLD", "cb": "none" },
+     { "no": "get_analyses · get_code_timeline", "meta": "", "amt": "", "due": "", "st": "grey", "stl": "OLD", "cb": "none" },
+     { "no": "get_contradictions · get_hints", "meta": "", "amt": "", "due": "", "st": "grey", "stl": "OLD", "cb": "none" },
+     { "no": "get_scorecard_notes", "meta": "notes per criterion with quotes", "amt": "", "due": "", "st": "ok", "stl": "NEW", "cb": "none" }
+    ], "hl": "tool", "label": "Tool list" }
+   ] } ],
+   "lanes": ["p", "r", "l"],
+   "msgs": [
+    { "id": "m1", "f": "p", "to": "r", "l": "report_snapshot()", "t": "MOD", "what": "Same snapshot." },
+    { "id": "m2", "f": "r", "to": "r", "l": "EvidenceIndex(notes=scorecard notes)", "t": "MOD", "what": "The index the scorer's tools read now carries the notes." },
+    { "id": "m3", "f": "r", "to": "l", "l": "scoring tool loop (tools_for(index))", "t": "MOD", "hl": "tool", "what": "`get_scorecard_notes` is offered only when there are notes, so sessions without the flag see exactly today's tool list." },
+    { "id": "m4", "f": "l", "to": "r", "l": "get_scorecard_notes(criterion=\"communication\")", "res": true, "what": "Optional filter by criterion. The executor returns the matching notes with their quotes and sources." },
+    { "id": "m5", "f": "r", "to": "l", "l": "notes", "res": true, "code": "[ { \"criterion\": \"communication\", \"source\": \"interviewer\", \"note\": \"explained the trade-off clearly once prompted\", \"quote\": \"\" }, ... ]", "what": "The scorer can quote the interviewer's own words as evidence." },
+    { "id": "m6", "f": "l", "to": "r", "l": "scores with evidence", "res": true, "what": "As today, with the extra source." }
+   ]
+  }
+ },
+ "suggestions": {
+  "g1": { "order": 1, "n": 1, "where": "Step 1", "title": "Hide the Copilot panel when the flag is off", "paras": [
+   "The frontend has no way to know whether the backend is in peer mode. Today every live session shows a Copilot panel that says **Listening.** and never changes, which reads as broken.",
+   "Give the dashboard a signal: either a `features` block on the session state (GET /state) or a `copilot_ready` message when the dashboard websocket connects. Render the panel only when it says so. Until then, the panel could at least say *Copilot is off for this session* instead of *Listening*." ] },
+  "g2": { "order": 2, "n": 2, "where": "Steps 3 and 6", "title": "Send mutes to the backend so a muted kind costs nothing", "paras": [
+   "Muting is a `localStorage` filter. A muted **Coaching** kind still triggers a Haiku call for every substantial interviewer turn (at most one per 20 s), and muted probes still cost a Sonnet call per analysed answer. The cards are produced, sent and thrown away.",
+   "Add a `set_copilot_mutes` message that stores `muted_kinds` in graph state; `dispatch` and `peer_sends` skip a node whose only output is a muted kind. Keep the local filter for instant feedback. Deterministic signals can keep running since they are free." ] },
+  "g3": { "order": 3, "n": 3, "where": "Step 4", "title": "Skip the run when a tick has nothing to check", "paras": [
+   "Each `Tick` runs the graph and writes a checkpoint, every 30 s, whether or not anything is due. That is about 120 extra runs and checkpoint writes per hour per live session, most of them no-ops, on the same Postgres the session already leans on.",
+   "The pipeline knows the state's `question_started_at`, the budget, `last_candidate_at` and the code context before it enqueues. Compute the next time anything *could* fire (next pace threshold, or 60 s after the last candidate line while `is_stuck`) and enqueue a Tick only then. The graph logic stays as it is; only the cadence changes." ] },
+  "g4": { "order": 4, "n": 4, "where": "Step 7", "title": "Answer copilot questions off the websocket loop", "paras": [
+   "`handle_copilot_query` is awaited inside the dashboard websocket's receive loop. A question can take four model steps; during that time this tab's `ping`, `change_question` and `use_copilot_card` wait. It is the same pattern as `rate_code` and `request_runtime_hint` today, but a question is the slowest of the three.",
+   "Wrap it in `asyncio.create_task` and broadcast the reply when it finishes; the reply already carries the client's id, so ordering does not matter. Doing the same for the two older handlers would be consistent." ] },
+  "g5": { "order": 5, "n": 5, "where": "Step 2", "title": "Give claim checks a cheap trigger", "paras": [
+   "Clarifications have `looks_like_a_question`; edge cases have the code graph's bug list; a claim check runs only when the analysis names `verify_claim`. An analysis that is busy scoring depth and relevance may not flag a confident wrong complexity.",
+   "A small pattern (`O(`, *always*, *guarantees*, *is thread-safe*, *never blocks*) on candidate text would queue the check deterministically. The 0.6 confidence floor and the incorrect/misleading filter already keep false alarms off the panel." ] }
+ },
+ "apis": {
+  "a1": { "order": 1, "call": "ws ← copilot_card", "owner": "Session graph → Dashboard", "gives": "One card: id, kind, priority, title, body, items, probe, question_id, source, timestamp", "tag": "NEW", "steps": [2, 3, 4, 5, 8] },
+  "a2": { "order": 2, "call": "ws ← copilot_coverage", "owner": "Session graph → Dashboard", "gives": "Evidence count and status per report criterion, plus the gaps", "tag": "NEW", "steps": [5] },
+  "a3": { "order": 3, "call": "ws ← scorecard", "owner": "Session graph → Dashboard", "gives": "All scorecard notes (copilot drafts with quotes, interviewer notes)", "tag": "NEW", "steps": [5, 6] },
+  "a4": { "order": 4, "call": "ws ← copilot_reply", "owner": "Pipeline → Dashboard", "gives": "Answer, validated citations, or an error, keyed by the client's id", "tag": "NEW", "steps": [7] },
+  "a5": { "order": 5, "call": "ws → use_copilot_card", "owner": "Dashboard → Pipeline", "gives": "Records that the interviewer relayed a card (graph state, then the report)", "tag": "NEW", "steps": [6] },
+  "a6": { "order": 6, "call": "ws → add_scorecard_note", "owner": "Dashboard → Pipeline", "gives": "Adds an interviewer note under a criterion; scorecard re-sent", "tag": "NEW", "steps": [6] },
+  "a7": { "order": 7, "call": "ws → copilot_query", "owner": "Dashboard → Pipeline", "gives": "Asks the copilot a free-text question", "tag": "NEW", "steps": [7] },
+  "a8": { "order": 8, "call": "ws → change_question", "owner": "Dashboard → Pipeline", "gives": "Now also carries alternates, remaining_questions, remaining_minutes", "tag": "MOD", "steps": [4, 5] },
+  "a9": { "order": 9, "call": "Tick(at)", "owner": "Pipeline → Session graph", "gives": "The 30 s clock: pace and stuck checks", "tag": "NEW", "steps": [4] },
+  "a10": { "order": 10, "call": "CopilotCardUsed · ScorecardNoteAdded", "owner": "Pipeline → Session graph", "gives": "Interviewer actions as graph events (registered in serde)", "tag": "NEW", "steps": [6] },
+  "a11": { "order": 11, "call": "QuestionChanged", "owner": "Pipeline → Session graph", "gives": "Gains at, remaining_questions, remaining_minutes; resets per-question peer state", "tag": "MOD", "steps": [4, 5] },
+  "a12": { "order": 12, "call": "TaskType.PEER_INTERVIEWER", "owner": "LLM config → Sonnet", "gives": "Probes, claim checks, clarifications, edge cases", "tag": "NEW", "steps": [2, 8] },
+  "a13": { "order": 13, "call": "TaskType.INTERVIEWER_COACHING", "owner": "LLM config → claude-haiku-5-5", "gives": "Coaching on the interviewer's turns", "tag": "NEW", "steps": [3] },
+  "a14": { "order": 14, "call": "TaskType.COPILOT_QUERY", "owner": "LLM config → Sonnet", "gives": "Tool-loop answers to typed questions", "tag": "NEW", "steps": [7] },
+  "a15": { "order": 15, "call": "run_tool_loop + evidence tools", "owner": "src/llm/tools.py, report_agentic", "gives": "search_transcript, read_transcript, get_analyses, get_code_timeline, get_contradictions, get_hints", "tag": "OLD", "steps": [7, 9] },
+  "a16": { "order": 16, "call": "get_scorecard_notes", "owner": "report_agentic", "gives": "Scorecard notes by criterion; offered only when notes exist", "tag": "NEW", "steps": [7, 9] },
+  "a17": { "order": 17, "call": "draft_hint node · send_hint_suggestion", "owner": "Session graph (Smart Hints)", "gives": "The stuck countdown reuses the hint drafter as is", "tag": "OLD", "steps": [4] },
+  "a18": { "order": 18, "call": "report_snapshot · ReportInput", "owner": "Pipeline → Report", "gives": "copilot_cards_used and scorecard_notes reach the report prompt", "tag": "MOD", "steps": [9] }
+ },
+ "rollout": {
+  "r1": { "order": 1, "title": "Backend, flag off", "text": "Deploy as is. The new event types are registered for checkpoints, the analysis prompt is unchanged, no clock runs. Nothing is visible." },
+  "r2": { "order": 2, "title": "Model ids", "text": "Confirm claude-haiku-5-5 (coaching) and the Sonnet id (peer calls, questions) resolve on the account; tests/test_live_models.py is the place." },
+  "r3": { "order": 3, "title": "Frontend", "text": "The panel ships inert and waits for cards. Decide suggestion 1 first, or accept a Listening line on every session until the flag is on." },
+  "r4": { "order": 4, "title": "Flag on in staging", "text": "Run a replay scenario with ticks. Watch peer_action_failed in the logs, checkpoint volume per session, and websocket latency while a question is being answered." },
+  "r5": { "order": 5, "title": "Flag on in production", "text": "One environment at a time. The mute list gives interviewers a way to quiet a kind without a deploy." }
+ },
+ "decisions": {
+  "d1": { "order": 1, "q": "Should the Copilot panel appear only when the backend says the flag is on?", "options": ["Yes, via the session state", "Yes, via a message on connect", "No, keep it always visible"], "affects": "Step 1" },
+  "d2": { "order": 2, "q": "Should muted kinds also skip their model calls on the backend?", "options": ["Yes, send mutes to the graph", "No, muting stays a display filter"], "affects": "Steps 3 and 6" },
+  "d3": { "order": 3, "q": "How should the clock run?", "options": ["Every 30 s with a checkpoint each (today)", "Only at the next time something could fire", "Every 30 s, but no run when nothing is due"], "affects": "Step 4" },
+  "d4": { "order": 4, "q": "Should Ask the copilot run as a background task instead of inline in the websocket loop?", "options": ["Yes, and the two older inline handlers too", "Yes, only this one", "No, keep the existing pattern"], "affects": "Step 7" },
+  "d5": { "order": 5, "q": "Which model should the Sonnet peer calls (probes, claims, clarifications, edge cases) use?", "options": ["Sonnet (today)", "Haiku, like coaching", "Opus for claim checks only"], "affects": "Steps 2 and 8" }
+ }
+}

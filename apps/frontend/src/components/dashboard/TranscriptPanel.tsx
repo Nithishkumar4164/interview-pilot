@@ -10,6 +10,8 @@ import { useTranscriptStore, type TranscriptEntry } from '@/stores/transcript-st
 import { useSpeakerStore } from '@/stores/speaker-store';
 import { useAnalysisStore, type DimensionScore, type InsightDimensions } from '@/stores/analysis-store';
 import { useWSSend } from '@/contexts/WebSocketContext';
+import { PanelTitle } from './PanelTitle';
+import { usePaneHidden } from '@/stores/panel-store';
 
 const SPEAKER_COLORS: Record<string, string> = {
   interviewer: 'var(--color-interviewer)',
@@ -18,6 +20,7 @@ const SPEAKER_COLORS: Record<string, string> = {
 };
 
 export function TranscriptPanel() {
+  const hidden = usePaneHidden('transcript');
   const { entries, interimEntry } = useTranscriptStore();
   const { latestAnalysis } = useAnalysisStore();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -40,9 +43,9 @@ export function TranscriptPanel() {
   };
 
   return (
-    <section className="transcript-panel" aria-label="Live Transcript">
-      <div className="transcript-panel__header">
-        <h2>Transcript</h2>
+    <section className="transcript-panel" hidden={hidden} aria-label="Live Transcript">
+      <div className="transcript-panel__header panel-header">
+        <PanelTitle id="transcript" level="h2">Transcript</PanelTitle>
         {!autoScroll && (
           <button
             className="btn btn--small"

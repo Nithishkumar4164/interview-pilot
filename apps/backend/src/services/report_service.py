@@ -4,19 +4,30 @@ Collects data from all session services and delegates to ReportGenerator.
 """
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.llm.failover import FailoverManager
-from src.services.analysis_service import AnalysisService
-from src.services.code_analysis_service import CodeAnalysisService
-from src.services.contradiction_service import ContradictionService
-from src.services.hint_service import HintService
-from src.services.memory_service import MemoryService
 from src.services.report_generator import GeneratedReport, ReportGenerator, ReportInput
 from src.utils.logging import get_logger
 
 logger = get_logger("report_service")
+
+
+def _coerce_datetime(value: str | datetime | None) -> datetime:
+    """Best-effort conversion of a transcript-timestamp value to a datetime.
+
+    Accepts a ``datetime`` (returned as-is when tz-aware), an ISO-8601
+    string (with or without trailing ``Z``), or ``None`` — the caller
+    handles the resulting ``TypeError`` for ``None``.
+    """
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    if value is None:
+        raise TypeError("timestamp is None")
+    text = value.replace("Z", "+00:00") if value.endswith("Z") else value
+    return datetime.fromisoformat(text)
 
 
 class ReportService:
@@ -24,58 +35,11 @@ class ReportService:
 
     Usage:
         service = ReportService(failover_manager)
-        report = await service.generate_report(...)
-        report = await service.generate_report_from_db(...)
+        report_input = await service.load_inputs(session_id, snapshots, db)
     """
 
     def __init__(self, failover_manager: FailoverManager) -> None:
         self._generator = ReportGenerator(failover_manager)
-
-    async def generate_report(
-        self,
-        session_id: str,
-        memory: MemoryService,
-        analysis: AnalysisService,
-        code_analysis: CodeAnalysisService | None,
-        hints: HintService,
-        contradictions: ContradictionService,
-        duration_minutes: float,
-        target_level: str,
-    ) -> GeneratedReport:
-        """Generate a comprehensive interview report from live services."""
-        code_progress = "unknown"
-        detected_approach = None
-        if code_analysis:
-            result = code_analysis.get_latest_result()
-            if result:
-                code_progress = result.progress_state.value
-                if result.detected_approach:
-                    detected_approach = result.detected_approach.name
-
-        report_input = ReportInput(
-            session_id=session_id,
-            duration_minutes=duration_minutes,
-            target_level=target_level,
-            fact_store=memory.fact_store,
-            analysis_results=analysis.get_recent_analyses(count=50),
-            hint_events=hints._hint_events,
-            hint_metrics=hints.get_metrics(),
-            contradictions=contradictions.contradictions,
-            transcript_summary=memory._rolling_summary,
-            code_progress=code_progress,
-            detected_approach=detected_approach,
-        )
-
-        report = await self._generator.generate(report_input)
-
-        logger.info(
-            "report_generated",
-            session_id=session_id,
-            recommendation=report.recommendation.value,
-            confidence=report.confidence_level,
-        )
-
-        return report
 
     async def generate_report_from_db(
         self,
@@ -85,14 +49,42 @@ class ReportService:
     ) -> GeneratedReport:
         """Generate a report using DB data + captured snapshots.
 
-        This is called from the background task after session end.
-        Queries DB for transcripts, analysis events, code snapshots, hints,
-        and plan data to build a comprehensive report.
+        NOTE: holds ``db`` open across the LLM call. Prefer
+        :meth:`load_inputs` + :meth:`generate_from_inputs` when you need to
+        release the DB connection during the LLM request.
         """
-        from src.repositories.transcript_repo import TranscriptRepository
+        report_input = await self.load_inputs(session_id, snapshots, db)
+        return await self.generate_from_inputs(report_input)
+
+    async def generate_from_inputs(self, report_input: ReportInput) -> GeneratedReport:
+        """Run the LLM call. No DB access — safe to invoke without a session."""
+        report = await self._generator.generate(report_input)
+
+        logger.info(
+            "report_generated_from_db",
+            session_id=report_input.session_id,
+            recommendation=report.recommendation.value,
+            confidence=report.confidence_level,
+        )
+
+        return report
+
+    async def load_inputs(
+        self,
+        session_id: str,
+        snapshots: dict,
+        db: AsyncSession,
+    ) -> ReportInput:
+        """Load all DB data needed for report generation into a ReportInput.
+
+        Callers should close their DB session after this returns and before
+        invoking :meth:`generate_from_inputs` so the LLM call does not hold
+        a connection.
+        """
         from src.repositories.analysis_repo import AnalysisEventRepository
         from src.repositories.code_snapshot_repo import CodeSnapshotRepository
         from src.repositories.hint_repo import HintEventRepository
+        from src.repositories.transcript_repo import TranscriptRepository
 
         sid = uuid.UUID(session_id)
 
@@ -109,24 +101,44 @@ class ReportService:
         hint_repo = HintEventRepository(db)
         hint_events_db = await hint_repo.get_session_hints(sid)
 
-        # Fetch plan data
+        # The questions asked: the questionnaire logged during the interview, or for
+        # sessions from before questions were generated live, the up-front plan.
         from sqlalchemy import select
+
         from src.models.plan import InterviewPlan
-        plan_result = await db.execute(
-            select(InterviewPlan)
-            .where(InterviewPlan.session_id == sid)
-            .where(InterviewPlan.is_active == True)  # noqa: E712
-            .order_by(InterviewPlan.version.desc())
-            .limit(1)
+        from src.models.question import SessionQuestion
+        from src.models.session import InterviewSession
+
+        asked = list(
+            (
+                await db.execute(
+                    select(SessionQuestion).where(SessionQuestion.session_id == sid).order_by(SessionQuestion.position)
+                )
+            ).scalars()
         )
-        plan = plan_result.scalar_one_or_none()
+        plan_data: dict | None = None
+        if asked:
+            db_session = await db.get(InterviewSession, sid)
+            plan_data = questionnaire_as_plan(asked)
+            time_per_question = time_per_asked_question(asked, db_session.ended_at if db_session else None)
+        else:
+            plan_result = await db.execute(
+                select(InterviewPlan)
+                .where(InterviewPlan.session_id == sid)
+                .where(InterviewPlan.is_active == True)  # noqa: E712
+                .order_by(InterviewPlan.version.desc())
+                .limit(1)
+            )
+            plan = plan_result.scalar_one_or_none()
+            plan_data = plan.plan_data if plan else None
+            time_per_question = self._derive_time_per_question(transcripts, plan)
 
         # Build full transcript list
         full_transcript = [
             {
                 "speaker_role": t.speaker_role,
                 "text": t.text,
-                "timestamp": t.timestamp,
+                "timestamp": (t.timestamp.isoformat() if isinstance(t.timestamp, datetime) else t.timestamp),
                 "is_final": t.is_final,
             }
             for t in transcripts
@@ -149,7 +161,7 @@ class ReportService:
         # Build code snapshots list
         code_snaps = [
             {
-                "timestamp": cs.timestamp,
+                "timestamp": (cs.timestamp.isoformat() if isinstance(cs.timestamp, datetime) else cs.timestamp),
                 "progress_state": cs.progress_state,
                 "approach": cs.approach,
                 "language": cs.language,
@@ -163,7 +175,9 @@ class ReportService:
                 "question_id": h.question_id,
                 "level": h.level,
                 "text": h.text,
-                "displayed_at": h.displayed_at,
+                "displayed_at": (
+                    h.displayed_at.isoformat() if isinstance(h.displayed_at, datetime) else h.displayed_at
+                ),
                 "interviewer_used": h.interviewer_used,
                 "candidate_response_quality": h.candidate_response_quality,
                 "time_to_respond_ms": h.time_to_respond_ms,
@@ -171,22 +185,22 @@ class ReportService:
             for h in hint_events_db
         ]
 
-        # Derive time-per-question from transcript timestamps
-        time_per_question = self._derive_time_per_question(transcripts, plan)
-
         # Build ReportInput using both snapshots and DB data
         fact_store = snapshots.get("fact_store", "")
         rolling_summary = snapshots.get("rolling_summary", "")
         snapshot_analysis = snapshots.get("analysis_results", [])
         snapshot_contradictions = snapshots.get("contradictions", [])
         snapshot_hints = snapshots.get("hint_events", [])
-        hint_metrics = snapshots.get("hint_metrics", {
-            "total_hints_given": len(hint_events_list),
-            "incorporation_rate": 0,
-            "average_response_time_ms": None,
-            "independence_trajectory": "unknown",
-            "level_distribution": {},
-        })
+        hint_metrics = snapshots.get(
+            "hint_metrics",
+            {
+                "total_hints_given": len(hint_events_list),
+                "incorporation_rate": 0,
+                "average_response_time_ms": None,
+                "independence_trajectory": "unknown",
+                "level_distribution": {},
+            },
+        )
 
         report_input = ReportInput(
             session_id=session_id,
@@ -206,21 +220,19 @@ class ReportService:
             code_snapshots=code_snaps,
             hint_events_db=hint_events_list,
             time_per_question=time_per_question,
-            plan_data=plan.plan_data if plan else None,
+            plan_data=plan_data,
+            scorecard_notes=snapshots.get("scorecard_notes") or None,
+            copilot_usage=snapshots.get("copilot_cards_used") or None,
         )
 
-        report = await self._generator.generate(report_input)
-
         logger.info(
-            "report_generated_from_db",
+            "report_inputs_loaded",
             session_id=session_id,
-            recommendation=report.recommendation.value,
-            confidence=report.confidence_level,
             transcript_count=len(full_transcript),
             analysis_count=len(all_analysis),
         )
 
-        return report
+        return report_input
 
     @staticmethod
     def _derive_time_per_question(transcripts, plan) -> dict[str, float]:
@@ -246,16 +258,16 @@ class ReportService:
         if total_transcripts == 0:
             return {}
 
-        from datetime import datetime
-
         try:
             first_ts = transcripts[0].timestamp
             last_ts = transcripts[-1].timestamp
 
-            first_dt = datetime.fromisoformat(first_ts.replace("Z", "+00:00"))
-            last_dt = datetime.fromisoformat(last_ts.replace("Z", "+00:00"))
+            # ``timestamp`` is stored as timestamptz now, but historic
+            # rows (and tests) may still carry ISO strings — accept both.
+            first_dt = _coerce_datetime(first_ts)
+            last_dt = _coerce_datetime(last_ts)
             total_minutes = (last_dt - first_dt).total_seconds() / 60.0
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, TypeError):
             total_minutes = 0
 
         if total_minutes <= 0:
@@ -263,3 +275,24 @@ class ReportService:
 
         per_question = total_minutes / len(question_ids)
         return {qid: round(per_question, 1) for qid in question_ids}
+
+
+def questionnaire_as_plan(asked: list) -> dict:
+    """The asked questions in the plan shape the report reads: a phase per run of one category."""
+    phases: list[dict] = []
+    for row in asked:
+        if not phases or phases[-1]["phase"] != row.category:
+            phases.append({"phase": row.category, "questions": []})
+        phases[-1]["questions"].append(row.question)
+    return {"phases": phases}
+
+
+def time_per_asked_question(asked: list, ended_at: datetime | None) -> dict[str, float]:
+    """Minutes on each question: from when it was asked until the next one (or the end)."""
+    out: dict[str, float] = {}
+    for row, nxt in zip(asked, [*asked[1:], None], strict=True):
+        until = nxt.asked_at if nxt is not None else ended_at
+        if until is None:
+            continue
+        out[str(row.id)] = round(max((until - row.asked_at).total_seconds(), 0) / 60.0, 1)
+    return out

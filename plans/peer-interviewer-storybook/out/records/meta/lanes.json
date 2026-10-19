@@ -1,0 +1,40 @@
+{
+ "lanes": {
+  "i": {
+   "name": "Interviewer",
+   "role": "at the dashboard"
+  },
+  "k": {
+   "name": "Candidate",
+   "role": "speech, via STT"
+  },
+  "d": {
+   "name": "Dashboard",
+   "role": "React, copilot store"
+  },
+  "w": {
+   "name": "WS handler",
+   "role": "dashboard_handler"
+  },
+  "p": {
+   "name": "Pipeline",
+   "role": "LangGraphSession"
+  },
+  "g": {
+   "name": "Session graph",
+   "role": "session_graph.py"
+  },
+  "l": {
+   "name": "LLM",
+   "role": "failover → Claude"
+  },
+  "c": {
+   "name": "Code graph",
+   "role": "editor snapshots"
+  },
+  "r": {
+   "name": "Report",
+   "role": "report_service"
+  }
+ }
+}

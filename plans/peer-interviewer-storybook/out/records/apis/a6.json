@@ -1,0 +1,10 @@
+{
+ "order": 6,
+ "call": "ws → add_scorecard_note",
+ "owner": "Dashboard → Pipeline",
+ "gives": "Adds an interviewer note under a criterion; scorecard re-sent",
+ "tag": "NEW",
+ "steps": [
+  6
+ ]
+}

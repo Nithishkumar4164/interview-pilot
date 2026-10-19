@@ -107,13 +107,15 @@ class MockDeepgramWorker:
         words = []
         start = self._time_offset
         for w in words_list:
-            words.append(TranscriptWord(
-                word=w,
-                start=start,
-                end=start + word_duration,
-                confidence=random.uniform(0.90, 0.99),
-                speaker=speaker_id,
-            ))
+            words.append(
+                TranscriptWord(
+                    word=w,
+                    start=start,
+                    end=start + word_duration,
+                    confidence=random.uniform(0.90, 0.99),
+                    speaker=speaker_id,
+                )
+            )
             start += word_duration
 
         duration = len(words_list) * word_duration
@@ -135,7 +137,9 @@ class MockDeepgramWorker:
         await self._result_queue.put((channel, result))
 
         # Emit utterance end marker
-        await self._result_queue.put((
-            channel,
-            UtteranceEnd(channel_index=0, last_word_end=result.end),
-        ))
+        await self._result_queue.put(
+            (
+                channel,
+                UtteranceEnd(channel_index=0, last_word_end=result.end),
+            )
+        )

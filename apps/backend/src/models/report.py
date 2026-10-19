@@ -29,9 +29,7 @@ class ReportNote(BaseModel):
     report_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("reports.id"), nullable=False, index=True
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
-    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     note_text: Mapped[str] = mapped_column(String, nullable=False)
 
     report: Mapped["Report"] = relationship(back_populates="notes")

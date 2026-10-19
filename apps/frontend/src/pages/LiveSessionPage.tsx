@@ -4,8 +4,10 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ConnectExtension } from '@/components/auth/ConnectExtension';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useTimer } from '@/hooks/useTimer';
+import { useExtensionChannel, type ExtensionStatus, type MeetControlsState } from '@/hooks/useExtensionChannel';
 import { useSessionStore, getAllPlanQuestions } from '@/stores/session-store';
 import type { SessionStatus } from '@/stores/session-store';
 import { useHintStore } from '@/stores/hint-store';
@@ -17,6 +19,7 @@ import { useAnalysisStore, mapDimensions } from '@/stores/analysis-store';
 import type { AnalysisEntry } from '@/stores/analysis-store';
 import { useOfflineStore } from '@/stores/offline-store';
 import { useSpeakerStore } from '@/stores/speaker-store';
+import { usePanelStore, type PanelId } from '@/stores/panel-store';
 import { WebSocketProvider } from '@/contexts/WebSocketContext';
 import { SessionBar } from '@/components/dashboard/SessionBar';
 import { VideoOverlay } from '@/components/dashboard/VideoOverlay';
@@ -25,13 +28,27 @@ import { TranscriptPanel } from '@/components/dashboard/TranscriptPanel';
 import { SpeakersPanel } from '@/components/dashboard/SpeakersPanel';
 import { HintPanel } from '@/components/dashboard/HintPanel';
 import { ScoreRings } from '@/components/dashboard/ScoreRings';
+import { FlagsPanel } from '@/components/dashboard/FlagsPanel';
+import { flagsFromPayload } from '@/lib/flags';
 import { InterviewPlanPanel } from '@/components/dashboard/InterviewPlanPanel';
+import { CopilotPanel } from '@/components/dashboard/CopilotPanel';
+import { useCopilotStore } from '@/stores/copilot-store';
 import * as api from '@/api/client';
+import type { GeneratedQuestion } from '@/api/client';
 
 interface OverlayEntry {
   id: string;
   cropRegion: CropRegion | null;
   mode: OverlayMode;
+}
+
+/** Minutes left in the interview's planned duration. */
+/** The panes in the right-hand column; the column goes when all of them are hidden. */
+const RIGHT_PANES: PanelId[] = ['copilot', 'speakers', 'scores', 'flags', 'hints'];
+
+function interviewMinutesLeft(): number {
+  const { durationMinutes, elapsedMs } = useSessionStore.getState();
+  return Math.max(0, Math.round(durationMinutes - elapsedMs / 60000));
 }
 
 export function LiveSessionPage() {
@@ -45,6 +62,10 @@ export function LiveSessionPage() {
   const degradationLevel = useOfflineStore((s) => s.degradationLevel);
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   const [overlays, setOverlays] = useState<OverlayEntry[]>([]);
+  const hiddenPanes = usePanelStore((s) => s.hidden);
+  const [focusAreas, setFocusAreas] = useState<string[]>([]);
+  const [meetControls, setMeetControls] = useState<MeetControlsState | null>(null);
+  const [extensionStatus, setExtensionStatus] = useState<ExtensionStatus | null>(null);
 
   // Initialize WebSocket and timer
   const { send } = useWebSocket(sessionId ?? null);
@@ -62,8 +83,11 @@ export function LiveSessionPage() {
       try {
         const state = await api.getSessionState(sessionId);
 
-        // Restore plan first (other stores depend on it)
-        if (state.plan) {
+        // Restore the questions first (other stores depend on them): the questionnaire
+        // logged during the interview, or for sessions planned up front, the plan.
+        if (state.questions.length > 0) {
+          usePlanStore.getState().setQuestionnaire(sessionId, state.questions);
+        } else if (state.plan) {
           const planData = state.plan as Record<string, unknown>;
           usePlanStore.getState().setPlan({
             id: (state.plan_id ?? '') as string,
@@ -127,6 +151,10 @@ export function LiveSessionPage() {
             dimensions: mapDimensions(a.dimensions),
           }));
           useAnalysisStore.getState().restoreAnalyses(analysisEntries);
+          // Analysis red flags are persisted; restore them into the Flags panel.
+          useAnalysisStore
+            .getState()
+            .addRedFlags(state.analyses.flatMap((a) => flagsFromPayload({ flags: a.red_flags }, a.timestamp)));
         }
 
         // Restore hints
@@ -151,15 +179,26 @@ export function LiveSessionPage() {
     })();
   }, [sessionId, status, setSession, setStatus]);
 
+  // The question generator offers the session's focus areas first.
+  useEffect(() => {
+    if (!sessionId) return;
+    api
+      .getSession(sessionId)
+      .then((s) => setFocusAreas((s.focus_areas as string[] | undefined) ?? []))
+      .catch(() => {});
+  }, [sessionId]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       reset();
+      usePlanStore.getState().reset();
       useTranscriptStore.getState().clear();
       useAnalysisStore.getState().clear();
       useHintStore.getState().clear();
       useOfflineStore.getState().reset();
       useSpeakerStore.getState().clear();
+      useCopilotStore.getState().clear();
       videoStream?.getTracks().forEach(t => t.stop());
     };
   }, [reset]);
@@ -173,6 +212,20 @@ export function LiveSessionPage() {
     track.addEventListener('ended', onEnded);
     return () => track.removeEventListener('ended', onEnded);
   }, [videoStream]);
+
+  // Meeting video sent by the extension when capture starts (no picker).
+  // Imported video starts pinned above the transcript; clones float.
+  const { sendMeetControl } = useExtensionChannel(sessionId ?? null, {
+    onStream: (stream) => {
+      setVideoStream((prev) => {
+        prev?.getTracks().forEach((t) => t.stop());
+        return stream;
+      });
+      setOverlays((prev) => (prev.length > 0 ? prev : [{ id: crypto.randomUUID(), cropRegion: null, mode: 'docked' }]));
+    },
+    onMeetControls: setMeetControls,
+    onStatus: setExtensionStatus,
+  });
 
   // ── Overlay callbacks ──────────────────────────────────────────────
 
@@ -212,7 +265,7 @@ export function LiveSessionPage() {
   const handleResume = useCallback(async () => {
     if (!sessionId) return;
     try {
-      await api.pauseSession(sessionId); // Toggle pause
+      await api.resumeSession(sessionId);
       setStatus('live');
     } catch (err) {
       console.error('Failed to resume session:', err);
@@ -235,7 +288,7 @@ export function LiveSessionPage() {
         controller,
       } as DisplayMediaStreamOptions);
       setVideoStream(stream);
-      setOverlays([{ id: crypto.randomUUID(), cropRegion: null, mode: 'floating' }]);
+      setOverlays([{ id: crypto.randomUUID(), cropRegion: null, mode: 'docked' }]);
     } catch {
       // User cancelled the picker — do nothing
     }
@@ -249,6 +302,10 @@ export function LiveSessionPage() {
     try {
       const result = await api.endSession(sessionId) as { report_id?: string };
       setStatus('ended');
+      if (isPanel) {
+        // The side panel's pairing token only covers this session; the report opens in the dashboard.
+        return;
+      }
       if (result?.report_id) {
         navigate(`/reports/${result.report_id}`);
       } else {
@@ -398,7 +455,10 @@ export function LiveSessionPage() {
       useAnalysisStore.getState().clearCodeRating();
       useSessionStore.getState().setContextReloading(true);
 
-      // Notify backend so analysis pipeline evaluates against the new question
+      // Notify backend so analysis pipeline evaluates against the new question.
+      // The rest of the plan (count and minutes) lets the copilot's time steward
+      // weigh an overrun against what is still to come.
+      const rest = allQ.slice(newIndex + 1);
       send({
         type: 'change_question',
         question_index: newIndex,
@@ -411,14 +471,31 @@ export function LiveSessionPage() {
           difficulty: q.difficulty,
           time_minutes: q.time_minutes,
           hints: q.hints,
+          alternates: q.alternates,
           brute_force_approach: q.brute_force_approach,
           optimal_approaches: q.optimal_approaches,
           common_pitfalls: q.common_pitfalls,
         },
+        remaining_questions: rest.length,
+        // Questions generated live have nothing planned after them: what is left is the interview's time.
+        remaining_minutes:
+          rest.length > 0
+            ? rest.reduce((sum, x) => sum + (x.time_minutes || 0), 0)
+            : interviewMinutesLeft(),
       });
 
     },
     [sessionId, send],
+  );
+
+  const handleUseQuestion = useCallback(
+    async (category: string, topic: string | null, question: GeneratedQuestion) => {
+      if (!sessionId) return;
+      const logged = await api.logQuestion(sessionId, { category, topic, question });
+      const index = usePlanStore.getState().addQuestion(sessionId, logged);
+      await navigateToQuestion(index);
+    },
+    [sessionId, navigateToQuestion],
   );
 
   const handleAdvanceQuestion = useCallback(
@@ -469,6 +546,14 @@ export function LiveSessionPage() {
     );
   }
 
+  const dockedOverlays = videoStream ? overlays.filter((o) => o.mode === 'docked') : [];
+  const showLeft = !hiddenPanes.transcript || dockedOverlays.length > 0;
+  const showCenter = !hiddenPanes.plan;
+  const showRight = RIGHT_PANES.some((id) => !hiddenPanes[id]);
+  // The transcript column takes the spare width; with it hidden, the next shown column does.
+  const fillColumn = showLeft ? 'left' : showCenter ? 'center' : 'right';
+  const fill = (column: typeof fillColumn) => (fillColumn === column ? ' live-session__column--fill' : '');
+
   return (
     <WebSocketProvider value={{ send }}>
       <div className={`live-session live-session--degradation-${degradationLevel}`}>
@@ -478,7 +563,11 @@ export function LiveSessionPage() {
           onEnd={handleEnd}
           onToggleVideo={handleToggleVideo}
           videoActive={!!videoStream}
+          meetControls={meetControls}
+          onMeetControl={sendMeetControl}
         />
+
+        {!isPanel && <ConnectExtension sessionId={sessionId} status={extensionStatus} />}
 
         {/* Floating + fullscreen overlays render outside layout */}
         {videoStream && overlays.filter(o => o.mode !== 'docked').map(overlay => (
@@ -495,9 +584,18 @@ export function LiveSessionPage() {
         ))}
 
         <main className="live-session__body">
-          <div className="live-session__left">
+          {!showLeft && !showCenter && !showRight && (
+            <div className="live-session__no-panes">
+              <p>All panes are hidden.</p>
+              <button type="button" className="btn btn--secondary" onClick={() => usePanelStore.getState().showAll()}>
+                Show all panes
+              </button>
+            </div>
+          )}
+
+          <div className="live-session__left" hidden={!showLeft}>
             {/* Docked overlays render above transcript */}
-            {videoStream && overlays.filter(o => o.mode === 'docked').map(overlay => (
+            {videoStream && dockedOverlays.map(overlay => (
               <VideoOverlay
                 key={overlay.id}
                 stream={videoStream}
@@ -512,8 +610,11 @@ export function LiveSessionPage() {
             <TranscriptPanel />
           </div>
 
-          <div className="live-session__center">
+          <div className={`live-session__center${fill('center')}`} hidden={!showCenter}>
             <InterviewPlanPanel
+              sessionId={sessionId ?? ''}
+              focusAreas={focusAreas}
+              onUseQuestion={handleUseQuestion}
               onAdvanceQuestion={handleAdvanceQuestion}
               onGoToQuestion={handleGoToQuestion}
               onRequestHint={handleRequestHint}
@@ -522,13 +623,38 @@ export function LiveSessionPage() {
             />
           </div>
 
-          <div className="live-session__right">
+          <div className={`live-session__right${fill('right')}`} hidden={!showRight}>
+            <CopilotPanel
+              onAsk={(id, question) => send({ type: 'copilot_query', id, question })}
+              onAddNote={(criterion, text) => {
+                const q = getAllPlanQuestions()[useSessionStore.getState().currentQuestionIndex];
+                send({ type: 'add_scorecard_note', criterion, text, question_id: q?.id ?? '' });
+              }}
+              onUseCard={(card) =>
+                send({
+                  type: 'use_copilot_card',
+                  id: card.id,
+                  kind: card.kind,
+                  text: card.probe || card.items[0] || card.title,
+                  question_id: card.questionId,
+                })
+              }
+            />
             <SpeakersPanel />
             <ScoreRings />
+            <FlagsPanel />
             <HintPanel
               onRequestRuntimeHint={handleRequestRuntimeHint}
               onRegenerateRuntimeHint={handleRegenerateRuntimeHint}
               onAcknowledgeRuntimeHint={handleAcknowledgeRuntimeHint}
+              onUseSuggestion={(suggestion) =>
+                send({
+                  type: 'use_hint_suggestion',
+                  id: suggestion.id,
+                  text: suggestion.text,
+                  question_id: suggestion.questionId,
+                })
+              }
             />
           </div>
         </main>

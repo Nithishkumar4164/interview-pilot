@@ -6,12 +6,12 @@ to dashboard clients. Supports multiple tabs per session.
 Endpoint: ws://{host}/ws/dashboard/{session_id}
 """
 
-import asyncio
 import json
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from src.utils.logging import get_logger
+from src.websocket.auth import authenticate_ws
 from src.websocket.manager import dashboard_manager
 
 logger = get_logger("ws.dashboard")
@@ -37,18 +37,23 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
     - ping: heartbeat (server responds with pong)
     - subscribe_events: filter which event types to receive
     """
+    if await authenticate_ws(websocket, session_id) is None:
+        return
     await dashboard_manager.connect(session_id, websocket)
 
     # Send catch-up transcripts if session is already active
-    from src.websocket.audio_handler import _active_workers, _active_sessions
+    from src.websocket.audio_handler import _active_sessions, _active_workers
 
     worker = _active_workers.get(session_id)
     if worker:
         recent = worker.get_recent_transcripts()
         if recent:
-            await dashboard_manager.send_catchup(session_id, {
-                "events": recent,
-            })
+            await dashboard_manager.send_catchup(
+                session_id,
+                {
+                    "events": recent,
+                },
+            )
             logger.info(
                 "dashboard_catchup_sent",
                 session_id=session_id,
@@ -67,6 +72,10 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
     try:
         while True:
             data = await websocket.receive()
+            # Raw receive() reports a close as a message rather than raising, and
+            # calling it again after that raises RuntimeError.
+            if data["type"] == "websocket.disconnect":
+                raise WebSocketDisconnect(data.get("code", 1000))
 
             if "text" in data:
                 try:
@@ -77,20 +86,24 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                 msg_type = message.get("type")
 
                 if msg_type == "ping":
-                    await websocket.send_json({
-                        "type": "pong",
-                        "timestamp": message.get("timestamp"),
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "pong",
+                            "timestamp": message.get("timestamp"),
+                        }
+                    )
 
                 elif msg_type == "subscribe_events":
                     # Allow clients to filter event types
                     event_types = message.get("event_types", [])
                     if isinstance(event_types, list):
                         subscribed_types = set(event_types)
-                        await websocket.send_json({
-                            "type": "subscribed",
-                            "event_types": list(subscribed_types),
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "subscribed",
+                                "event_types": list(subscribed_types),
+                            }
+                        )
 
                 # ── Speaker management handlers ──────────────────────
                 elif msg_type == "get_speaker_snapshot":
@@ -101,6 +114,7 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                         # No audio session yet — return defaults so the
                         # panel is never empty.
                         from src.services.speaker_service import SpeakerService
+
                         snap = SpeakerService(session_id).get_speaker_snapshot()
                     await dashboard_manager.send_speaker_snapshot(session_id, snap)
 
@@ -170,7 +184,8 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                         try:
                             rating_result = await worker.handle_code_rating(message)
                             await dashboard_manager.send_code_rating(
-                                session_id, rating_result,
+                                session_id,
+                                rating_result,
                             )
                         except Exception as e:
                             logger.error(
@@ -179,7 +194,8 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                                 error=str(e),
                             )
                             await dashboard_manager.send_error(
-                                session_id, f"Code rating failed: {e}",
+                                session_id,
+                                f"Code rating failed: {e}",
                             )
 
                 # ── Runtime hint handlers ─────────────────────────
@@ -189,7 +205,8 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                         try:
                             hint_result = await worker.handle_runtime_hint_request(message)
                             await dashboard_manager.send_runtime_hint(
-                                session_id, hint_result,
+                                session_id,
+                                hint_result,
                             )
                         except Exception as e:
                             logger.error(
@@ -198,7 +215,8 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                                 error=str(e),
                             )
                             await dashboard_manager.send_error(
-                                session_id, f"Runtime hint failed: {e}",
+                                session_id,
+                                f"Runtime hint failed: {e}",
                             )
 
                 elif msg_type == "acknowledge_runtime_hint":
@@ -213,6 +231,44 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                                 error=str(e),
                             )
 
+                elif msg_type == "use_hint_suggestion":
+                    # The interviewer is giving the drafted hint: it counts as a hint given in the
+                    # report, and analyses score hint_reception against it.
+                    text = str(message.get("text", "")).strip()
+                    suggestion_id = str(message.get("id", "")).strip()
+                    if text and suggestion_id:
+                        from src.api.sessions import _get_or_create_hint_service
+
+                        _get_or_create_hint_service(session_id).record_suggested_hint(
+                            suggestion_id, str(message.get("question_id", "")), text
+                        )
+                        worker = _active_workers.get(session_id)
+                        if worker:
+                            worker.set_active_hint(text)
+
+                elif msg_type == "use_copilot_card":
+                    # The interviewer asked the suggested probe / relayed the card to the candidate.
+                    worker = _active_workers.get(session_id)
+                    if worker:
+                        try:
+                            await worker.handle_copilot_card_used(message)
+                        except Exception as e:
+                            logger.error("copilot_card_used_error", session_id=session_id, error=str(e))
+
+                elif msg_type == "copilot_query":
+                    worker = _active_workers.get(session_id)
+                    if worker:
+                        reply = await worker.handle_copilot_query(message)
+                        await dashboard_manager.send_copilot_reply(session_id, reply)
+
+                elif msg_type == "add_scorecard_note":
+                    worker = _active_workers.get(session_id)
+                    if worker:
+                        try:
+                            await worker.handle_scorecard_note(message)
+                        except Exception as e:
+                            logger.error("scorecard_note_error", session_id=session_id, error=str(e))
+
                 elif msg_type == "change_question":
                     worker = _active_workers.get(session_id)
                     if worker:
@@ -226,6 +282,8 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                             question_text=message.get("question_text", ""),
                             question_plan=message.get("question_plan") or {},
                             question_index=message.get("question_index", 0),
+                            remaining_questions=int(message.get("remaining_questions") or 0),
+                            remaining_minutes=float(message.get("remaining_minutes") or 0),
                         )
 
                 elif msg_type == "get_sv_transcripts":
@@ -235,14 +293,14 @@ async def dashboard_websocket(websocket: WebSocket, session_id: str) -> None:
                     if svc and worker and sv_id:
                         sv = svc.speaker_service._speech_vectors.get(sv_id)
                         if sv:
-                            tid_set = set(sv.transcript_ids)
                             matching = [
                                 {"id": t["id"], "text": t["text"]}
-                                for t in worker._transcript_history
-                                if t["id"] in tid_set
+                                for t in worker.get_transcripts_by_ids(set(sv.transcript_ids))
                             ]
                             await dashboard_manager.send_sv_transcripts(
-                                session_id, sv_id, matching,
+                                session_id,
+                                sv_id,
+                                matching,
                             )
 
     except WebSocketDisconnect:

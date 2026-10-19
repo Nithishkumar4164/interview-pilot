@@ -97,119 +97,221 @@ class ConnectionManager:
                 session_id=session_id,
                 text_preview=event.get("text", "")[:50],
             )
-        await self.broadcast(session_id, {
-            "type": "transcript",
-            "session_id": session_id,
-            "payload": event,
-        })
+        await self.broadcast(
+            session_id,
+            {
+                "type": "transcript",
+                "session_id": session_id,
+                "payload": event,
+            },
+        )
+
+    async def send_hint_suggestion(self, session_id: str, suggestion: dict) -> None:
+        """A hint the agentic pipeline drafted for the interviewer to use or dismiss."""
+        await self.broadcast(
+            session_id,
+            {
+                "type": "hint_suggestion",
+                "session_id": session_id,
+                "payload": suggestion,
+            },
+        )
+
+    async def send_copilot_card(self, session_id: str, card: dict) -> None:
+        """A whisper from the peer interviewer (probe, claim check, coaching, pacing, ...)."""
+        await self.broadcast(
+            session_id,
+            {
+                "type": "copilot_card",
+                "session_id": session_id,
+                "payload": card,
+            },
+        )
+
+    async def send_copilot_coverage(self, session_id: str, coverage: dict) -> None:
+        """Evidence gathered so far per report criterion (peer interviewer)."""
+        await self.broadcast(
+            session_id,
+            {
+                "type": "copilot_coverage",
+                "session_id": session_id,
+                "payload": coverage,
+            },
+        )
+
+    async def send_scorecard(self, session_id: str, scorecard: dict) -> None:
+        """The live scorecard draft: notes with quotes per criterion (peer interviewer)."""
+        await self.broadcast(
+            session_id,
+            {
+                "type": "scorecard",
+                "session_id": session_id,
+                "payload": scorecard,
+            },
+        )
+
+    async def send_copilot_reply(self, session_id: str, reply: dict) -> None:
+        """The copilot's answer to a question the interviewer typed (peer interviewer)."""
+        await self.broadcast(
+            session_id,
+            {
+                "type": "copilot_reply",
+                "session_id": session_id,
+                "payload": reply,
+            },
+        )
 
     async def send_analysis(self, session_id: str, analysis: dict) -> None:
         """Send an analysis event to all dashboard connections."""
-        await self.broadcast(session_id, {
-            "type": "analysis",
-            "session_id": session_id,
-            "payload": analysis,
-        })
+        await self.broadcast(
+            session_id,
+            {
+                "type": "analysis",
+                "session_id": session_id,
+                "payload": analysis,
+            },
+        )
 
     async def send_code_analysis(self, session_id: str, analysis: dict) -> None:
         """Send a code analysis event."""
-        await self.broadcast(session_id, {
-            "type": "code_analysis",
-            "session_id": session_id,
-            "payload": analysis,
-        })
+        await self.broadcast(
+            session_id,
+            {
+                "type": "code_analysis",
+                "session_id": session_id,
+                "payload": analysis,
+            },
+        )
 
     async def send_hint(self, session_id: str, hint: dict) -> None:
         """Send a hint event."""
-        await self.broadcast(session_id, {
-            "type": "hint",
-            "session_id": session_id,
-            "payload": hint,
-        })
+        await self.broadcast(
+            session_id,
+            {
+                "type": "hint",
+                "session_id": session_id,
+                "payload": hint,
+            },
+        )
 
     async def send_red_flag(self, session_id: str, flag: dict) -> None:
         """Send a red flag event."""
-        await self.broadcast(session_id, {
-            "type": "red_flag",
-            "session_id": session_id,
-            "payload": flag,
-        })
+        await self.broadcast(
+            session_id,
+            {
+                "type": "red_flag",
+                "session_id": session_id,
+                "payload": flag,
+            },
+        )
 
     async def send_catchup(self, session_id: str, summary: dict) -> None:
         """Send a catch-up summary after buffered replay."""
-        await self.broadcast(session_id, {
-            "type": "catchup",
-            "session_id": session_id,
-            "payload": summary,
-        })
+        await self.broadcast(
+            session_id,
+            {
+                "type": "catchup",
+                "session_id": session_id,
+                "payload": summary,
+            },
+        )
 
     async def send_provider_status(self, session_id: str, status: dict) -> None:
         """Send a provider failover status update."""
-        await self.broadcast(session_id, {
-            "type": "provider_status",
-            "session_id": session_id,
-            "payload": status,
-        })
+        await self.broadcast(
+            session_id,
+            {
+                "type": "provider_status",
+                "session_id": session_id,
+                "payload": status,
+            },
+        )
 
     async def send_error(self, session_id: str, error: str) -> None:
         """Send an error message."""
-        await self.broadcast(session_id, {
-            "type": "error",
-            "session_id": session_id,
-            "payload": {"message": error},
-        })
+        await self.broadcast(
+            session_id,
+            {
+                "type": "error",
+                "session_id": session_id,
+                "payload": {"message": error},
+            },
+        )
 
     async def send_speaker_snapshot(self, session_id: str, snapshot: dict) -> None:
         """Send a full speaker snapshot to all dashboard connections."""
-        await self.broadcast(session_id, {
-            "type": "speaker_snapshot",
-            "session_id": session_id,
-            "payload": snapshot,
-        })
+        await self.broadcast(
+            session_id,
+            {
+                "type": "speaker_snapshot",
+                "session_id": session_id,
+                "payload": snapshot,
+            },
+        )
 
     async def send_speaker_transcript_assigned(
-        self, session_id: str, assignment: dict,
+        self,
+        session_id: str,
+        assignment: dict,
     ) -> None:
         """Send a transcript reassignment notification."""
-        await self.broadcast(session_id, {
-            "type": "speaker_transcript_assigned",
-            "session_id": session_id,
-            "payload": assignment,
-        })
+        await self.broadcast(
+            session_id,
+            {
+                "type": "speaker_transcript_assigned",
+                "session_id": session_id,
+                "payload": assignment,
+            },
+        )
 
     async def send_code_rating(self, session_id: str, rating: dict) -> None:
         """Send a code rating response to all dashboard connections."""
-        await self.broadcast(session_id, {
-            "type": "code_rating",
-            "session_id": session_id,
-            "payload": rating,
-        })
+        await self.broadcast(
+            session_id,
+            {
+                "type": "code_rating",
+                "session_id": session_id,
+                "payload": rating,
+            },
+        )
 
     async def send_runtime_hint(self, session_id: str, hint: dict) -> None:
         """Send a runtime hint response to all dashboard connections."""
-        await self.broadcast(session_id, {
-            "type": "runtime_hint",
-            "session_id": session_id,
-            "payload": hint,
-        })
+        await self.broadcast(
+            session_id,
+            {
+                "type": "runtime_hint",
+                "session_id": session_id,
+                "payload": hint,
+            },
+        )
 
     async def send_sv_transcripts(
-        self, session_id: str, sv_id: str, transcripts: list[dict],
+        self,
+        session_id: str,
+        sv_id: str,
+        transcripts: list[dict],
     ) -> None:
         """Send recent transcript texts for a speech vector."""
-        await self.broadcast(session_id, {
-            "type": "sv_transcripts",
-            "session_id": session_id,
-            "payload": {"sv_id": sv_id, "transcripts": transcripts},
-        })
+        await self.broadcast(
+            session_id,
+            {
+                "type": "sv_transcripts",
+                "session_id": session_id,
+                "payload": {"sv_id": sv_id, "transcripts": transcripts},
+            },
+        )
 
     async def send_context_reloaded(self, session_id: str, data: dict) -> None:
         """Send confirmation that question context has been reloaded."""
-        await self.broadcast(session_id, {
-            "type": "context_reloaded",
-            "session_id": session_id,
-            "payload": data,
-        })
+        await self.broadcast(
+            session_id,
+            {
+                "type": "context_reloaded",
+                "session_id": session_id,
+                "payload": data,
+            },
+        )
 
 
 # Global singleton

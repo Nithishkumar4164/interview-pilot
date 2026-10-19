@@ -1,0 +1,131 @@
+{
+ "scene": "s8",
+ "order": 1,
+ "name": "A bug is suspected",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "rows",
+     "hl": "card",
+     "label": "Edge-case card",
+     "items": [
+      {
+       "no": "Edge cases",
+       "meta": "Ask them to trace these by hand",
+       "amt": "",
+       "due": "10:36",
+       "st": "proc",
+       "stl": "suggest",
+       "cb": "none"
+      }
+     ]
+    },
+    {
+     "t": "text",
+     "text": "Suspected: off-by-one when k exceeds the number of distinct words"
+    },
+    {
+     "t": "text",
+     "text": "• [] → [] (empty input)"
+    },
+    {
+     "t": "text",
+     "text": "• [\"a\"] with k=3 → [\"a\"] (k larger than the vocabulary)"
+    },
+    {
+     "t": "text",
+     "text": "• [\"b\",\"a\",\"b\",\"a\"] with k=1 → [\"a\"] (tie-break order)"
+    },
+    {
+     "t": "btn",
+     "text": "Mark as asked",
+     "kind": "primary",
+     "sm": true
+    },
+    {
+     "t": "btn",
+     "text": "Dismiss",
+     "kind": "ghost",
+     "sm": true
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "c",
+  "g",
+  "l",
+  "w",
+  "d"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "c",
+   "to": "g",
+   "l": "code_context: snapshot sn-21, 1 suspected bug",
+   "t": "OLD",
+   "what": "The code graph's heuristic pass already lists suspected bugs on each snapshot. The pipeline attaches its latest values to every session run.",
+   "code": "code_context = { \"code\": \"def top_k(words, k): ...\", \"language\": \"python\",\n  \"snapshot_id\": \"sn-21\", \"is_stuck\": false,\n  \"bugs\": [\"off-by-one when k exceeds the number of distinct words\"] }"
+  },
+  {
+   "id": "m2",
+   "f": "g",
+   "to": "g",
+   "l": "peer_sends: edge cases due",
+   "t": "NEW",
+   "what": "After the next analysis. Due when the analysis chose `edge_cases` **or** the bug list is non-empty, there is code, and this snapshot id differs from `edge_cases_for`."
+  },
+  {
+   "id": "m3",
+   "f": "g",
+   "to": "l",
+   "l": "suggest_edge_cases (Sonnet)",
+   "t": "NEW",
+   "what": "Gets the question, the suspected bugs and the code. Asked for two or three literal inputs with definite expected outputs, and told not to explain the fix.",
+   "code": "## Question\nTop-K frequent words in a stream\n\n## Suspected Bugs (from a heuristic pass)\n- off-by-one when k exceeds the number of distinct words\n\n## Candidate's Code (python)\n```python\ndef top_k(words, k): ...\n```"
+  },
+  {
+   "id": "m4",
+   "f": "l",
+   "to": "g",
+   "l": "{ edge_cases: [3] }",
+   "res": true,
+   "code": "{ \"edge_cases\": [\n  { \"input\": \"[]\", \"expected\": \"[]\", \"exposes\": \"empty input\" },\n  { \"input\": \"[\\\"a\\\"] with k=3\", \"expected\": \"[\\\"a\\\"]\", \"exposes\": \"k larger than the vocabulary\" },\n  { \"input\": \"[\\\"b\\\",\\\"a\\\",\\\"b\\\",\\\"a\\\"] with k=1\", \"expected\": \"[\\\"a\\\"]\", \"exposes\": \"tie-break order\" } ] }",
+   "what": "Items without an input are dropped; at most three kept."
+  },
+  {
+   "id": "m5",
+   "f": "g",
+   "to": "g",
+   "l": "edge_cases_for = sn-21",
+   "t": "NEW",
+   "what": "Set before the result is known, so a failed or empty call still closes this snapshot."
+  },
+  {
+   "id": "m6",
+   "f": "g",
+   "to": "w",
+   "l": "send_copilot_card (edge_cases)",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Body names the first two suspected bugs; items are `input → expected (exposes)`; the probe asks the candidate to trace the first input.",
+   "code": "{ \"id\": \"sess-7f3a:sn-21:edge_cases\", \"kind\": \"edge_cases\",\n  \"title\": \"Ask them to trace these by hand\",\n  \"body\": \"Suspected: off-by-one when k exceeds the number of distinct words\",\n  \"items\": [\"[] → [] (empty input)\", \"[\\\"a\\\"] with k=3 → [\\\"a\\\"] (k larger than the vocabulary)\", ...],\n  \"probe\": \"Can you walk me through what your code does for []?\", \"question_id\": \"q2\" }"
+  },
+  {
+   "id": "m7",
+   "f": "w",
+   "to": "d",
+   "l": "copilot_card",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Mark as asked relays the probe."
+  }
+ ]
+}

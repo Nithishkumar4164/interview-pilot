@@ -3,6 +3,8 @@
  *
  * All endpoints go through the Vite proxy (/api → backend:8000).
  */
+import { useAuthStore } from '@/stores/auth-store';
+import type { PlannedQuestion } from '@/stores/plan-store';
 
 export class APIError extends Error {
   constructor(
@@ -15,21 +17,79 @@ export class APIError extends Error {
   }
 }
 
+/**
+ * fetch with the caller's credential attached. On a 401 the access token is
+ * refreshed once (single-flight) and the request retried; if that fails the
+ * auth store moves to signed_out and the route guard sends the user to /login.
+ */
+export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const auth = useAuthStore.getState();
+  const send = (token: string | null) => {
+    const headers = new Headers(init.headers);
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return fetch(input, { ...init, headers });
+  };
+
+  const res = await send(await auth.getValidToken());
+  if (res.status !== 401) return res;
+  const fresh = await auth.recoverFromUnauthorized();
+  return fresh ? send(fresh) : res;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(path, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    ...options,
-  });
+  const headers = new Headers(options.headers);
+  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  const res = await authFetch(path, { ...options, headers });
 
   if (!res.ok) {
     const body = await res.text();
     throw new APIError(res.status, res.statusText, body);
   }
 
+  if (res.status === 204) return undefined as T;
   return res.json();
+}
+
+export interface SSEEvent {
+  event: string;
+  data: string;
+}
+
+/**
+ * Read a text/event-stream response with fetch (EventSource can't send an
+ * Authorization header). Resolves when the stream ends or ``signal`` aborts.
+ */
+export async function streamSSE(
+  path: string,
+  onEvent: (event: SSEEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await authFetch(path, { headers: { Accept: 'text/event-stream' }, signal });
+  if (!res.ok || !res.body) {
+    throw new APIError(res.status, res.statusText, res.body ? await res.text() : 'No stream');
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    // Events are separated by a blank line.
+    let boundary: RegExpExecArray | null;
+    while ((boundary = /\r?\n\r?\n/.exec(buffer)) !== null) {
+      const raw = buffer.slice(0, boundary.index);
+      buffer = buffer.slice(boundary.index + boundary[0].length);
+      let event = 'message';
+      const data: string[] = [];
+      for (const line of raw.split(/\r?\n/)) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+      }
+      if (data.length) onEvent({ event, data: data.join('\n') });
+    }
+  }
 }
 
 // ── Sessions ──────────────────────────────────────────────────────────
@@ -41,7 +101,10 @@ export interface StartSessionRequest {
   focus_areas?: string[];
   candidate_name?: string;
   candidate_email?: string;
+  candidate_phone?: string;
+  candidate_role?: string;
   resume_data?: Record<string, unknown> | null;
+  meeting_url?: string | null;
 }
 
 export async function startSession(data: StartSessionRequest) {
@@ -63,7 +126,18 @@ export async function goLive(sessionId: string) {
 }
 
 export async function pauseSession(sessionId: string) {
-  return request(`/api/sessions/${sessionId}/pause`, { method: 'PATCH' });
+  return request<{ status: string }>(`/api/sessions/${sessionId}/pause`, { method: 'POST' });
+}
+
+export async function resumeSession(sessionId: string) {
+  return request<{ status: string }>(`/api/sessions/${sessionId}/resume`, { method: 'POST' });
+}
+
+export async function updateMeetingUrl(sessionId: string, meetingUrl: string | null) {
+  return request<{ meeting_url: string | null }>(`/api/sessions/${sessionId}/meeting-url`, {
+    method: 'PATCH',
+    body: JSON.stringify({ meeting_url: meetingUrl }),
+  });
 }
 
 export async function endSession(sessionId: string) {
@@ -79,6 +153,7 @@ export interface SessionStateResponse {
     status: string;
     level: string;
     duration_minutes: number;
+    focus_areas: string[];
     elapsed_ms: number;
     started_at: string | null;
     ended_at: string | null;
@@ -112,8 +187,10 @@ export interface SessionStateResponse {
     interviewer_used: boolean;
     candidate_response_quality: string;
   }>;
+  /** Only sessions planned up front, before questions were generated live, have a plan. */
   plan: Record<string, unknown> | null;
   plan_id: string | null;
+  questions: LoggedQuestion[];
   snapshot: Record<string, unknown> | null;
 }
 
@@ -132,6 +209,7 @@ export interface SessionListItem {
   created_at: string;
   candidate_name: string | null;
   candidate_email: string | null;
+  candidate_role?: string | null;
   report_id: string | null;
   report_status: string | null;
   recommendation: string | null;
@@ -238,13 +316,6 @@ export async function acknowledgeHint(
   });
 }
 
-export async function registerPlanHints(sessionId: string, planData: { phases: unknown[] }) {
-  return request<{ registered_questions: number }>(
-    `/api/sessions/${sessionId}/register-plan-hints`,
-    { method: 'POST', body: JSON.stringify(planData) },
-  );
-}
-
 // ── Upload ────────────────────────────────────────────────────────────
 
 export interface UploadResponse {
@@ -257,114 +328,74 @@ export interface UploadResponse {
 export async function uploadResume(file: File): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append('file', file);
-
-  const res = await fetch('/api/upload/resume', {
-    method: 'POST',
-    body: formData,
-    // Do NOT set Content-Type — browser sets multipart boundary
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new APIError(res.status, res.statusText, body);
-  }
-  return res.json();
+  // No Content-Type: the browser sets the multipart boundary.
+  return request<UploadResponse>('/api/upload/resume', { method: 'POST', body: formData });
 }
 
 export function getExtractionStreamUrl(referenceId: string): string {
   return `/api/upload/${referenceId}/stream`;
 }
 
-// ── Plans ─────────────────────────────────────────────────────────────
+// ── Extension pairing ────────────────────────────────────────────────
 
-export interface CreatePlanRequest {
+export interface PairingTokenResponse {
   session_id: string;
-  level: string;
-  duration_minutes: number;
-  focus_areas: string[];
-  resume_data?: Record<string, unknown> | null;
+  pairing_token: string;
+  expires_in: number;
 }
 
-export interface PlanQuestionResponse {
+export async function createPairingToken(sessionId: string) {
+  return request<PairingTokenResponse>(`/api/sessions/${sessionId}/pairing-token`, { method: 'POST' });
+}
+
+// ── Questions ─────────────────────────────────────────────────────────
+
+/** A question as the backend generates it; the live dashboard's PlannedQuestion shape. */
+export type GeneratedQuestion = Omit<PlannedQuestion, 'id'> & { id: string; tags?: string[] };
+
+export interface TopicSuggestion {
+  concept: string;
+  topic: string;
+}
+
+/** A question the interviewer used: one row of the questionnaire. */
+export interface LoggedQuestion {
   id: string;
-  text: string;
+  position: number;
   category: string;
-  difficulty: number;
-  time_minutes: number;
-  alternates: string[];
-  hints: Array<{ level: number; text: string }>;
-  optimal_approaches: Array<{
-    name: string;
-    data_structures: string[];
-    expected_complexity: Record<string, string>;
-    key_steps: string[];
-  }> | null;
-  common_pitfalls: string[] | null;
+  topic: string | null;
+  asked_at: string;
+  question: PlannedQuestion;
 }
 
-export interface PlanPhaseResponse {
-  phase: string;
-  start_minute: number;
-  duration_minutes: number;
-  questions: PlanQuestionResponse[];
+export async function suggestTopics(sessionId: string, category: string) {
+  return request<{ category: string; topics: TopicSuggestion[] }>(`/api/sessions/${sessionId}/questions/topics`, {
+    method: 'POST',
+    body: JSON.stringify({ category }),
+  });
 }
 
-export interface InterviewPlanResponse {
-  id: string;
-  session_id: string;
-  version: number;
-  is_active: boolean;
-  phases: PlanPhaseResponse[];
-  total_minutes: number;
-  created_at: string;
+export interface GenerateQuestionRequest {
+  category: string;
+  topic?: string | null;
+  rejected_drafts?: string[];
+  feedback?: string | null;
 }
 
-export async function createPlan(data: CreatePlanRequest) {
-  return request<InterviewPlanResponse>('/api/plans/create', {
+export async function generateQuestion(sessionId: string, data: GenerateQuestionRequest) {
+  return request<{ category: string; topic: string | null; question: GeneratedQuestion }>(
+    `/api/sessions/${sessionId}/questions/generate`,
+    { method: 'POST', body: JSON.stringify(data) },
+  );
+}
+
+export async function logQuestion(
+  sessionId: string,
+  data: { category: string; topic?: string | null; question: GeneratedQuestion },
+) {
+  return request<LoggedQuestion>(`/api/sessions/${sessionId}/questions`, {
     method: 'POST',
     body: JSON.stringify(data),
-  });
-}
-
-export async function getPlan(planId: string) {
-  return request<InterviewPlanResponse>(`/api/plans/${planId}`);
-}
-
-export async function swapQuestion(
-  planId: string,
-  phaseIndex: number,
-  questionIndex: number,
-  alternateIndex: number,
-) {
-  return request<InterviewPlanResponse>(`/api/plans/${planId}/swap`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      phase_index: phaseIndex,
-      question_index: questionIndex,
-      alternate_index: alternateIndex,
-    }),
-  });
-}
-
-export async function removeQuestion(
-  planId: string,
-  phaseIndex: number,
-  questionIndex: number,
-) {
-  return request<InterviewPlanResponse>(`/api/plans/${planId}/remove`, {
-    method: 'PATCH',
-    body: JSON.stringify({ phase_index: phaseIndex, question_index: questionIndex }),
-  });
-}
-
-export async function regenerateHints(
-  planId: string,
-  phaseIndex: number,
-  questionIndex: number,
-) {
-  return request<InterviewPlanResponse>(`/api/plans/${planId}/regenerate-hints`, {
-    method: 'POST',
-    body: JSON.stringify({ phase_index: phaseIndex, question_index: questionIndex }),
   });
 }
 

@@ -1,0 +1,10 @@
+{
+ "n": 3,
+ "short": "You speak",
+ "title": "The interviewer speaks",
+ "lede": "Your own turns are coached by a cheap model, at most once per 20 seconds. Two talk-time signals need no model at all.",
+ "also": [
+  2
+ ],
+ "stack": false
+}

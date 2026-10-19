@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.config import settings
+from src.graphs.checkpointer import Checkpointer
 from src.llm import FailoverManager, HealthMonitor
 from src.llm.config import DEFAULT_TASK_MAPPINGS, TaskProviderMapping
 
@@ -15,6 +16,7 @@ _has_openai = bool(settings.openai_api_key)
 # If no LLM keys, fall back to mock provider for development
 if not _has_anthropic and not _has_openai:
     import logging
+
     logging.getLogger("dependencies").warning(
         "No LLM API keys configured — activating mock provider mode. "
         "Set INTERVIEW_PILOT_ANTHROPIC_API_KEY and/or INTERVIEW_PILOT_OPENAI_API_KEY for real analysis."
@@ -23,18 +25,27 @@ if not _has_anthropic and not _has_openai:
 # Global singletons — avoids circular import from main.py
 health_monitor = HealthMonitor()
 failover_manager = FailoverManager(health_monitor)
+checkpointer = Checkpointer()  # opened in main.lifespan
 
 # Override mappings so only providers with valid keys are used.
 # If no keys at all, use mock provider. If only one key, use that provider for both.
 if not _has_anthropic and not _has_openai:
+    _dev_provider, _dev_model = "mock", "mock-v1"
+    if settings.dev_llm_provider == "scripted":
+        # Deterministic, input-sensitive answers (red flags, contradictions, tool use) for local e2e runs.
+        from src.llm.factory import ProviderFactory
+        from src.replay.scripted_provider import ScriptedProvider
+
+        ProviderFactory.register("scripted", ScriptedProvider)
+        _dev_provider, _dev_model = "scripted", "scripted-v1"
     for task_type in DEFAULT_TASK_MAPPINGS:
         failover_manager.update_mapping(
             TaskProviderMapping(
                 task_type=task_type,
-                primary_provider="mock",
-                primary_model="mock-v1",
-                fallback_provider="mock",
-                fallback_model="mock-v1",
+                primary_provider=_dev_provider,
+                primary_model=_dev_model,
+                fallback_provider=_dev_provider,
+                fallback_model=_dev_model,
             )
         )
 elif not _has_anthropic or not _has_openai:
@@ -70,19 +81,29 @@ def get_failover_manager() -> FailoverManager:
     return failover_manager
 
 
+def get_checkpointer() -> Checkpointer:
+    """FastAPI dependency for the LangGraph Postgres checkpointer."""
+    return checkpointer
+
+
 def get_persistence_service():
     """FastAPI dependency for the persistence service.
 
     Lazy import to avoid circular dependency with main.py.
     """
     from src.main import persistence_service
+
     return persistence_service
 
 
-def get_session_state_service():
-    """FastAPI dependency for the session state service.
+def get_report_runner():
+    """The process-wide ReportRunner (ReportGraph on the shared checkpointer)."""
+    global _report_runner
+    if _report_runner is None:
+        from src.graphs.report_graph import ReportRunner
 
-    Lazy import to avoid circular dependency with main.py.
-    """
-    from src.main import session_state_service
-    return session_state_service
+        _report_runner = ReportRunner(failover_manager, async_session_factory, checkpointer)
+    return _report_runner
+
+
+_report_runner = None

@@ -1,0 +1,10 @@
+{
+ "order": 5,
+ "n": 5,
+ "where": "Step 2",
+ "title": "Give claim checks a cheap trigger",
+ "paras": [
+  "Clarifications have `looks_like_a_question`; edge cases have the code graph's bug list; a claim check runs only when the analysis names `verify_claim`. An analysis that is busy scoring depth and relevance may not flag a confident wrong complexity.",
+  "A small pattern (`O(`, *always*, *guarantees*, *is thread-safe*, *never blocks*) on candidate text would queue the check deterministically. The 0.6 confidence floor and the incorrect/misleading filter already keep false alarms off the panel."
+ ]
+}

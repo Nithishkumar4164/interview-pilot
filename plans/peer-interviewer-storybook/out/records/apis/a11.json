@@ -1,0 +1,11 @@
+{
+ "order": 11,
+ "call": "QuestionChanged",
+ "owner": "Pipeline → Session graph",
+ "gives": "Gains at, remaining_questions, remaining_minutes; resets per-question peer state",
+ "tag": "MOD",
+ "steps": [
+  4,
+  5
+ ]
+}

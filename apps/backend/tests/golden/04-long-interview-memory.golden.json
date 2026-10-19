@@ -1,0 +1,3291 @@
+{
+  "code_ratings": [],
+  "dashboard_events": [
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "23b5a540-d12b-5e0c-8b11-5d9d0f023eca",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "Let's start with your background. In your last role you were on the data platform team, and I'd like to hear about the systems you owned, the scale they ran at, and what went wrong. On our team we used Kafka for years, so I'm curious how yours compared.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "5ef1f031-bc3d-5d66-87c9-3a3396031ead",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Sure. I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 3,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "excellent",
+            "signals_detected": []
+          },
+          "communication_quality": {
+            "clarity": "medium",
+            "confidence": "medium",
+            "justification": "scripted",
+            "score": "weak",
+            "structure": "low"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "adequate"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [],
+            "score": "good"
+          },
+          "hint_reception": {
+            "acted_on_hint": true,
+            "incorporation_level": "full",
+            "justification": "scripted",
+            "score": "good"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "good"
+          }
+        },
+        "hint_signal": "nudge",
+        "insight": "scripted-insight-4542",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [
+          "scripted-red-flag-81"
+        ],
+        "suggestion_for_interviewer": "scripted-suggestion-542",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_red_flag",
+      "payload": {
+        "flags": [
+          "scripted-red-flag-81"
+        ],
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "nudge",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "2dba2af9-9c17-52ab-bb19-6910c5da07ec",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "How big was that deployment?",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "192578f8-6eac-5f93-891b-e224587cba58",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Around forty brokers and roughly two thousand partitions, handling about three hundred thousand messages per second at peak.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 4,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "poor",
+            "signals_detected": []
+          },
+          "communication_quality": {
+            "clarity": "high",
+            "confidence": "medium",
+            "justification": "scripted",
+            "score": "adequate",
+            "structure": "high"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [],
+            "score": "poor"
+          },
+          "hint_reception": {
+            "acted_on_hint": true,
+            "incorporation_level": "full",
+            "justification": "scripted",
+            "score": "adequate"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "poor"
+          }
+        },
+        "hint_signal": "guide",
+        "insight": "scripted-insight-6078",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-078",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "guide",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "7c92acd9-cf4d-55a8-a098-d041c5cd679d",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "And who owned partition planning?",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "ee335ad7-2517-521b-ba8b-d3cdbda6a57d",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "I did most of it. I think partition count should come from the target throughput divided by what a single consumer can handle.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 4,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "adequate",
+            "signals_detected": []
+          },
+          "communication_quality": {
+            "clarity": "high",
+            "confidence": "low",
+            "justification": "scripted",
+            "score": "adequate",
+            "structure": "medium"
+          },
+          "contextual_consistency": {
+            "consistent": false,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "good"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [],
+            "score": "poor"
+          },
+          "hint_reception": {
+            "acted_on_hint": true,
+            "incorporation_level": "full",
+            "justification": "scripted",
+            "score": "good"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": false,
+            "score": "poor"
+          }
+        },
+        "hint_signal": "nudge",
+        "insight": "scripted-insight-8448",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-448",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "nudge",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "9fc6e870-2c5c-5635-8a58-cf1cd4a04c89",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "Okay.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "520c0f4d-c833-5f6b-95b7-9da9511422ac",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "We also used keys for ordering, so all events for one account landed on the same partition.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 2,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "adequate",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "low",
+            "confidence": "high",
+            "justification": "scripted",
+            "score": "good",
+            "structure": "medium"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "weak"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "adequate"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "none",
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "excellent"
+          }
+        },
+        "hint_signal": "direct",
+        "insight": "scripted-insight-4391",
+        "latency_ms": "<volatile>",
+        "on_track": false,
+        "provider": "scripted",
+        "red_flags": [
+          "scripted-red-flag-65"
+        ],
+        "suggestion_for_interviewer": "scripted-suggestion-391",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_red_flag",
+      "payload": {
+        "flags": [
+          "scripted-red-flag-65"
+        ],
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "direct",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "28aa3b8b-6699-53a1-86f2-d52934537d23",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "What happens when you add partitions to an existing topic?",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "e001cfc5-b716-5b97-953a-0e3ff9d57ec6",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "The key to partition mapping changes, so ordering per key breaks for a while unless you migrate carefully.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 1,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [
+              "vagueness"
+            ],
+            "justification": "scripted",
+            "score": "weak",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "medium",
+            "confidence": "medium",
+            "justification": "scripted",
+            "score": "good",
+            "structure": "low"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "good"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "adequate"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "none",
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "adequate"
+          }
+        },
+        "hint_signal": "guide",
+        "insight": "scripted-insight-6215",
+        "latency_ms": "<volatile>",
+        "on_track": false,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-215",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "guide",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "5f4b6194-51ff-528e-aa0f-55516a29106b",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "Good. How did you monitor consumer lag?",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "f9dee5fc-aa1c-5cd7-ad23-f0abb05cf987",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "We exported lag per consumer group to Prometheus and alerted when it grew for more than five minutes.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 5,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "poor",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "low",
+            "confidence": "low",
+            "justification": "scripted",
+            "score": "excellent",
+            "structure": "medium"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "adequate"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "good"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "partial",
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "poor"
+          }
+        },
+        "hint_signal": "none",
+        "insight": "scripted-insight-3819",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [
+          "scripted-red-flag-71"
+        ],
+        "suggestion_for_interviewer": "scripted-suggestion-819",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_red_flag",
+      "payload": {
+        "flags": [
+          "scripted-red-flag-71"
+        ],
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "a5806000-8540-560f-b9a3-28b69d991c2f",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "Did you ever lose data?",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "27258e99-f243-5ac7-a5c2-71536652e115",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Once, when a producer was configured with acks set to one and a broker died before replication finished.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 3,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "poor",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "high",
+            "confidence": "low",
+            "justification": "scripted",
+            "score": "weak",
+            "structure": "medium"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "adequate"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "none",
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "weak"
+          }
+        },
+        "hint_signal": "direct",
+        "insight": "scripted-insight-5437",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [
+          "scripted-red-flag-54"
+        ],
+        "suggestion_for_interviewer": "scripted-suggestion-437",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_red_flag",
+      "payload": {
+        "flags": [
+          "scripted-red-flag-54"
+        ],
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "direct",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "0fd42dfb-d49a-56c6-ad1d-7c4e5a2c8433",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "How did you fix it?",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "de5dea9c-7fee-5acf-987b-17bc9c11d879",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "We moved every producer to acks all with min insync replicas of two, and added an idempotent producer config.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 4,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "poor",
+            "signals_detected": []
+          },
+          "communication_quality": {
+            "clarity": "low",
+            "confidence": "high",
+            "justification": "scripted",
+            "score": "good",
+            "structure": "medium"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "adequate"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [],
+            "score": "adequate"
+          },
+          "hint_reception": {
+            "acted_on_hint": true,
+            "incorporation_level": "none",
+            "justification": "scripted",
+            "score": "weak"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "poor"
+          }
+        },
+        "hint_signal": "none",
+        "insight": "scripted-insight-8818",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-818",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "2928c7cf-43d6-57d9-826a-313847f418ac",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "Nice.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "0f5af6a3-3546-523b-a756-50782629e630",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Honestly I'm not familiar with the transactional API, we never needed it for our pipelines.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 5,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "poor",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "low",
+            "confidence": "low",
+            "justification": "scripted",
+            "score": "weak",
+            "structure": "low"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "good"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "none",
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "poor"
+          }
+        },
+        "hint_signal": "nudge",
+        "insight": "scripted-insight-3119",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [
+          "scripted-red-flag-60"
+        ],
+        "suggestion_for_interviewer": "scripted-suggestion-119",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_red_flag",
+      "payload": {
+        "flags": [
+          "scripted-red-flag-60"
+        ],
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "nudge",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "bd3f16c1-74cc-5afe-9811-bd6e61836be0",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "That's fine.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "d5e6c29d-b8d4-5cf5-b54e-c6710910455b",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "I led the migration from the old cluster to the new one, which took about three months end to end.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 3,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "poor",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "medium",
+            "confidence": "low",
+            "justification": "scripted",
+            "score": "poor",
+            "structure": "low"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "poor"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "none",
+            "justification": "scripted",
+            "score": "good"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": false,
+            "score": "weak"
+          }
+        },
+        "hint_signal": "none",
+        "insight": "scripted-insight-5957",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-957",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "d29a063b-868b-52f3-83cb-c3b8861fa50a",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "During the migration we mirrored topics with MirrorMaker and cut consumers over one group at a time.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 2,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "adequate",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "low",
+            "confidence": "low",
+            "justification": "scripted",
+            "score": "good",
+            "structure": "medium"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "good"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "adequate"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "none",
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": false,
+            "score": "excellent"
+          }
+        },
+        "hint_signal": "guide",
+        "insight": "scripted-insight-4691",
+        "latency_ms": "<volatile>",
+        "on_track": false,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-691",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "guide",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "c6e4328e-6ee9-5ff2-9500-1a6470bbd1ba",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Actually I've never used Kafka Connect or MirrorMaker myself, another team ran that part.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 5,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "adequate",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "low",
+            "confidence": "low",
+            "justification": "scripted",
+            "score": "excellent",
+            "structure": "low"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "good"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "excellent"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "partial",
+            "justification": "scripted",
+            "score": "excellent"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "poor"
+          }
+        },
+        "hint_signal": "none",
+        "insight": "scripted-insight-5289",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-289",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_red_flag",
+      "payload": {
+        "claim": "I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.",
+        "confidence": 0.8,
+        "explanation": "Candidate previously said 'I have used' but now says 'I've never'",
+        "new_statement": "Actually I've never used Kafka Connect or MirrorMaker myself, another team ran that part.",
+        "suggested_probe": "Could you clarify your experience level with this technology?",
+        "timestamp": "<volatile>",
+        "type": "contradiction"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "71dedbfd-7bf9-5984-a659-cb8618096983",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "Let's move on to a coding question.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "c94ee4e5-9ca0-5ac8-b6e6-b659b092e910",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Sounds good, I'm ready for the next one whenever you are.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 3,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "weak",
+            "signals_detected": []
+          },
+          "communication_quality": {
+            "clarity": "medium",
+            "confidence": "medium",
+            "justification": "scripted",
+            "score": "adequate",
+            "structure": "high"
+          },
+          "contextual_consistency": {
+            "consistent": false,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [],
+            "score": "excellent"
+          },
+          "hint_reception": {
+            "acted_on_hint": true,
+            "incorporation_level": "none",
+            "justification": "scripted",
+            "score": "good"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "good"
+          }
+        },
+        "hint_signal": "guide",
+        "insight": "scripted-insight-3792",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-792",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "guide",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "54cabee4-7d4b-593a-91d6-1ea0810870a7",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "Implement get and put for an LRU cache with a fixed capacity, both in constant time.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "7a820385-1b5e-5a4e-9539-d22dcd4c005f",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 4,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "excellent",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "low",
+            "confidence": "low",
+            "justification": "scripted",
+            "score": "weak",
+            "structure": "medium"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "adequate"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "adequate"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "partial",
+            "justification": "scripted",
+            "score": "good"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "good"
+          }
+        },
+        "hint_signal": "direct",
+        "insight": "scripted-insight-8783",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-783",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "direct",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "655db8f1-cc39-594a-b5a3-a1fa69b48353",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "On get I move the node to the head, and on put I insert at the head and evict from the tail when over capacity.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 4,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "weak",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "high",
+            "confidence": "high",
+            "justification": "scripted",
+            "score": "adequate",
+            "structure": "high"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "good"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "excellent"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "none",
+            "justification": "scripted",
+            "score": "excellent"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "good"
+          }
+        },
+        "hint_signal": "none",
+        "insight": "scripted-insight-5453",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [
+          "scripted-red-flag-84"
+        ],
+        "suggestion_for_interviewer": "scripted-suggestion-453",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_red_flag",
+      "payload": {
+        "flags": [
+          "scripted-red-flag-84"
+        ],
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "b833c6e3-4b33-504f-ba42-e1bd1078d174",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Edge cases are updating an existing key, which should also move it to the front, and capacity zero.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 2,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "adequate",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "high",
+            "confidence": "medium",
+            "justification": "scripted",
+            "score": "weak",
+            "structure": "high"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "weak"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "good"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "full",
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "excellent"
+          }
+        },
+        "hint_signal": "nudge",
+        "insight": "scripted-insight-6231",
+        "latency_ms": "<volatile>",
+        "on_track": false,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-231",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "nudge",
+        "timestamp": "<volatile>"
+      }
+    }
+  ],
+  "error": null,
+  "final_state": {
+    "analyses_run": 16,
+    "analysis": {
+      "analysis_count": 16,
+      "average_quality": 3.9166666666666665,
+      "current_question": "Design an LRU cache with O(1) get and put.",
+      "recent_analyses": [
+        {
+          "answer_quality": 5,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "adequate",
+              "signals_detected": [
+                "structured_thinking"
+              ]
+            },
+            "communication_quality": {
+              "clarity": "low",
+              "confidence": "low",
+              "justification": "scripted",
+              "score": "excellent",
+              "structure": "low"
+            },
+            "contextual_consistency": {
+              "consistent": true,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "good"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [
+                "scripted-missed"
+              ],
+              "score": "excellent"
+            },
+            "hint_reception": {
+              "acted_on_hint": false,
+              "incorporation_level": "partial",
+              "justification": "scripted",
+              "score": "excellent"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "poor"
+            }
+          },
+          "hint_signal": "none",
+          "insight": "scripted-insight-5289",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-289",
+          "timestamp": "<volatile>"
+        },
+        {
+          "answer_quality": 3,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "weak",
+              "signals_detected": []
+            },
+            "communication_quality": {
+              "clarity": "medium",
+              "confidence": "medium",
+              "justification": "scripted",
+              "score": "adequate",
+              "structure": "high"
+            },
+            "contextual_consistency": {
+              "consistent": false,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "poor"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [],
+              "score": "excellent"
+            },
+            "hint_reception": {
+              "acted_on_hint": true,
+              "incorporation_level": "none",
+              "justification": "scripted",
+              "score": "good"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "good"
+            }
+          },
+          "hint_signal": "guide",
+          "insight": "scripted-insight-3792",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-792",
+          "timestamp": "<volatile>"
+        },
+        {
+          "answer_quality": 4,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "excellent",
+              "signals_detected": [
+                "structured_thinking"
+              ]
+            },
+            "communication_quality": {
+              "clarity": "low",
+              "confidence": "low",
+              "justification": "scripted",
+              "score": "weak",
+              "structure": "medium"
+            },
+            "contextual_consistency": {
+              "consistent": true,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "adequate"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [
+                "scripted-missed"
+              ],
+              "score": "adequate"
+            },
+            "hint_reception": {
+              "acted_on_hint": false,
+              "incorporation_level": "partial",
+              "justification": "scripted",
+              "score": "good"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "good"
+            }
+          },
+          "hint_signal": "direct",
+          "insight": "scripted-insight-8783",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-783",
+          "timestamp": "<volatile>"
+        },
+        {
+          "answer_quality": 4,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "weak",
+              "signals_detected": [
+                "structured_thinking"
+              ]
+            },
+            "communication_quality": {
+              "clarity": "high",
+              "confidence": "high",
+              "justification": "scripted",
+              "score": "adequate",
+              "structure": "high"
+            },
+            "contextual_consistency": {
+              "consistent": true,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "good"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [
+                "scripted-missed"
+              ],
+              "score": "excellent"
+            },
+            "hint_reception": {
+              "acted_on_hint": false,
+              "incorporation_level": "none",
+              "justification": "scripted",
+              "score": "excellent"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "good"
+            }
+          },
+          "hint_signal": "none",
+          "insight": "scripted-insight-5453",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "scripted",
+          "red_flags": [
+            "scripted-red-flag-84"
+          ],
+          "suggestion_for_interviewer": "scripted-suggestion-453",
+          "timestamp": "<volatile>"
+        },
+        {
+          "answer_quality": 2,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "adequate",
+              "signals_detected": [
+                "structured_thinking"
+              ]
+            },
+            "communication_quality": {
+              "clarity": "high",
+              "confidence": "medium",
+              "justification": "scripted",
+              "score": "weak",
+              "structure": "high"
+            },
+            "contextual_consistency": {
+              "consistent": true,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "weak"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [
+                "scripted-missed"
+              ],
+              "score": "good"
+            },
+            "hint_reception": {
+              "acted_on_hint": false,
+              "incorporation_level": "full",
+              "justification": "scripted",
+              "score": "poor"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "excellent"
+            }
+          },
+          "hint_signal": "nudge",
+          "insight": "scripted-insight-6231",
+          "latency_ms": "<volatile>",
+          "on_track": false,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-231",
+          "timestamp": "<volatile>"
+        }
+      ],
+      "session_id": "04-long-interview-memory"
+    },
+    "contradictions": {
+      "contradictions": [
+        {
+          "claim": "I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.",
+          "confidence": 0.8,
+          "detected_at": "<volatile>",
+          "detection_method": "rule_based",
+          "explanation": "Candidate previously said 'I have used' but now says 'I've never'",
+          "new_statement": "Actually I've never used Kafka Connect or MirrorMaker myself, another team ran that part.",
+          "suggested_probe": "Could you clarify your experience level with this technology?"
+        }
+      ]
+    },
+    "events_processed": 28,
+    "memory": {
+      "fact_store": {
+        "behavioral_signals": [],
+        "claimed_experience": [
+          "I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing."
+        ],
+        "hint_interactions": [
+          {
+            "hint_id": "<volatile>",
+            "quality": "partial",
+            "question_id": "q-kafka",
+            "type": "runtime"
+          }
+        ],
+        "key_numbers": [],
+        "technical_positions": [
+          "I think partition count should come from the target throughput divided by what a single consumer can handle.",
+          "I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent."
+        ]
+      },
+      "rolling_summary": "scripted-summary-364440",
+      "session_id": "04-long-interview-memory",
+      "total_utterances": 28,
+      "unsummarized_count": 0,
+      "working_memory": [
+        {
+          "speaker": "interviewer",
+          "text": "Implement get and put for an LRU cache with a fixed capacity, both in constant time.",
+          "timestamp": "<volatile>"
+        },
+        {
+          "speaker": "candidate",
+          "text": "I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent.",
+          "timestamp": "<volatile>"
+        },
+        {
+          "speaker": "candidate",
+          "text": "On get I move the node to the head, and on put I insert at the head and evict from the tail when over capacity.",
+          "timestamp": "<volatile>"
+        },
+        {
+          "speaker": "candidate",
+          "text": "Edge cases are updating an existing key, which should also move it to the front, and capacity zero.",
+          "timestamp": "<volatile>"
+        }
+      ]
+    },
+    "session_id": "04-long-interview-memory"
+  },
+  "golden_version": 2,
+  "hint_responses": [
+    {
+      "directness": "subtle",
+      "generation_number": 1,
+      "hint_id": "<volatile>",
+      "is_regeneration": false,
+      "latency_ms": "<volatile>",
+      "provider": "scripted",
+      "question_id": "q-kafka",
+      "regeneration_reason": null,
+      "text": "scripted-hint-5053"
+    },
+    {
+      "directness": "subtle",
+      "generation_number": 1,
+      "hint_id": "<volatile>",
+      "is_regeneration": true,
+      "latency_ms": "<volatile>",
+      "provider": "scripted",
+      "question_id": "q-lru",
+      "regeneration_reason": "too_direct",
+      "text": "scripted-hint-5094"
+    }
+  ],
+  "llm_calls_by_kind": {
+    "fact_extraction": [
+      {
+        "max_tokens": 300,
+        "response_format": "json",
+        "system_prompt_sha": "34b139630de3",
+        "task_type": "real_time_analysis",
+        "temperature": 0.2,
+        "user_content": "Analyze this interview utterance and extract any factual claims into the following JSON structure. Only include categories with actual findings. Return valid JSON only.\n\n{\n  \"claimed_experience\": [\"list of specific claims about experience or skills\"],\n  \"technical_positions\": [\"list of technical opinions or approach preferences\"],\n  \"behavioral_signals\": [\"list of communication or behavioral observations\"],\n  \"key_numbers\": [\"list of specific metrics, numbers, or quantified claims\"]\n}\n\nUtterance (by candidate): Sure. I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing."
+      },
+      {
+        "max_tokens": 300,
+        "response_format": "json",
+        "system_prompt_sha": "34b139630de3",
+        "task_type": "real_time_analysis",
+        "temperature": 0.2,
+        "user_content": "Analyze this interview utterance and extract any factual claims into the following JSON structure. Only include categories with actual findings. Return valid JSON only.\n\n{\n  \"claimed_experience\": [\"list of specific claims about experience or skills\"],\n  \"technical_positions\": [\"list of technical opinions or approach preferences\"],\n  \"behavioral_signals\": [\"list of communication or behavioral observations\"],\n  \"key_numbers\": [\"list of specific metrics, numbers, or quantified claims\"]\n}\n\nUtterance (by candidate): I did most of it. I think partition count should come from the target throughput divided by what a single consumer can handle."
+      },
+      {
+        "max_tokens": 300,
+        "response_format": "json",
+        "system_prompt_sha": "34b139630de3",
+        "task_type": "real_time_analysis",
+        "temperature": 0.2,
+        "user_content": "Analyze this interview utterance and extract any factual claims into the following JSON structure. Only include categories with actual findings. Return valid JSON only.\n\n{\n  \"claimed_experience\": [\"list of specific claims about experience or skills\"],\n  \"technical_positions\": [\"list of technical opinions or approach preferences\"],\n  \"behavioral_signals\": [\"list of communication or behavioral observations\"],\n  \"key_numbers\": [\"list of specific metrics, numbers, or quantified claims\"]\n}\n\nUtterance (by candidate): I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent."
+      },
+      {
+        "max_tokens": 300,
+        "response_format": "json",
+        "system_prompt_sha": "34b139630de3",
+        "task_type": "real_time_analysis",
+        "temperature": 0.2,
+        "user_content": "Analyze this interview utterance and extract any factual claims into the following JSON structure. Only include categories with actual findings. Return valid JSON only.\n\n{\n  \"claimed_experience\": [\"list of specific claims about experience or skills\"],\n  \"technical_positions\": [\"list of technical opinions or approach preferences\"],\n  \"behavioral_signals\": [\"list of communication or behavioral observations\"],\n  \"key_numbers\": [\"list of specific metrics, numbers, or quantified claims\"]\n}\n\nUtterance (by candidate): On get I move the node to the head, and on put I insert at the head and evict from the tail when over capacity."
+      }
+    ],
+    "hint": [
+      {
+        "max_tokens": 400,
+        "response_format": "json",
+        "system_prompt_sha": "701497686d91",
+        "task_type": "hint_generation",
+        "temperature": 0.5,
+        "user_content": "## Current Question\nKafka in production\n\n## Expected Approaches\n- partition by key for ordering\n- size partitions from target throughput\n\n## Recent Candidate Transcript\n[candidate]: We exported lag per consumer group to Prometheus and alerted when it grew for more than five minutes.\n[interviewer]: Did you ever lose data?\n[candidate]: Once, when a producer was configured with acks set to one and a broker died before replication finished.\n[interviewer]: How did you fix it?\n[candidate]: We moved every producer to acks all with min insync replicas of two, and added an idempotent producer config.\n[interviewer]: Nice.\n[candidate]: Honestly I'm not familiar with the transactional API, we never needed it for our pipelines.\n[interviewer]: That's fine.\n[candidate]: I led the migration from the old cluster to the new one, which took about three months end to end.\n[candidate]: During the migration we mirrored topics with MirrorMaker and cut consumers over one group at a time.\n\n## Interview Summary\nscripted-summary-787238\n\n## Recent Analysis\n- Quality 5/5: scripted-insight-3119\n- Quality 3/5: scripted-insight-5957\n- Quality 2/5: scripted-insight-4691\n\n## Directness Level\nGenerate a moderate hint."
+      },
+      {
+        "max_tokens": 400,
+        "response_format": "json",
+        "system_prompt_sha": "701497686d91",
+        "task_type": "hint_generation",
+        "temperature": 0.5,
+        "user_content": "## Current Question\nDesign an LRU cache\n\n## Expected Approaches\n- {'name': 'hash_map_plus_doubly_linked_list', 'expected_complexity': {'time': 'O(1)', 'space': 'O(n)'}}\n\n## Recent Candidate Transcript\n[interviewer]: Implement get and put for an LRU cache with a fixed capacity, both in constant time.\n[candidate]: I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent.\n[candidate]: On get I move the node to the head, and on put I insert at the head and evict from the tail when over capacity.\n\n## Interview Summary\nscripted-summary-230306\n\n## Recent Analysis\n- Quality 4/5: scripted-insight-8783\n- Quality 4/5: scripted-insight-5453\n\n## Directness Level\nGenerate a moderate hint.\n\n## Regeneration Context\nPrevious hint was rejected (reason: too_direct):\n\"scripted-hint-5053\"\nGenerate a different hint that addresses this feedback."
+      }
+    ],
+    "summary": [
+      {
+        "max_tokens": 500,
+        "response_format": null,
+        "system_prompt_sha": "84845177ca07",
+        "task_type": "summary_compression",
+        "temperature": 0.3,
+        "user_content": "Current summary:\n(empty)\n\nNew utterances:\n[interviewer]: Let's start with your background. In your last role you were on the data platform team, and I'd like to hear about the systems you owned, the scale they ran at, and what went wrong. On our team we used Kafka for years, so I'm curious how yours compared.\n[candidate]: Sure. I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\n[interviewer]: How big was that deployment?\n[candidate]: Around forty brokers and roughly two thousand partitions, handling about three hundred thousand messages per second at peak.\n[interviewer]: And who owned partition planning?\n[candidate]: I did most of it. I think partition count should come from the target throughput divided by what a single consumer can handle.\n[interviewer]: Okay.\n[candidate]: We also used keys for ordering, so all events for one account landed on the same partition.\n[interviewer]: What happens when you add partitions to an existing topic?\n[candidate]: The key to partition mapping changes, so ordering per key breaks for a while unless you migrate carefully.\n[interviewer]: Good. How did you monitor consumer lag?\n[candidate]: We exported lag per consumer group to Prometheus and alerted when it grew for more than five minutes.\n[interviewer]: Did you ever lose data?\n[candidate]: Once, when a producer was configured with acks set to one and a broker died before replication finished.\n[interviewer]: How did you fix it?\n[candidate]: We moved every producer to acks all with min insync replicas of two, and added an idempotent producer config.\n[interviewer]: Nice.\n[candidate]: Honestly I'm not familiar with the transactional API, we never needed it for our pipelines.\n[interviewer]: That's fine.\n[candidate]: I led the migration from the old cluster to the new one, which took about three months end to end."
+      },
+      {
+        "max_tokens": 500,
+        "response_format": null,
+        "system_prompt_sha": "84845177ca07",
+        "task_type": "summary_compression",
+        "temperature": 0.3,
+        "user_content": "Current summary:\nscripted-summary-787238\n\nNew utterances:\n[candidate]: During the migration we mirrored topics with MirrorMaker and cut consumers over one group at a time.\n[candidate]: Actually I've never used Kafka Connect or MirrorMaker myself, another team ran that part.\n[interviewer]: Let's move on to a coding question.\n[candidate]: Sounds good, I'm ready for the next one whenever you are."
+      },
+      {
+        "max_tokens": 500,
+        "response_format": null,
+        "system_prompt_sha": "84845177ca07",
+        "task_type": "summary_compression",
+        "temperature": 0.3,
+        "user_content": "Current summary:\nscripted-summary-230306\n\nNew utterances:\n[interviewer]: Implement get and put for an LRU cache with a fixed capacity, both in constant time.\n[candidate]: I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent.\n[candidate]: On get I move the node to the head, and on put I insert at the head and evict from the tail when over capacity.\n[candidate]: Edge cases are updating an existing key, which should also move it to the front, and capacity zero."
+      }
+    ],
+    "utterance_analysis": [
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nTell me about running Kafka in production.\n\n## Key Facts\n(No facts extracted yet)\n\n## Recent Conversation\n[interviewer]: Let's start with your background. In your last role you were on the data platform team, and I'd like to hear about the systems you owned, the scale they ran at, and what went wrong. On our team we used Kafka for years, so I'm curious how yours compared.\n[candidate]: Sure. I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\n\n## Expected Answer Outline\nOptimal approaches: partition by key for ordering; size partitions from target throughput\nCommon pitfalls: confusing partitions with replicas\n\n## Latest Utterance\n[candidate]: Sure. I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nTell me about running Kafka in production.\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\n\n## Recent Conversation\n[interviewer]: Let's start with your background. In your last role you were on the data platform team, and I'd like to hear about the systems you owned, the scale they ran at, and what went wrong. On our team we used Kafka for years, so I'm curious how yours compared.\n[candidate]: Sure. I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\n[interviewer]: How big was that deployment?\n[candidate]: Around forty brokers and roughly two thousand partitions, handling about three hundred thousand messages per second at peak.\n\n## Expected Answer Outline\nOptimal approaches: partition by key for ordering; size partitions from target throughput\nCommon pitfalls: confusing partitions with replicas\n\n## Latest Utterance\n[candidate]: Around forty brokers and roughly two thousand partitions, handling about three hundred thousand messages per second at peak."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nTell me about running Kafka in production.\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\n\n## Recent Conversation\n[interviewer]: Let's start with your background. In your last role you were on the data platform team, and I'd like to hear about the systems you owned, the scale they ran at, and what went wrong. On our team we used Kafka for years, so I'm curious how yours compared.\n[candidate]: Sure. I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\n[interviewer]: How big was that deployment?\n[candidate]: Around forty brokers and roughly two thousand partitions, handling about three hundred thousand messages per second at peak.\n[interviewer]: And who owned partition planning?\n[candidate]: I did most of it. I think partition count should come from the target throughput divided by what a single consumer can handle.\n\n## Expected Answer Outline\nOptimal approaches: partition by key for ordering; size partitions from target throughput\nCommon pitfalls: confusing partitions with replicas\n\n## Latest Utterance\n[candidate]: I did most of it. I think partition count should come from the target throughput divided by what a single consumer can handle."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nTell me about running Kafka in production.\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\nTechnical positions: I think partition count should come from the target throughput divided by what a single consumer can handle.\n\n## Recent Conversation\n[interviewer]: Let's start with your background. In your last role you were on the data platform team, and I'd like to hear about the systems you owned, the scale they ran at, and what went wrong. On our team we used Kafka for years, so I'm curious how yours compared.\n[candidate]: Sure. I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\n[interviewer]: How big was that deployment?\n[candidate]: Around forty brokers and roughly two thousand partitions, handling about three hundred thousand messages per second at peak.\n[interviewer]: And who owned partition planning?\n[candidate]: I did most of it. I think partition count should come from the target throughput divided by what a single consumer can handle.\n[interviewer]: Okay.\n[candidate]: We also used keys for ordering, so all events for one account landed on the same partition.\n\n## Expected Answer Outline\nOptimal approaches: partition by key for ordering; size partitions from target throughput\nCommon pitfalls: confusing partitions with replicas\n\n## Latest Utterance\n[candidate]: We also used keys for ordering, so all events for one account landed on the same partition."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nTell me about running Kafka in production.\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\nTechnical positions: I think partition count should come from the target throughput divided by what a single consumer can handle.\n\n## Recent Conversation\n[interviewer]: Let's start with your background. In your last role you were on the data platform team, and I'd like to hear about the systems you owned, the scale they ran at, and what went wrong. On our team we used Kafka for years, so I'm curious how yours compared.\n[candidate]: Sure. I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\n[interviewer]: How big was that deployment?\n[candidate]: Around forty brokers and roughly two thousand partitions, handling about three hundred thousand messages per second at peak.\n[interviewer]: And who owned partition planning?\n[candidate]: I did most of it. I think partition count should come from the target throughput divided by what a single consumer can handle.\n[interviewer]: Okay.\n[candidate]: We also used keys for ordering, so all events for one account landed on the same partition.\n[interviewer]: What happens when you add partitions to an existing topic?\n[candidate]: The key to partition mapping changes, so ordering per key breaks for a while unless you migrate carefully.\n\n## Expected Answer Outline\nOptimal approaches: partition by key for ordering; size partitions from target throughput\nCommon pitfalls: confusing partitions with replicas\n\n## Latest Utterance\n[candidate]: The key to partition mapping changes, so ordering per key breaks for a while unless you migrate carefully."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nTell me about running Kafka in production.\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\nTechnical positions: I think partition count should come from the target throughput divided by what a single consumer can handle.\n\n## Recent Conversation\n[interviewer]: How big was that deployment?\n[candidate]: Around forty brokers and roughly two thousand partitions, handling about three hundred thousand messages per second at peak.\n[interviewer]: And who owned partition planning?\n[candidate]: I did most of it. I think partition count should come from the target throughput divided by what a single consumer can handle.\n[interviewer]: Okay.\n[candidate]: We also used keys for ordering, so all events for one account landed on the same partition.\n[interviewer]: What happens when you add partitions to an existing topic?\n[candidate]: The key to partition mapping changes, so ordering per key breaks for a while unless you migrate carefully.\n[interviewer]: Good. How did you monitor consumer lag?\n[candidate]: We exported lag per consumer group to Prometheus and alerted when it grew for more than five minutes.\n\n## Expected Answer Outline\nOptimal approaches: partition by key for ordering; size partitions from target throughput\nCommon pitfalls: confusing partitions with replicas\n\n## Latest Utterance\n[candidate]: We exported lag per consumer group to Prometheus and alerted when it grew for more than five minutes."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nTell me about running Kafka in production.\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\nTechnical positions: I think partition count should come from the target throughput divided by what a single consumer can handle.\n\n## Recent Conversation\n[interviewer]: And who owned partition planning?\n[candidate]: I did most of it. I think partition count should come from the target throughput divided by what a single consumer can handle.\n[interviewer]: Okay.\n[candidate]: We also used keys for ordering, so all events for one account landed on the same partition.\n[interviewer]: What happens when you add partitions to an existing topic?\n[candidate]: The key to partition mapping changes, so ordering per key breaks for a while unless you migrate carefully.\n[interviewer]: Good. How did you monitor consumer lag?\n[candidate]: We exported lag per consumer group to Prometheus and alerted when it grew for more than five minutes.\n[interviewer]: Did you ever lose data?\n[candidate]: Once, when a producer was configured with acks set to one and a broker died before replication finished.\n\n## Expected Answer Outline\nOptimal approaches: partition by key for ordering; size partitions from target throughput\nCommon pitfalls: confusing partitions with replicas\n\n## Latest Utterance\n[candidate]: Once, when a producer was configured with acks set to one and a broker died before replication finished."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nTell me about running Kafka in production.\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\nTechnical positions: I think partition count should come from the target throughput divided by what a single consumer can handle.\n\n## Recent Conversation\n[interviewer]: Okay.\n[candidate]: We also used keys for ordering, so all events for one account landed on the same partition.\n[interviewer]: What happens when you add partitions to an existing topic?\n[candidate]: The key to partition mapping changes, so ordering per key breaks for a while unless you migrate carefully.\n[interviewer]: Good. How did you monitor consumer lag?\n[candidate]: We exported lag per consumer group to Prometheus and alerted when it grew for more than five minutes.\n[interviewer]: Did you ever lose data?\n[candidate]: Once, when a producer was configured with acks set to one and a broker died before replication finished.\n[interviewer]: How did you fix it?\n[candidate]: We moved every producer to acks all with min insync replicas of two, and added an idempotent producer config.\n\n## Expected Answer Outline\nOptimal approaches: partition by key for ordering; size partitions from target throughput\nCommon pitfalls: confusing partitions with replicas\n\n## Latest Utterance\n[candidate]: We moved every producer to acks all with min insync replicas of two, and added an idempotent producer config."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nTell me about running Kafka in production.\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\nTechnical positions: I think partition count should come from the target throughput divided by what a single consumer can handle.\n\n## Recent Conversation\n[interviewer]: What happens when you add partitions to an existing topic?\n[candidate]: The key to partition mapping changes, so ordering per key breaks for a while unless you migrate carefully.\n[interviewer]: Good. How did you monitor consumer lag?\n[candidate]: We exported lag per consumer group to Prometheus and alerted when it grew for more than five minutes.\n[interviewer]: Did you ever lose data?\n[candidate]: Once, when a producer was configured with acks set to one and a broker died before replication finished.\n[interviewer]: How did you fix it?\n[candidate]: We moved every producer to acks all with min insync replicas of two, and added an idempotent producer config.\n[interviewer]: Nice.\n[candidate]: Honestly I'm not familiar with the transactional API, we never needed it for our pipelines.\n\n## Expected Answer Outline\nOptimal approaches: partition by key for ordering; size partitions from target throughput\nCommon pitfalls: confusing partitions with replicas\n\n## Latest Utterance\n[candidate]: Honestly I'm not familiar with the transactional API, we never needed it for our pipelines."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nTell me about running Kafka in production.\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\nTechnical positions: I think partition count should come from the target throughput divided by what a single consumer can handle.\n\n## Recent Conversation\n[interviewer]: Good. How did you monitor consumer lag?\n[candidate]: We exported lag per consumer group to Prometheus and alerted when it grew for more than five minutes.\n[interviewer]: Did you ever lose data?\n[candidate]: Once, when a producer was configured with acks set to one and a broker died before replication finished.\n[interviewer]: How did you fix it?\n[candidate]: We moved every producer to acks all with min insync replicas of two, and added an idempotent producer config.\n[interviewer]: Nice.\n[candidate]: Honestly I'm not familiar with the transactional API, we never needed it for our pipelines.\n[interviewer]: That's fine.\n[candidate]: I led the migration from the old cluster to the new one, which took about three months end to end.\n\n## Expected Answer Outline\nOptimal approaches: partition by key for ordering; size partitions from target throughput\nCommon pitfalls: confusing partitions with replicas\n\n## Latest Utterance\n[candidate]: I led the migration from the old cluster to the new one, which took about three months end to end."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "5b5ee2c887a6",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nTell me about running Kafka in production.\n\n## Active Hints\nThink about what happens to in-flight messages during a cluster migration.\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\nTechnical positions: I think partition count should come from the target throughput divided by what a single consumer can handle.\n\n## Interview Summary\nscripted-summary-787238\n\n## Recent Conversation\n[candidate]: We exported lag per consumer group to Prometheus and alerted when it grew for more than five minutes.\n[interviewer]: Did you ever lose data?\n[candidate]: Once, when a producer was configured with acks set to one and a broker died before replication finished.\n[interviewer]: How did you fix it?\n[candidate]: We moved every producer to acks all with min insync replicas of two, and added an idempotent producer config.\n[interviewer]: Nice.\n[candidate]: Honestly I'm not familiar with the transactional API, we never needed it for our pipelines.\n[interviewer]: That's fine.\n[candidate]: I led the migration from the old cluster to the new one, which took about three months end to end.\n[candidate]: During the migration we mirrored topics with MirrorMaker and cut consumers over one group at a time.\n\n## Expected Answer Outline\nOptimal approaches: partition by key for ordering; size partitions from target throughput\nCommon pitfalls: confusing partitions with replicas\n\n## Latest Utterance\n[candidate]: During the migration we mirrored topics with MirrorMaker and cut consumers over one group at a time."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "5b5ee2c887a6",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nTell me about running Kafka in production.\n\n## Active Hints\nscripted-hint-5053\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\nTechnical positions: I think partition count should come from the target throughput divided by what a single consumer can handle.\nHint interactions: 1 recorded\n\n## Interview Summary\nscripted-summary-787238\n\n## Recent Conversation\n[interviewer]: Did you ever lose data?\n[candidate]: Once, when a producer was configured with acks set to one and a broker died before replication finished.\n[interviewer]: How did you fix it?\n[candidate]: We moved every producer to acks all with min insync replicas of two, and added an idempotent producer config.\n[interviewer]: Nice.\n[candidate]: Honestly I'm not familiar with the transactional API, we never needed it for our pipelines.\n[interviewer]: That's fine.\n[candidate]: I led the migration from the old cluster to the new one, which took about three months end to end.\n[candidate]: During the migration we mirrored topics with MirrorMaker and cut consumers over one group at a time.\n[candidate]: Actually I've never used Kafka Connect or MirrorMaker myself, another team ran that part.\n\n## Expected Answer Outline\nOptimal approaches: partition by key for ordering; size partitions from target throughput\nCommon pitfalls: confusing partitions with replicas\n\n## Latest Utterance\n[candidate]: Actually I've never used Kafka Connect or MirrorMaker myself, another team ran that part."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "5b5ee2c887a6",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nTell me about running Kafka in production.\n\n## Active Hints\nscripted-hint-5053\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\nTechnical positions: I think partition count should come from the target throughput divided by what a single consumer can handle.\nHint interactions: 1 recorded\n\n## Interview Summary\nscripted-summary-787238\n\n## Recent Conversation\n[interviewer]: How did you fix it?\n[candidate]: We moved every producer to acks all with min insync replicas of two, and added an idempotent producer config.\n[interviewer]: Nice.\n[candidate]: Honestly I'm not familiar with the transactional API, we never needed it for our pipelines.\n[interviewer]: That's fine.\n[candidate]: I led the migration from the old cluster to the new one, which took about three months end to end.\n[candidate]: During the migration we mirrored topics with MirrorMaker and cut consumers over one group at a time.\n[candidate]: Actually I've never used Kafka Connect or MirrorMaker myself, another team ran that part.\n[interviewer]: Let's move on to a coding question.\n[candidate]: Sounds good, I'm ready for the next one whenever you are.\n\n## Expected Answer Outline\nOptimal approaches: partition by key for ordering; size partitions from target throughput\nCommon pitfalls: confusing partitions with replicas\n\n## Latest Utterance\n[candidate]: Sounds good, I'm ready for the next one whenever you are."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nDesign an LRU cache with O(1) get and put.\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\nTechnical positions: I think partition count should come from the target throughput divided by what a single consumer can handle.\nHint interactions: 1 recorded\n\n## Interview Summary\nscripted-summary-230306\n\n## Recent Conversation\n[interviewer]: Implement get and put for an LRU cache with a fixed capacity, both in constant time.\n[candidate]: I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent.\n\n## Expected Answer Outline\nOptimal approaches: {'name': 'hash_map_plus_doubly_linked_list', 'expected_complexity': {'time': 'O(1)', 'space': 'O(n)'}}\nCommon pitfalls: forgetting to move a key to the front on get\nBrute-force approach: scan a list for the least recently used key\n\n## Latest Utterance\n[candidate]: I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nDesign an LRU cache with O(1) get and put.\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\nTechnical positions: I think partition count should come from the target throughput divided by what a single consumer can handle.; I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent.\nHint interactions: 1 recorded\n\n## Interview Summary\nscripted-summary-230306\n\n## Recent Conversation\n[interviewer]: Implement get and put for an LRU cache with a fixed capacity, both in constant time.\n[candidate]: I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent.\n[candidate]: On get I move the node to the head, and on put I insert at the head and evict from the tail when over capacity.\n\n## Expected Answer Outline\nOptimal approaches: {'name': 'hash_map_plus_doubly_linked_list', 'expected_complexity': {'time': 'O(1)', 'space': 'O(n)'}}\nCommon pitfalls: forgetting to move a key to the front on get\nBrute-force approach: scan a list for the least recently used key\n\n## Latest Utterance\n[candidate]: On get I move the node to the head, and on put I insert at the head and evict from the tail when over capacity."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "5b5ee2c887a6",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nDesign an LRU cache with O(1) get and put.\n\n## Active Hints\nscripted-hint-5094\n\n## Key Facts\nExperience: I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.\nTechnical positions: I think partition count should come from the target throughput divided by what a single consumer can handle.; I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent.\nHint interactions: 1 recorded\n\n## Interview Summary\nscripted-summary-230306\n\n## Recent Conversation\n[interviewer]: Implement get and put for an LRU cache with a fixed capacity, both in constant time.\n[candidate]: I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent.\n[candidate]: On get I move the node to the head, and on put I insert at the head and evict from the tail when over capacity.\n[candidate]: Edge cases are updating an existing key, which should also move it to the front, and capacity zero.\n\n## Expected Answer Outline\nOptimal approaches: {'name': 'hash_map_plus_doubly_linked_list', 'expected_complexity': {'time': 'O(1)', 'space': 'O(n)'}}\nCommon pitfalls: forgetting to move a key to the front on get\nBrute-force approach: scan a list for the least recently used key\n\n## Latest Utterance\n[candidate]: Edge cases are updating an existing key, which should also move it to the front, and capacity zero."
+      }
+    ]
+  },
+  "persisted": [
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "Let's start with your background. In your last role you were on the data platform team, and I'd like to hear about the systems you owned, the scale they ran at, and what went wrong. On our team we used Kafka for years, so I'm curious how yours compared.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Sure. I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 3,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "excellent",
+          "signals_detected": []
+        },
+        "communication_quality": {
+          "clarity": "medium",
+          "confidence": "medium",
+          "justification": "scripted",
+          "score": "weak",
+          "structure": "low"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "adequate"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [],
+          "score": "good"
+        },
+        "hint_reception": {
+          "acted_on_hint": true,
+          "incorporation_level": "full",
+          "justification": "scripted",
+          "score": "good"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "good"
+        }
+      },
+      "hint_signal": "nudge",
+      "insight": "scripted-insight-4542",
+      "on_track": true,
+      "red_flags": [
+        "scripted-red-flag-81"
+      ],
+      "suggestion": "scripted-suggestion-542",
+      "type": "analysis"
+    },
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "How big was that deployment?",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Around forty brokers and roughly two thousand partitions, handling about three hundred thousand messages per second at peak.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 4,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "poor",
+          "signals_detected": []
+        },
+        "communication_quality": {
+          "clarity": "high",
+          "confidence": "medium",
+          "justification": "scripted",
+          "score": "adequate",
+          "structure": "high"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [],
+          "score": "poor"
+        },
+        "hint_reception": {
+          "acted_on_hint": true,
+          "incorporation_level": "full",
+          "justification": "scripted",
+          "score": "adequate"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "poor"
+        }
+      },
+      "hint_signal": "guide",
+      "insight": "scripted-insight-6078",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-078",
+      "type": "analysis"
+    },
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "And who owned partition planning?",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "I did most of it. I think partition count should come from the target throughput divided by what a single consumer can handle.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 4,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "adequate",
+          "signals_detected": []
+        },
+        "communication_quality": {
+          "clarity": "high",
+          "confidence": "low",
+          "justification": "scripted",
+          "score": "adequate",
+          "structure": "medium"
+        },
+        "contextual_consistency": {
+          "consistent": false,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "good"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [],
+          "score": "poor"
+        },
+        "hint_reception": {
+          "acted_on_hint": true,
+          "incorporation_level": "full",
+          "justification": "scripted",
+          "score": "good"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": false,
+          "score": "poor"
+        }
+      },
+      "hint_signal": "nudge",
+      "insight": "scripted-insight-8448",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-448",
+      "type": "analysis"
+    },
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "Okay.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "We also used keys for ordering, so all events for one account landed on the same partition.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 2,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "adequate",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "low",
+          "confidence": "high",
+          "justification": "scripted",
+          "score": "good",
+          "structure": "medium"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "weak"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "adequate"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "none",
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "excellent"
+        }
+      },
+      "hint_signal": "direct",
+      "insight": "scripted-insight-4391",
+      "on_track": false,
+      "red_flags": [
+        "scripted-red-flag-65"
+      ],
+      "suggestion": "scripted-suggestion-391",
+      "type": "analysis"
+    },
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "What happens when you add partitions to an existing topic?",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "The key to partition mapping changes, so ordering per key breaks for a while unless you migrate carefully.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 1,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [
+            "vagueness"
+          ],
+          "justification": "scripted",
+          "score": "weak",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "medium",
+          "confidence": "medium",
+          "justification": "scripted",
+          "score": "good",
+          "structure": "low"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "good"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "adequate"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "none",
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "adequate"
+        }
+      },
+      "hint_signal": "guide",
+      "insight": "scripted-insight-6215",
+      "on_track": false,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-215",
+      "type": "analysis"
+    },
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "Good. How did you monitor consumer lag?",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "We exported lag per consumer group to Prometheus and alerted when it grew for more than five minutes.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 5,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "poor",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "low",
+          "confidence": "low",
+          "justification": "scripted",
+          "score": "excellent",
+          "structure": "medium"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "adequate"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "good"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "partial",
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "poor"
+        }
+      },
+      "hint_signal": "none",
+      "insight": "scripted-insight-3819",
+      "on_track": true,
+      "red_flags": [
+        "scripted-red-flag-71"
+      ],
+      "suggestion": "scripted-suggestion-819",
+      "type": "analysis"
+    },
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "Did you ever lose data?",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Once, when a producer was configured with acks set to one and a broker died before replication finished.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 3,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "poor",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "high",
+          "confidence": "low",
+          "justification": "scripted",
+          "score": "weak",
+          "structure": "medium"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "adequate"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "none",
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "weak"
+        }
+      },
+      "hint_signal": "direct",
+      "insight": "scripted-insight-5437",
+      "on_track": true,
+      "red_flags": [
+        "scripted-red-flag-54"
+      ],
+      "suggestion": "scripted-suggestion-437",
+      "type": "analysis"
+    },
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "How did you fix it?",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "We moved every producer to acks all with min insync replicas of two, and added an idempotent producer config.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 4,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "poor",
+          "signals_detected": []
+        },
+        "communication_quality": {
+          "clarity": "low",
+          "confidence": "high",
+          "justification": "scripted",
+          "score": "good",
+          "structure": "medium"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "adequate"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [],
+          "score": "adequate"
+        },
+        "hint_reception": {
+          "acted_on_hint": true,
+          "incorporation_level": "none",
+          "justification": "scripted",
+          "score": "weak"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "poor"
+        }
+      },
+      "hint_signal": "none",
+      "insight": "scripted-insight-8818",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-818",
+      "type": "analysis"
+    },
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "Nice.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Honestly I'm not familiar with the transactional API, we never needed it for our pipelines.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 5,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "poor",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "low",
+          "confidence": "low",
+          "justification": "scripted",
+          "score": "weak",
+          "structure": "low"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "good"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "none",
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "poor"
+        }
+      },
+      "hint_signal": "nudge",
+      "insight": "scripted-insight-3119",
+      "on_track": true,
+      "red_flags": [
+        "scripted-red-flag-60"
+      ],
+      "suggestion": "scripted-suggestion-119",
+      "type": "analysis"
+    },
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "That's fine.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "I led the migration from the old cluster to the new one, which took about three months end to end.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 3,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "poor",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "medium",
+          "confidence": "low",
+          "justification": "scripted",
+          "score": "poor",
+          "structure": "low"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "poor"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "none",
+          "justification": "scripted",
+          "score": "good"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": false,
+          "score": "weak"
+        }
+      },
+      "hint_signal": "none",
+      "insight": "scripted-insight-5957",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-957",
+      "type": "analysis"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "During the migration we mirrored topics with MirrorMaker and cut consumers over one group at a time.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 2,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "adequate",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "low",
+          "confidence": "low",
+          "justification": "scripted",
+          "score": "good",
+          "structure": "medium"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "good"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "adequate"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "none",
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": false,
+          "score": "excellent"
+        }
+      },
+      "hint_signal": "guide",
+      "insight": "scripted-insight-4691",
+      "on_track": false,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-691",
+      "type": "analysis"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Actually I've never used Kafka Connect or MirrorMaker myself, another team ran that part.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 5,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "adequate",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "low",
+          "confidence": "low",
+          "justification": "scripted",
+          "score": "excellent",
+          "structure": "low"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "good"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "excellent"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "partial",
+          "justification": "scripted",
+          "score": "excellent"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "poor"
+        }
+      },
+      "hint_signal": "none",
+      "insight": "scripted-insight-5289",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-289",
+      "type": "analysis"
+    },
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "Let's move on to a coding question.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Sounds good, I'm ready for the next one whenever you are.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 3,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "weak",
+          "signals_detected": []
+        },
+        "communication_quality": {
+          "clarity": "medium",
+          "confidence": "medium",
+          "justification": "scripted",
+          "score": "adequate",
+          "structure": "high"
+        },
+        "contextual_consistency": {
+          "consistent": false,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [],
+          "score": "excellent"
+        },
+        "hint_reception": {
+          "acted_on_hint": true,
+          "incorporation_level": "none",
+          "justification": "scripted",
+          "score": "good"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "good"
+        }
+      },
+      "hint_signal": "guide",
+      "insight": "scripted-insight-3792",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-792",
+      "type": "analysis"
+    },
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "Implement get and put for an LRU cache with a fixed capacity, both in constant time.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 4,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "excellent",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "low",
+          "confidence": "low",
+          "justification": "scripted",
+          "score": "weak",
+          "structure": "medium"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "adequate"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "adequate"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "partial",
+          "justification": "scripted",
+          "score": "good"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "good"
+        }
+      },
+      "hint_signal": "direct",
+      "insight": "scripted-insight-8783",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-783",
+      "type": "analysis"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "On get I move the node to the head, and on put I insert at the head and evict from the tail when over capacity.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 4,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "weak",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "high",
+          "confidence": "high",
+          "justification": "scripted",
+          "score": "adequate",
+          "structure": "high"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "good"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "excellent"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "none",
+          "justification": "scripted",
+          "score": "excellent"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "good"
+        }
+      },
+      "hint_signal": "none",
+      "insight": "scripted-insight-5453",
+      "on_track": true,
+      "red_flags": [
+        "scripted-red-flag-84"
+      ],
+      "suggestion": "scripted-suggestion-453",
+      "type": "analysis"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Edge cases are updating an existing key, which should also move it to the front, and capacity zero.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 2,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "adequate",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "high",
+          "confidence": "medium",
+          "justification": "scripted",
+          "score": "weak",
+          "structure": "high"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "weak"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "good"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "full",
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "excellent"
+        }
+      },
+      "hint_signal": "nudge",
+      "insight": "scripted-insight-6231",
+      "on_track": false,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-231",
+      "type": "analysis"
+    }
+  ],
+  "scenario_id": "04-long-interview-memory",
+  "session_state": {
+    "active_question_id": "q-lru",
+    "analysis_count": 16,
+    "code_snapshot_count": 0,
+    "coverage_tracker": {},
+    "facts": {
+      "behavioral_signals": [],
+      "claimed_experience": [
+        "I have used Kafka for about four years, mostly on the ingestion side, and I built the consumer framework our teams still use for exactly-once processing."
+      ],
+      "hint_interactions": [
+        {
+          "hint_id": "<volatile>",
+          "quality": "partial",
+          "question_id": "q-kafka",
+          "type": "runtime"
+        }
+      ],
+      "key_numbers": [],
+      "technical_positions": [
+        "I think partition count should come from the target throughput divided by what a single consumer can handle.",
+        "I would use a hash map from key to node plus a doubly linked list ordered by recency, with the head as most recent."
+      ]
+    },
+    "hint_history": [],
+    "last_transcript_timestamp": null,
+    "plan_progress": {
+      "current_phase_index": 0,
+      "current_question_index": 1
+    },
+    "rolling_summary": "scripted-summary-364440",
+    "schema_version": 1,
+    "scores": {
+      "problem_solving": 3.6
+    },
+    "session_id": "04-long-interview-memory",
+    "transcript_count": 28
+  }
+}

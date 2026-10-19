@@ -1,0 +1,10 @@
+{
+ "order": 4,
+ "n": 4,
+ "where": "Step 7",
+ "title": "Answer copilot questions off the websocket loop",
+ "paras": [
+  "`handle_copilot_query` is awaited inside the dashboard websocket's receive loop. A question can take four model steps; during that time this tab's `ping`, `change_question` and `use_copilot_card` wait. It is the same pattern as `rate_code` and `request_runtime_hint` today, but a question is the slowest of the three.",
+  "Wrap it in `asyncio.create_task` and broadcast the reply when it finishes; the reply already carries the client's id, so ordering does not matter. Doing the same for the two older handlers would be consistent."
+ ]
+}

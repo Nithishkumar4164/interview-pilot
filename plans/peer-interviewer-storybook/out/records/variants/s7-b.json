@@ -1,0 +1,96 @@
+{
+ "scene": "s7",
+ "order": 2,
+ "name": "Model unavailable",
+ "wires": [
+  {
+   "cap": "Copilot panel · Ask the copilot",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Ask the copilot"
+    },
+    {
+     "t": "text",
+     "text": "**What did they say about memory limits?**"
+    },
+    {
+     "t": "msg",
+     "hl": "reply",
+     "kind": "crit",
+     "text": "Copilot unavailable: all providers failed"
+    },
+    {
+     "t": "input",
+     "text": "Ask the copilot… e.g. what did they say about Kafka?",
+     "filled": false
+    },
+    {
+     "t": "btn",
+     "text": "Ask",
+     "kind": "off",
+     "sm": true
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "d",
+  "w",
+  "p",
+  "l"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "d",
+   "to": "w",
+   "l": "copilot_query",
+   "t": "NEW",
+   "what": "Same request."
+  },
+  {
+   "id": "m2",
+   "f": "w",
+   "to": "p",
+   "l": "handle_copilot_query",
+   "t": "NEW",
+   "what": "Same handler."
+  },
+  {
+   "id": "m3",
+   "f": "p",
+   "to": "l",
+   "l": "run_tool_loop",
+   "t": "MOD",
+   "what": "The failover tries its providers in turn."
+  },
+  {
+   "id": "m4",
+   "f": "l",
+   "to": "p",
+   "l": "raises",
+   "res": true,
+   "what": "Every provider failed, or the loop hit an error it does not retry."
+  },
+  {
+   "id": "m5",
+   "f": "p",
+   "to": "w",
+   "l": "reply with error",
+   "t": "NEW",
+   "hl": "reply",
+   "code": "{ \"id\": \"b1e4…\", \"question\": \"...\", \"answer\": \"Copilot unavailable: all providers failed\",\n  \"citations\": [], \"error\": \"all providers failed\" }",
+   "what": "The handler never raises. An empty question comes back the same way with `error: \"empty\"` (the UI already prevents sending one)."
+  },
+  {
+   "id": "m6",
+   "f": "w",
+   "to": "d",
+   "l": "copilot_reply",
+   "t": "NEW",
+   "hl": "reply",
+   "what": "The thread entry turns red with the message and the input is enabled again. The interviewer can retry straight away."
+  }
+ ]
+}

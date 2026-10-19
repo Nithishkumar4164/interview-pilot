@@ -1,0 +1,150 @@
+{
+ "scene": "s4",
+ "order": 2,
+ "name": "Stuck: a card and a drafted hint",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "rows",
+     "hl": "card",
+     "label": "Stuck card",
+     "items": [
+      {
+       "no": "Stuck · signal",
+       "meta": "Quiet for 74 s and the code is not moving",
+       "amt": "",
+       "due": "10:33",
+       "st": "proc",
+       "stl": "suggest",
+       "cb": "none"
+      }
+     ]
+    },
+    {
+     "t": "text",
+     "text": "A hint is being drafted (Smart Hints). Or ask them to talk through what they are trying now."
+    },
+    {
+     "t": "btn",
+     "text": "Done",
+     "kind": "off",
+     "sm": true
+    }
+   ]
+  },
+  {
+   "cap": "Hint panel (existing), a moment later",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Smart Hints"
+    },
+    {
+     "t": "msg",
+     "hl": "hint",
+     "kind": "note",
+     "text": "Suggested hint: \"What would you need to keep for each word to avoid re-counting?\""
+    },
+    {
+     "t": "btn",
+     "text": "Use this hint",
+     "kind": "primary",
+     "sm": true
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "c",
+  "p",
+  "g",
+  "l",
+  "w",
+  "d"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "c",
+   "to": "p",
+   "l": "code values: is_stuck, snapshot sn-18",
+   "t": "OLD",
+   "what": "The code graph already decides `is_stuck` from the editor snapshots. The pipeline reads its latest values; nothing new runs in the code graph.",
+   "code": "_code_context() -> { \"code\": \"def top_k(...)...\", \"language\": \"python\",\n  \"snapshot_id\": \"sn-18\", \"is_stuck\": true, \"bugs\": [] }"
+  },
+  {
+   "id": "m2",
+   "f": "p",
+   "to": "g",
+   "l": "Tick(at=10:33:20Z) + code_context",
+   "t": "NEW",
+   "what": "Every run carries the code context in; the tick is what makes the check happen with nobody talking."
+  },
+  {
+   "id": "m3",
+   "f": "g",
+   "to": "g",
+   "l": "quiet 74 s since last candidate line",
+   "t": "NEW",
+   "what": "`last_candidate_at` (10:32:06Z) against `at`. Fires when `is_stuck`, quiet ≥ 60 s, and this snapshot id has not been handled (`stuck_hint_for`). A missing timestamp counts as infinite quiet and is ignored."
+  },
+  {
+   "id": "m4",
+   "f": "g",
+   "to": "w",
+   "l": "send_copilot_card (stuck)",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Id `sess-7f3a:sn-18:stuck`: one per snapshot. When the candidate types again a new snapshot id makes the countdown eligible once more.",
+   "code": "{ \"id\": \"sess-7f3a:sn-18:stuck\", \"kind\": \"stuck\", \"priority\": \"suggest\",\n  \"title\": \"Quiet for 74 s and the code is not moving\",\n  \"body\": \"A hint is being drafted (Smart Hints). Or ask them to talk through what they are trying now.\",\n  \"source\": \"rule\", \"question_id\": \"q2\" }"
+  },
+  {
+   "id": "m5",
+   "f": "g",
+   "to": "g",
+   "l": "dispatch: stuck_hint_due → Send(draft_hint)",
+   "t": "NEW",
+   "what": "The existing Smart Hints node, reused. The task id is `stuck:sn-18` so its suggestion is distinguishable from analysis-driven ones."
+  },
+  {
+   "id": "m6",
+   "f": "g",
+   "to": "l",
+   "l": "draft_hint (existing hint prompt)",
+   "t": "OLD",
+   "what": "Same prompt, context and hint ladder as a hint chosen after an analysis."
+  },
+  {
+   "id": "m7",
+   "f": "l",
+   "to": "g",
+   "l": "hint text",
+   "res": true,
+   "what": "A level-appropriate hint."
+  },
+  {
+   "id": "m8",
+   "f": "g",
+   "to": "w",
+   "l": "send_hint_suggestion",
+   "t": "OLD",
+   "hl": "hint",
+   "what": "The hint goes where hints always go: the Hint panel, not the Copilot panel. Using it there records it as a hint given."
+  },
+  {
+   "id": "m9",
+   "f": "w",
+   "to": "d",
+   "l": "copilot_card, then hint_suggestion",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Two panels update a few seconds apart."
+  }
+ ]
+}

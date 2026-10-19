@@ -1,0 +1,10 @@
+{
+ "order": 14,
+ "call": "TaskType.COPILOT_QUERY",
+ "owner": "LLM config → Sonnet",
+ "gives": "Tool-loop answers to typed questions",
+ "tag": "NEW",
+ "steps": [
+  7
+ ]
+}

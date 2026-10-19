@@ -1,0 +1,660 @@
+{
+  "code_ratings": [],
+  "dashboard_events": [
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "8c78282a-87c4-5975-b943-c0577ef1a9b7",
+        "is_final": false,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "Can you reverse",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "a6c74042-0a02-50ce-995e-3ef8fe4e801a",
+        "is_final": false,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "Can you reverse a singly linked list",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "tab",
+        "confidence": 0.95,
+        "id": "66410344-1133-5bc4-bffd-a0b7d459db6a",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "interviewer",
+        "speech_vector_id": "",
+        "text": "Can you reverse a singly linked list in place?",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "1e8e7ef9-d9b4-573c-aea5-dbe4936c20d5",
+        "is_final": false,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Sure so I",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "87a4c9e8-9aba-5dc0-a363-39c6dbf7069b",
+        "is_final": false,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Sure so I would keep three",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "2c0fe5e2-f58a-532d-ae02-4417750b17c2",
+        "is_final": false,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Sure so I would keep three pointers previous current",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "f03ceff6-c757-56e6-9bbb-4c0704fe47f5",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "Sure so I would keep three pointers, previous, current and next, and walk the list once flipping each next pointer.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 5,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "poor",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "high",
+            "confidence": "high",
+            "justification": "scripted",
+            "score": "adequate",
+            "structure": "high"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "adequate"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "poor"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "none",
+            "justification": "scripted",
+            "score": "poor"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": false,
+            "score": "poor"
+          }
+        },
+        "hint_signal": "guide",
+        "insight": "scripted-insight-0059",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [
+          "scripted-red-flag-19"
+        ],
+        "suggestion_for_interviewer": "scripted-suggestion-059",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_red_flag",
+      "payload": {
+        "flags": [
+          "scripted-red-flag-19"
+        ],
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "guide",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "e56a50eb-79b4-5de3-b8f9-6c0a98df4e9b",
+        "is_final": false,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "That makes it",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "4f438945-9956-5c07-a651-d19d60b3eb9b",
+        "is_final": false,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "That makes it linear time and constant",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_transcript",
+      "payload": {
+        "channel": "microphone",
+        "confidence": 0.95,
+        "id": "1817c3ba-1498-5c9c-aa61-f0af1af8ccf2",
+        "is_final": true,
+        "is_retroactive": false,
+        "root_speaker_id": "",
+        "speaker_role": "candidate",
+        "speech_vector_id": "",
+        "text": "That makes it linear time and constant space, and I'd return previous at the end as the new head.",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_analysis",
+      "payload": {
+        "answer_quality": 3,
+        "dimensions": {
+          "behavioral_signal": {
+            "flags": [],
+            "justification": "scripted",
+            "score": "good",
+            "signals_detected": [
+              "structured_thinking"
+            ]
+          },
+          "communication_quality": {
+            "clarity": "high",
+            "confidence": "low",
+            "justification": "scripted",
+            "score": "poor",
+            "structure": "medium"
+          },
+          "contextual_consistency": {
+            "consistent": true,
+            "contradictions": [],
+            "justification": "scripted",
+            "score": "excellent"
+          },
+          "depth_completeness": {
+            "justification": "scripted",
+            "key_points_covered": [
+              "scripted-covered"
+            ],
+            "key_points_missed": [
+              "scripted-missed"
+            ],
+            "score": "poor"
+          },
+          "hint_reception": {
+            "acted_on_hint": false,
+            "incorporation_level": "full",
+            "justification": "scripted",
+            "score": "adequate"
+          },
+          "relevance": {
+            "justification": "scripted",
+            "on_topic": true,
+            "score": "weak"
+          }
+        },
+        "hint_signal": "direct",
+        "insight": "scripted-insight-9207",
+        "latency_ms": "<volatile>",
+        "on_track": true,
+        "provider": "scripted",
+        "red_flags": [],
+        "suggestion_for_interviewer": "scripted-suggestion-207",
+        "timestamp": "<volatile>"
+      }
+    },
+    {
+      "method": "send_hint",
+      "payload": {
+        "signal": "direct",
+        "timestamp": "<volatile>"
+      }
+    }
+  ],
+  "error": null,
+  "final_state": {
+    "analyses_run": 2,
+    "analysis": {
+      "analysis_count": 2,
+      "average_quality": 4.0,
+      "current_question": "Reverse a linked list.",
+      "recent_analyses": [
+        {
+          "answer_quality": 5,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "poor",
+              "signals_detected": [
+                "structured_thinking"
+              ]
+            },
+            "communication_quality": {
+              "clarity": "high",
+              "confidence": "high",
+              "justification": "scripted",
+              "score": "adequate",
+              "structure": "high"
+            },
+            "contextual_consistency": {
+              "consistent": true,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "adequate"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [
+                "scripted-missed"
+              ],
+              "score": "poor"
+            },
+            "hint_reception": {
+              "acted_on_hint": false,
+              "incorporation_level": "none",
+              "justification": "scripted",
+              "score": "poor"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": false,
+              "score": "poor"
+            }
+          },
+          "hint_signal": "guide",
+          "insight": "scripted-insight-0059",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "scripted",
+          "red_flags": [
+            "scripted-red-flag-19"
+          ],
+          "suggestion_for_interviewer": "scripted-suggestion-059",
+          "timestamp": "<volatile>"
+        },
+        {
+          "answer_quality": 3,
+          "dimensions": {
+            "behavioral_signal": {
+              "flags": [],
+              "justification": "scripted",
+              "score": "good",
+              "signals_detected": [
+                "structured_thinking"
+              ]
+            },
+            "communication_quality": {
+              "clarity": "high",
+              "confidence": "low",
+              "justification": "scripted",
+              "score": "poor",
+              "structure": "medium"
+            },
+            "contextual_consistency": {
+              "consistent": true,
+              "contradictions": [],
+              "justification": "scripted",
+              "score": "excellent"
+            },
+            "depth_completeness": {
+              "justification": "scripted",
+              "key_points_covered": [
+                "scripted-covered"
+              ],
+              "key_points_missed": [
+                "scripted-missed"
+              ],
+              "score": "poor"
+            },
+            "hint_reception": {
+              "acted_on_hint": false,
+              "incorporation_level": "full",
+              "justification": "scripted",
+              "score": "adequate"
+            },
+            "relevance": {
+              "justification": "scripted",
+              "on_topic": true,
+              "score": "weak"
+            }
+          },
+          "hint_signal": "direct",
+          "insight": "scripted-insight-9207",
+          "latency_ms": "<volatile>",
+          "on_track": true,
+          "provider": "scripted",
+          "red_flags": [],
+          "suggestion_for_interviewer": "scripted-suggestion-207",
+          "timestamp": "<volatile>"
+        }
+      ],
+      "session_id": "05-interim-transcripts"
+    },
+    "contradictions": {
+      "contradictions": []
+    },
+    "events_processed": 10,
+    "memory": {
+      "fact_store": {
+        "behavioral_signals": [],
+        "claimed_experience": [],
+        "hint_interactions": [],
+        "key_numbers": [],
+        "technical_positions": []
+      },
+      "rolling_summary": "scripted-summary-652321",
+      "session_id": "05-interim-transcripts",
+      "total_utterances": 3,
+      "unsummarized_count": 0,
+      "working_memory": [
+        {
+          "speaker": "interviewer",
+          "text": "Can you reverse a singly linked list in place?",
+          "timestamp": "<volatile>"
+        },
+        {
+          "speaker": "candidate",
+          "text": "Sure so I would keep three pointers, previous, current and next, and walk the list once flipping each next pointer.",
+          "timestamp": "<volatile>"
+        },
+        {
+          "speaker": "candidate",
+          "text": "That makes it linear time and constant space, and I'd return previous at the end as the new head.",
+          "timestamp": "<volatile>"
+        }
+      ]
+    },
+    "session_id": "05-interim-transcripts"
+  },
+  "golden_version": 2,
+  "hint_responses": [],
+  "llm_calls_by_kind": {
+    "summary": [
+      {
+        "max_tokens": 500,
+        "response_format": null,
+        "system_prompt_sha": "84845177ca07",
+        "task_type": "summary_compression",
+        "temperature": 0.3,
+        "user_content": "Current summary:\n(empty)\n\nNew utterances:\n[interviewer]: Can you reverse a singly linked list in place?\n[candidate]: Sure so I would keep three pointers, previous, current and next, and walk the list once flipping each next pointer.\n[candidate]: That makes it linear time and constant space, and I'd return previous at the end as the new head."
+      }
+    ],
+    "utterance_analysis": [
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nReverse a linked list.\n\n## Key Facts\n(No facts extracted yet)\n\n## Recent Conversation\n[interviewer]: Can you reverse a singly linked list in place?\n[candidate]: Sure so I would keep three pointers, previous, current and next, and walk the list once flipping each next pointer.\n\n## Expected Answer Outline\nOptimal approaches: iterative three pointers\n\n## Latest Utterance\n[candidate]: Sure so I would keep three pointers, previous, current and next, and walk the list once flipping each next pointer."
+      },
+      {
+        "max_tokens": 600,
+        "response_format": "json",
+        "system_prompt_sha": "7d9acd39b017",
+        "task_type": "real_time_analysis",
+        "temperature": 0.3,
+        "user_content": "## Current Question\nReverse a linked list.\n\n## Key Facts\n(No facts extracted yet)\n\n## Recent Conversation\n[interviewer]: Can you reverse a singly linked list in place?\n[candidate]: Sure so I would keep three pointers, previous, current and next, and walk the list once flipping each next pointer.\n[candidate]: That makes it linear time and constant space, and I'd return previous at the end as the new head.\n\n## Expected Answer Outline\nOptimal approaches: iterative three pointers\n\n## Latest Utterance\n[candidate]: That makes it linear time and constant space, and I'd return previous at the end as the new head."
+      }
+    ]
+  },
+  "persisted": [
+    {
+      "channel": "tab",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "interviewer",
+      "speech_vector_id": "",
+      "text": "Can you reverse a singly linked list in place?",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "Sure so I would keep three pointers, previous, current and next, and walk the list once flipping each next pointer.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 5,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "poor",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "high",
+          "confidence": "high",
+          "justification": "scripted",
+          "score": "adequate",
+          "structure": "high"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "adequate"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "poor"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "none",
+          "justification": "scripted",
+          "score": "poor"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": false,
+          "score": "poor"
+        }
+      },
+      "hint_signal": "guide",
+      "insight": "scripted-insight-0059",
+      "on_track": true,
+      "red_flags": [
+        "scripted-red-flag-19"
+      ],
+      "suggestion": "scripted-suggestion-059",
+      "type": "analysis"
+    },
+    {
+      "channel": "microphone",
+      "confidence": 0.95,
+      "is_final": true,
+      "is_retroactive": false,
+      "root_speaker_id": "",
+      "speaker_role": "candidate",
+      "speech_vector_id": "",
+      "text": "That makes it linear time and constant space, and I'd return previous at the end as the new head.",
+      "timestamp": "<volatile>",
+      "type": "transcript"
+    },
+    {
+      "answer_quality": 3,
+      "dimensions": {
+        "behavioral_signal": {
+          "flags": [],
+          "justification": "scripted",
+          "score": "good",
+          "signals_detected": [
+            "structured_thinking"
+          ]
+        },
+        "communication_quality": {
+          "clarity": "high",
+          "confidence": "low",
+          "justification": "scripted",
+          "score": "poor",
+          "structure": "medium"
+        },
+        "contextual_consistency": {
+          "consistent": true,
+          "contradictions": [],
+          "justification": "scripted",
+          "score": "excellent"
+        },
+        "depth_completeness": {
+          "justification": "scripted",
+          "key_points_covered": [
+            "scripted-covered"
+          ],
+          "key_points_missed": [
+            "scripted-missed"
+          ],
+          "score": "poor"
+        },
+        "hint_reception": {
+          "acted_on_hint": false,
+          "incorporation_level": "full",
+          "justification": "scripted",
+          "score": "adequate"
+        },
+        "relevance": {
+          "justification": "scripted",
+          "on_topic": true,
+          "score": "weak"
+        }
+      },
+      "hint_signal": "direct",
+      "insight": "scripted-insight-9207",
+      "on_track": true,
+      "red_flags": null,
+      "suggestion": "scripted-suggestion-207",
+      "type": "analysis"
+    }
+  ],
+  "scenario_id": "05-interim-transcripts",
+  "session_state": {
+    "active_question_id": "q-rev",
+    "analysis_count": 2,
+    "code_snapshot_count": 0,
+    "coverage_tracker": {},
+    "facts": {
+      "behavioral_signals": [],
+      "claimed_experience": [],
+      "hint_interactions": [],
+      "key_numbers": [],
+      "technical_positions": []
+    },
+    "hint_history": [],
+    "last_transcript_timestamp": null,
+    "plan_progress": {
+      "current_phase_index": 0,
+      "current_question_index": 0
+    },
+    "rolling_summary": "scripted-summary-652321",
+    "schema_version": 1,
+    "scores": {
+      "problem_solving": 4.0
+    },
+    "session_id": "05-interim-transcripts",
+    "transcript_count": 10
+  }
+}

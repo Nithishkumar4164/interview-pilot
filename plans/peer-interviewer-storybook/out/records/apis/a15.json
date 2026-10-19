@@ -1,0 +1,11 @@
+{
+ "order": 15,
+ "call": "run_tool_loop + evidence tools",
+ "owner": "src/llm/tools.py, report_agentic",
+ "gives": "search_transcript, read_transcript, get_analyses, get_code_timeline, get_contradictions, get_hints",
+ "tag": "OLD",
+ "steps": [
+  7,
+  9
+ ]
+}

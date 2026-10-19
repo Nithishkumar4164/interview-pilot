@@ -1,0 +1,101 @@
+{
+ "scene": "s3",
+ "order": 2,
+ "name": "Talk-share nudge (no model)",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "rows",
+     "hl": "card",
+     "label": "Talk-share card",
+     "items": [
+      {
+       "no": "Coaching · signal",
+       "meta": "You have spoken 63% of the last 310 words",
+       "amt": "",
+       "due": "10:23",
+       "st": "grey",
+       "stl": "info",
+       "cb": "none"
+      }
+     ]
+    },
+    {
+     "t": "text",
+     "text": "Candidates reveal most when they do the talking. Hand the floor back with an open question."
+    },
+    {
+     "t": "btn",
+     "text": "Done",
+     "kind": "off",
+     "sm": true
+    },
+    {
+     "t": "btn",
+     "text": "Dismiss",
+     "kind": "ghost",
+     "sm": true
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "i",
+  "p",
+  "g",
+  "w",
+  "d"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "i",
+   "to": "p",
+   "l": "final transcript line u-52 (interviewer, 40 words)",
+   "t": "OLD",
+   "what": "Another interviewer turn. The transcript is unchanged; only what the graph does with it is new."
+  },
+  {
+   "id": "m2",
+   "f": "p",
+   "to": "g",
+   "l": "apply_events: talk_share over the window",
+   "t": "NEW",
+   "what": "Over the last 40 final utterances: 310 words spoken, 196 by the interviewer, 63%. The rule needs ≥ 250 words in the window, share ≥ 60%, and ≥ 5 min since the last nudge (`last_talk_card_at`). No model is involved.",
+   "code": "talk_window = [[\"candidate\", 23], [\"interviewer\", 18], ..., [\"interviewer\", 40]]\nshare, total = talk_share(talk_window)   # 0.63, 310"
+  },
+  {
+   "id": "m3",
+   "f": "g",
+   "to": "w",
+   "l": "send_copilot_card (coaching, source rule)",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Same card shape, `source: \"rule\"`, which the panel shows as a small *signal* badge. A single interviewer turn of ≥ 120 words sends a sibling card, *That was a long turn*.",
+   "code": "{ \"id\": \"sess-7f3a:u-52:talk_share\", \"kind\": \"coaching\", \"priority\": \"info\",\n  \"title\": \"You have spoken 63% of the last 310 words\",\n  \"body\": \"Candidates reveal most when they do the talking. Hand the floor back with an open question.\",\n  \"source\": \"rule\", \"timestamp\": \"2026-10-16T10:23:40Z\" }"
+  },
+  {
+   "id": "m4",
+   "f": "g",
+   "to": "g",
+   "l": "last_talk_card_at = 10:23:40Z",
+   "t": "NEW",
+   "what": "Five minutes of quiet on this signal before the next nudge, however the share moves."
+  },
+  {
+   "id": "m5",
+   "f": "w",
+   "to": "d",
+   "l": "copilot_card",
+   "t": "NEW",
+   "hl": "card",
+   "what": "Shown with the signal badge."
+  }
+ ]
+}

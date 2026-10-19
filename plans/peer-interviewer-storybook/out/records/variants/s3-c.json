@@ -1,0 +1,63 @@
+{
+ "scene": "s3",
+ "order": 3,
+ "name": "Short turn: no call",
+ "wires": [
+  {
+   "cap": "Copilot panel",
+   "blocks": [
+    {
+     "t": "title",
+     "text": "Copilot"
+    },
+    {
+     "t": "empty",
+     "hl": "empty",
+     "label": "Empty state",
+     "title": "Listening.",
+     "text": "Suggestions appear here as the interview unfolds."
+    }
+   ]
+  }
+ ],
+ "lanes": [
+  "i",
+  "p",
+  "g",
+  "l"
+ ],
+ "msgs": [
+  {
+   "id": "m1",
+   "f": "i",
+   "to": "p",
+   "l": "final transcript line: \"Okay, go on.\"",
+   "t": "OLD",
+   "what": "Three words."
+  },
+  {
+   "id": "m2",
+   "f": "p",
+   "to": "g",
+   "l": "apply_events: talk window + [interviewer, 3]",
+   "t": "NEW",
+   "what": "Still counted toward talk share."
+  },
+  {
+   "id": "m3",
+   "f": "g",
+   "to": "g",
+   "l": "coaching_candidate → None",
+   "t": "NEW",
+   "what": "Fewer than 12 words, so no coaching Send. The same happens for a long turn within 20 s of the last coached one: only the newest substantial turn in a batch is ever sent."
+  },
+  {
+   "id": "m4",
+   "f": "g",
+   "to": "l",
+   "l": "(no coaching call)",
+   "hl": "empty",
+   "what": "This is the common case. Most interviewer turns cost nothing."
+  }
+ ]
+}

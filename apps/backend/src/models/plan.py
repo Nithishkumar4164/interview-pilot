@@ -26,9 +26,7 @@ class QuestionBank(BaseModel):
     text: Mapped[str] = mapped_column(String, nullable=False)
     difficulty: Mapped[int] = mapped_column(Integer, nullable=False)
     category: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    tags: Mapped[list[str]] = mapped_column(
-        type_=JSON, nullable=False, default=list
-    )
+    tags: Mapped[list[str]] = mapped_column(type_=JSON, nullable=False, default=list)
     expected_time_min: Mapped[int] = mapped_column(Integer, nullable=False)
     optimal_approaches: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     common_pitfalls: Mapped[dict | None] = mapped_column(JSON, nullable=True)

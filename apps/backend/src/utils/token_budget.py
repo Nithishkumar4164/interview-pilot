@@ -38,9 +38,9 @@ def truncate_to_budget(text: str, max_tokens: int) -> str:
 
 # Default token budgets per context tier
 BUDGET_SYSTEM_PROMPT = 1000
-BUDGET_FACT_STORE = 500        # Tier 3
+BUDGET_FACT_STORE = 500  # Tier 3
 BUDGET_ROLLING_SUMMARY = 1500  # Tier 2
-BUDGET_WORKING_MEMORY = 2000   # Tier 1
+BUDGET_WORKING_MEMORY = 2000  # Tier 1
 BUDGET_HINTS = 200
 BUDGET_RESPONSE = 600
 BUDGET_RUNTIME_HINT = 400

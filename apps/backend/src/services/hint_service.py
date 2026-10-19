@@ -20,6 +20,9 @@ logger = get_logger("hint_service")
 # Default auto-advance timeout (seconds)
 DEFAULT_HINT_TIMEOUT_S = 180  # 3 minutes
 
+# Hint ids for used suggestions derive from the suggestion id, so a repeated "Use" is recognized.
+_SUGGESTION_ID_NAMESPACE = uuid.UUID("5d0c6f63-2b5e-4b8e-9a43-6a1f0f3c8e21")
+
 
 @dataclass
 class HintSet:
@@ -133,37 +136,7 @@ class HintService:
             text=hint_text,
             displayed_at=datetime.now(UTC).isoformat(),
         )
-        self._hint_events.append(active)
-
-        # Persist hint event to DB
-        try:
-            from src.dependencies import get_persistence_service
-            persistence = get_persistence_service()
-            persistence.enqueue_hint(
-                self.session_id,
-                question_id=qid,
-                level=next_level,
-                text=hint_text,
-                displayed_at=active.displayed_at,
-                hint_id=active.hint_id,
-            )
-        except Exception:
-            logger.warning("persistence_enqueue_failed", type="hint")
-
-        # Update session state with hint history
-        try:
-            from src.dependencies import get_session_state_service
-            sss = get_session_state_service()
-            state = sss.get_state(self.session_id)
-            state.hint_history.append({
-                "hint_id": active.hint_id,
-                "question_id": qid,
-                "level": next_level,
-                "displayed_at": active.displayed_at,
-            })
-            state.mark_dirty()
-        except Exception:
-            logger.warning("session_state_hint_update_failed")
+        self._record(active)
 
         logger.info(
             "hint_advanced",
@@ -174,11 +147,59 @@ class HintService:
 
         return active
 
+    def record_suggested_hint(self, suggestion_id: str, question_id: str, text: str) -> ActiveHint | None:
+        """Record a hint the agentic pipeline drafted and the interviewer chose to give.
+
+        Recorded once per suggestion (level 0, like other generated hints);
+        returns None if this suggestion was already recorded. The progressive
+        plan-hint level is unaffected.
+        """
+        hint_id = str(uuid.uuid5(_SUGGESTION_ID_NAMESPACE, suggestion_id))
+        # Before the first question change the pipeline has no question id; the plan's active question is it.
+        question_id = question_id or self._active_question_id or ""
+        if any(h.hint_id == hint_id for h in self._hint_events):
+            return None
+        active = ActiveHint(
+            hint_id=hint_id,
+            question_id=question_id,
+            level=0,
+            text=text,
+            displayed_at=datetime.now(UTC).isoformat(),
+            interviewer_used=True,
+        )
+        self._record(active, idempotency_key=f"hint_suggestion:{suggestion_id}")
+        logger.info("hint_suggestion_used", session_id=self.session_id, question_id=question_id)
+        return active
+
+    def _record(self, active: ActiveHint, idempotency_key: str | None = None) -> None:
+        """Keep a given hint for the report and persist it."""
+        self._hint_events.append(active)
+        from src.services.persistence_service import safe_enqueue
+
+        safe_enqueue(
+            "hint",
+            self.session_id,
+            question_id=active.question_id,
+            level=active.level,
+            text=active.text,
+            displayed_at=active.displayed_at,
+            hint_id=active.hint_id,
+            idempotency_key=idempotency_key,
+            interviewer_used=active.interviewer_used,
+        )
+
     def get_current_hint(self) -> ActiveHint | None:
         """Get the currently active hint."""
         if not self._hint_events:
             return None
         return self._hint_events[-1]
+
+    def get_events(self) -> list[ActiveHint]:
+        """Return the full list of hint events for this session (read-only).
+
+        Prefer this over reaching into ``_hint_events`` from callers.
+        """
+        return self._hint_events
 
     def get_current_level(self) -> int:
         """Get the current hint level (0 = no hint shown)."""
@@ -213,16 +234,13 @@ class HintService:
             )
 
         # Response times
-        response_times = [
-            h.time_to_respond_ms
-            for h in self._hint_events
-            if h.time_to_respond_ms is not None
-        ]
+        response_times = [h.time_to_respond_ms for h in self._hint_events if h.time_to_respond_ms is not None]
         avg_time = (sum(response_times) / len(response_times)) if response_times else None
 
         # Incorporation rate
         incorporated = sum(
-            1 for h in self._hint_events
+            1
+            for h in self._hint_events
             if h.candidate_response_quality in (HintResponseQuality.PARTIAL, HintResponseQuality.FULL)
         )
         rate = incorporated / total
@@ -295,7 +313,9 @@ class HintService:
             text=text,
             displayed_at=datetime.now(UTC).isoformat(),
             interviewer_used=True,
-            candidate_response_quality=HintResponseQuality(quality) if quality in ("none", "partial", "full") else HintResponseQuality.NONE,
+            candidate_response_quality=HintResponseQuality(quality)
+            if quality in ("none", "partial", "full")
+            else HintResponseQuality.NONE,
         )
         self._hint_events.append(active)
 

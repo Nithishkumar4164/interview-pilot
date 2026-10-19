@@ -1,0 +1,10 @@
+{
+ "order": 1,
+ "q": "Should the Copilot panel appear only when the backend says the flag is on?",
+ "options": [
+  "Yes, via the session state",
+  "Yes, via a message on connect",
+  "No, keep it always visible"
+ ],
+ "affects": "Step 1"
+}

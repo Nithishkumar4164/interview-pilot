@@ -7,7 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ConnectExtension } from '@/components/auth/ConnectExtension';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useTimer } from '@/hooks/useTimer';
-import { useExtensionChannel, type MeetControlsState } from '@/hooks/useExtensionChannel';
+import { useExtensionChannel, type ExtensionStatus, type MeetControlsState } from '@/hooks/useExtensionChannel';
 import { useSessionStore, getAllPlanQuestions } from '@/stores/session-store';
 import type { SessionStatus } from '@/stores/session-store';
 import { useHintStore } from '@/stores/hint-store';
@@ -65,6 +65,7 @@ export function LiveSessionPage() {
   const hiddenPanes = usePanelStore((s) => s.hidden);
   const [focusAreas, setFocusAreas] = useState<string[]>([]);
   const [meetControls, setMeetControls] = useState<MeetControlsState | null>(null);
+  const [extensionStatus, setExtensionStatus] = useState<ExtensionStatus | null>(null);
 
   // Initialize WebSocket and timer
   const { send } = useWebSocket(sessionId ?? null);
@@ -223,6 +224,7 @@ export function LiveSessionPage() {
       setOverlays((prev) => (prev.length > 0 ? prev : [{ id: crypto.randomUUID(), cropRegion: null, mode: 'docked' }]));
     },
     onMeetControls: setMeetControls,
+    onStatus: setExtensionStatus,
   });
 
   // ── Overlay callbacks ──────────────────────────────────────────────
@@ -565,7 +567,7 @@ export function LiveSessionPage() {
           onMeetControl={sendMeetControl}
         />
 
-        {!isPanel && <ConnectExtension sessionId={sessionId} />}
+        {!isPanel && <ConnectExtension sessionId={sessionId} status={extensionStatus} />}
 
         {/* Floating + fullscreen overlays render outside layout */}
         {videoStream && overlays.filter(o => o.mode !== 'docked').map(overlay => (

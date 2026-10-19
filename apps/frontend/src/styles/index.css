@@ -4139,6 +4139,18 @@ ul, ol {
   border-radius: var(--radius-sm);
 }
 
+.connect-extension__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+}
+
+.connect-extension__dot--live {
+  background: var(--color-danger);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
+}
+
 .connect-extension__status--error {
   color: var(--color-danger);
 }

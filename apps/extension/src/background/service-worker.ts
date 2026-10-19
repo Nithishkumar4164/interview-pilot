@@ -107,13 +107,21 @@ chrome.storage.local.get(['backendUrl', 'frontendUrl'], (result) => {
 
 // The pairing token lives in session storage: it survives service-worker
 // eviction but not a browser restart, and is never written to disk.
-chrome.storage.session.get(['pairingToken'], (result) => {
+chrome.storage.session.get(['pairingToken', 'tabCaptureActive'], (result) => {
   const pairing = typeof result.pairingToken === 'string' ? parsePairingToken(result.pairingToken) : null;
   if (pairing) {
     state.pairing = pairing;
     state.sessionId = pairing.sessionId;
   }
+  // Capture runs in the offscreen document and outlives this worker.
+  if (result.tabCaptureActive === true) state.tabCaptureActive = true;
+  broadcastState();
 });
+
+function setTabCaptureActive(active: boolean): void {
+  state.tabCaptureActive = active;
+  chrome.storage.session.set({ tabCaptureActive: active });
+}
 
 function pairAndConnect(pairing: Pairing, backendUrl: string, frontendUrl: string | undefined): void {
   if (frontendUrl) state.frontendUrl = frontendUrl;
@@ -492,6 +500,17 @@ function broadcastState(): void {
   chrome.runtime.sendMessage({ type: 'state-update', state }).catch(() => {
     // Popup might not be open
   });
+  postToDashboard(extensionStatus());
+}
+
+/** What the dashboard shows in place of its Connect button. */
+function extensionStatus(): Record<string, unknown> {
+  return {
+    type: 'extension-status',
+    sessionId: state.sessionId,
+    connected: state.connectionState === 'connected',
+    capturing: state.tabCaptureActive,
+  };
 }
 
 async function updateBufferStats(): Promise<void> {
@@ -650,6 +669,7 @@ chrome.runtime.onConnectExternal.addListener((port) => {
   port.onMessage.addListener((message) => {
     if (message?.type === 'hello' && typeof message.viewerId === 'string') {
       dashboardViewer = { port, viewerId: message.viewerId };
+      postToDashboard(extensionStatus());
       if (message.wantsVideo && message.sessionId === state.sessionId) requestTabVideo(dashboardViewer);
       // This worker may have restarted since the last report: read Meet afresh.
       postToDashboard({ type: 'meet-controls', state: lastMeetControls });
@@ -778,7 +798,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
 
     case 'tab-capture-started':
-      state.tabCaptureActive = true;
+      setTabCaptureActive(true);
       broadcastState();
       updateMeetingBadge().catch(() => {});
       if (dashboardViewer) requestTabVideo(dashboardViewer);
@@ -786,7 +806,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
 
     case 'tab-capture-stopped':
-      state.tabCaptureActive = false;
+      setTabCaptureActive(false);
       broadcastState();
       updateMeetingBadge().catch(() => {});
       postToDashboard({ type: 'tab-video-ended' });

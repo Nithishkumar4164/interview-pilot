@@ -7,7 +7,8 @@
  * audio and video, and offers the video to this page over a local WebRTC
  * connection, so the dashboard shows it without the screen-share picker. It
  * also reports the Meet tab's mic, camera and presenting state, and takes
- * mute / camera / present requests back.
+ * mute / camera / present requests back, and says which session it is paired
+ * with and whether it is capturing.
  */
 import { useCallback, useEffect, useRef } from 'react';
 
@@ -32,16 +33,28 @@ export interface MeetControlsState {
   canPresent: boolean;
 }
 
+/** The extension's pairing and capture, as it reports them. */
+export interface ExtensionStatus {
+  /** The session the extension is paired with, if any. */
+  sessionId: string | null;
+  /** Its audio socket to the backend is open. */
+  connected: boolean;
+  /** It is capturing the meeting tab. */
+  capturing: boolean;
+}
+
 export type MeetControlAction = 'toggle-mic' | 'toggle-camera' | 'present';
 
 type ExtensionMessage =
   | { type: 'tab-video-offer'; sdp: string; sessionId: string | null }
   | { type: 'tab-video-ended' }
-  | { type: 'meet-controls'; state: MeetControlsState };
+  | { type: 'meet-controls'; state: MeetControlsState }
+  | ({ type: 'extension-status' } & ExtensionStatus);
 
 interface ExtensionChannelHandlers {
   onStream: (stream: MediaStream) => void;
   onMeetControls: (state: MeetControlsState) => void;
+  onStatus?: (status: ExtensionStatus) => void;
 }
 
 const RECONNECT_DELAY_MS = 1000;
@@ -125,6 +138,12 @@ export function useExtensionChannel(
           closePeer();
         } else if (message.type === 'meet-controls') {
           handlersRef.current.onMeetControls(message.state);
+        } else if (message.type === 'extension-status') {
+          handlersRef.current.onStatus?.({
+            sessionId: message.sessionId,
+            connected: message.connected,
+            capturing: message.capturing,
+          });
         }
       });
       // The extension's service worker can stop at any time; reconnecting wakes it.

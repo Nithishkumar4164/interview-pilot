@@ -7,10 +7,15 @@
  * the Meet link: the extension opens that tab and tracks it for the session.
  * Otherwise the token is shown as a pairing code to paste into the extension
  * popup.
+ *
+ * Once the extension reports it is paired with this session, the form gives
+ * way to its status (waiting for capture, or capturing), with Reconnect to
+ * pair again or change the Meet link.
  */
 import { useEffect, useState } from 'react';
 import * as api from '@/api/client';
 import { MEETING_URL_HINT, normalizeMeetingUrl } from '@/lib/meeting';
+import type { ExtensionStatus } from '@/hooks/useExtensionChannel';
 
 interface ChromeRuntime {
   sendMessage: (extensionId: string, message: unknown, callback: (response: unknown) => void) => void;
@@ -43,8 +48,17 @@ type State =
   | { kind: 'code'; code: string; copied: boolean }
   | { kind: 'error'; message: string };
 
-export function ConnectExtension({ sessionId }: { sessionId: string }) {
+interface ConnectExtensionProps {
+  sessionId: string;
+  /** What the extension last reported; null before it has (or without one). */
+  status?: ExtensionStatus | null;
+}
+
+const START_CAPTURE_HINT = 'On the Meet tab, press Alt+Shift+I (Option+Shift+I on Mac) to start capture.';
+
+export function ConnectExtension({ sessionId, status = null }: ConnectExtensionProps) {
   const [state, setState] = useState<State>({ kind: 'idle' });
+  const [reconnecting, setReconnecting] = useState(false);
   // The saved link, and what is in the field.
   const [savedMeetingUrl, setSavedMeetingUrl] = useState<string | null>(null);
   const [meetingUrl, setMeetingUrl] = useState('');
@@ -99,6 +113,7 @@ export function ConnectExtension({ sessionId }: { sessionId: string }) {
           meetingUrl: link,
         });
         if (delivered) {
+          setReconnecting(false);
           setState({ kind: 'sent', openedMeeting: !!link });
           return;
         }
@@ -108,6 +123,30 @@ export function ConnectExtension({ sessionId }: { sessionId: string }) {
       setState({ kind: 'error', message: err instanceof Error ? err.message : 'Could not create a pairing code' });
     }
   };
+
+  if (status?.sessionId === sessionId && !reconnecting) {
+    return (
+      <div className="connect-extension" role="status">
+        <span
+          className={`connect-extension__dot${status.capturing ? ' connect-extension__dot--live' : ''}`}
+          aria-hidden="true"
+        />
+        <span className="connect-extension__status">
+          {status.capturing ? 'Extension is capturing the meeting.' : `Extension connected. ${START_CAPTURE_HINT}`}
+          {!status.connected && ' Reconnecting to the server…'}
+        </span>
+        <button
+          className="btn btn--ghost btn--small"
+          onClick={() => {
+            setState({ kind: 'idle' });
+            setReconnecting(true);
+          }}
+        >
+          Reconnect
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="connect-extension">
@@ -124,9 +163,7 @@ export function ConnectExtension({ sessionId }: { sessionId: string }) {
       </button>
       {state.kind === 'sent' && (
         <span className="connect-extension__status">
-          {state.openedMeeting
-            ? 'Extension connected. On the Meet tab, press Alt+Shift+I (Option+Shift+I on Mac) to start capture.'
-            : 'Extension connected to this session.'}
+          {state.openedMeeting ? `Extension connected. ${START_CAPTURE_HINT}` : 'Extension connected to this session.'}
         </span>
       )}
       {state.kind === 'error' && (

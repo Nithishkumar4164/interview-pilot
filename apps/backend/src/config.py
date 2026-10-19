@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = 7
     google_client_id: str = ""
     google_client_secret: str = ""
-    google_redirect_uri: str = "http://localhost:5173/auth/callback"
+    google_redirect_uri: str = "http://interviewpilot.localhost:5173/auth/callback"
     # OpenID provider endpoints. Default to Google; overridable so tests and
     # local end-to-end runs can point at a stand-in provider.
     oidc_issuer: str = "https://accounts.google.com"
@@ -74,7 +74,7 @@ class Settings(BaseSettings):
 
     # App
     backend_url: str = "http://localhost:8000"
-    frontend_url: str = "http://localhost:5173"
+    frontend_url: str = "http://interviewpilot.localhost:5173"
     environment: str = "development"
     log_level: str = "DEBUG"
 

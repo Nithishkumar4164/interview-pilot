@@ -54,7 +54,7 @@ const state: ExtensionState = {
   sessionId: null,
   pairing: null,
   backendUrl: 'ws://localhost:8000',
-  frontendUrl: 'http://localhost:5173',
+  frontendUrl: 'http://interviewpilot.localhost:5173',
   connectionState: 'disconnected',
   tabCaptureActive: false,
   micCaptureActive: false,

@@ -26,7 +26,7 @@ export function SidePanel() {
   const [state, setState] = useState<ExtensionState>({
     sessionId: null,
     pairing: null,
-    frontendUrl: 'http://localhost:5173',
+    frontendUrl: 'http://interviewpilot.localhost:5173',
     connectionState: 'disconnected',
   });
 
@@ -37,7 +37,7 @@ export function SidePanel() {
         setState({
           sessionId: response.sessionId,
           pairing: response.pairing ?? null,
-          frontendUrl: response.frontendUrl || 'http://localhost:5173',
+          frontendUrl: response.frontendUrl || 'http://interviewpilot.localhost:5173',
           connectionState: response.connectionState,
         });
       }
@@ -49,7 +49,7 @@ export function SidePanel() {
         setState({
           sessionId: message.state.sessionId,
           pairing: message.state.pairing ?? null,
-          frontendUrl: message.state.frontendUrl || 'http://localhost:5173',
+          frontendUrl: message.state.frontendUrl || 'http://interviewpilot.localhost:5173',
           connectionState: message.state.connectionState,
         });
       }

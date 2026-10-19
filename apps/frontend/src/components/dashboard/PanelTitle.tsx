@@ -1,10 +1,9 @@
 /**
- * A live-session panel's title, doubling as its collapse toggle. The panel
- * adds `is-collapsed` (from usePanelCollapsed) and marks its header row
- * `panel-header`; CSS hides everything else while collapsed, so the panel
- * keeps its state.
+ * A live-session pane's title, with a button that hides the pane. The pane
+ * sets `hidden` (from usePaneHidden) so it stays mounted and keeps its state;
+ * the Panes menu in the session bar shows it again.
  */
-import { usePanelStore, type PanelId } from '@/stores/panel-store';
+import { paneLabel, usePanelStore, type PanelId } from '@/stores/panel-store';
 
 interface PanelTitleProps {
   id: PanelId;
@@ -13,16 +12,19 @@ interface PanelTitleProps {
 }
 
 export function PanelTitle({ id, children, level: Heading = 'h3' }: PanelTitleProps) {
-  const collapsed = usePanelStore((s) => !!s.collapsed[id]);
-  const toggle = usePanelStore((s) => s.toggle);
+  const setShown = usePanelStore((s) => s.setShown);
 
   return (
     <Heading className="panel-title">
-      <button type="button" className="panel-title__toggle" aria-expanded={!collapsed} onClick={() => toggle(id)}>
-        <span className="panel-title__chevron" aria-hidden="true">
-          {collapsed ? '▸' : '▾'}
-        </span>
-        {children}
+      {children}
+      <button
+        type="button"
+        className="panel-title__hide"
+        aria-label={`Hide ${paneLabel(id)}`}
+        title="Hide this pane (show it again from Panes)"
+        onClick={() => setShown(id, false)}
+      >
+        ×
       </button>
     </Heading>
   );

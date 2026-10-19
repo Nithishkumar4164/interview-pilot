@@ -1,10 +1,11 @@
 /**
  * Session controls bar — top bar with status, timer, and controls.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSessionStore } from '@/stores/session-store';
 import { usePlanStore } from '@/stores/plan-store';
 import { useOfflineStore } from '@/stores/offline-store';
+import { PANES, usePanelStore } from '@/stores/panel-store';
 import type { MeetControlAction, MeetControlsState } from '@/hooks/useExtensionChannel';
 
 function formatTime(ms: number): string {
@@ -98,6 +99,8 @@ export function SessionBar({
       </div>
 
       <div className="session-bar__right">
+        <PanesMenu />
+
         {meetControls?.available && onMeetControl && (
           <MeetControls controls={meetControls} onControl={onMeetControl} />
         )}
@@ -137,6 +140,61 @@ export function SessionBar({
         )}
       </div>
     </header>
+  );
+}
+
+/** Show or hide each live-session pane. */
+function PanesMenu() {
+  const hidden = usePanelStore((s) => s.hidden);
+  const setShown = usePanelStore((s) => s.setShown);
+  const showAll = usePanelStore((s) => s.showAll);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const hiddenCount = PANES.filter((p) => hidden[p.id]).length;
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="panes-menu" ref={ref}>
+      <button
+        type="button"
+        className="btn btn--secondary btn--sm"
+        aria-expanded={open}
+        aria-haspopup="true"
+        onClick={() => setOpen((o) => !o)}
+      >
+        Panes{hiddenCount > 0 ? ` (${hiddenCount} hidden)` : ''} ▾
+      </button>
+      {open && (
+        <div className="panes-menu__list" role="group" aria-label="Panes">
+          {PANES.map((p) => (
+            <label key={p.id} className="panes-menu__item">
+              <input type="checkbox" checked={!hidden[p.id]} onChange={(e) => setShown(p.id, e.target.checked)} />
+              {p.label}
+            </label>
+          ))}
+          {hiddenCount > 0 && (
+            <button type="button" className="btn btn--ghost btn--sm panes-menu__show-all" onClick={showAll}>
+              Show all
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

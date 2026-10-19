@@ -61,7 +61,7 @@ describe('generating questions during the interview', () => {
   beforeEach(() => {
     usePlanStore.getState().reset();
     useSessionStore.getState().reset();
-    usePanelStore.setState({ collapsed: {} });
+    usePanelStore.setState({ hidden: {} });
     vi.mocked(api.suggestTopics).mockReset().mockResolvedValue({
       category: 'coding',
       topics: [

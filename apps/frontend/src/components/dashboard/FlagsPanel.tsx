@@ -6,7 +6,7 @@
 import { useAnalysisStore } from '@/stores/analysis-store';
 import type { FlagKind } from '@/lib/flags';
 import { PanelTitle } from './PanelTitle';
-import { usePanelCollapsed } from '@/stores/panel-store';
+import { usePaneHidden } from '@/stores/panel-store';
 
 const KIND_LABELS: Record<FlagKind, string> = {
   red_flag: 'Red flag',
@@ -15,12 +15,12 @@ const KIND_LABELS: Record<FlagKind, string> = {
 };
 
 export function FlagsPanel() {
-  const collapsed = usePanelCollapsed('flags');
+  const hidden = usePaneHidden('flags');
   const flags = useAnalysisStore((s) => s.redFlags);
   const newestFirst = [...flags].reverse();
 
   return (
-    <section className={`flags-panel${collapsed ? ' is-collapsed' : ''}`} aria-label="Flags">
+    <section className="flags-panel" hidden={hidden} aria-label="Flags">
       <div className="flags-panel__header panel-header">
         <PanelTitle id="flags">Flags</PanelTitle>
         {flags.length > 0 && <span className="flags-panel__count">{flags.length}</span>}

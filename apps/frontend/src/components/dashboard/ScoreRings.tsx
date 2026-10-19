@@ -5,7 +5,7 @@
  */
 import { useAnalysisStore } from '@/stores/analysis-store';
 import { PanelTitle } from './PanelTitle';
-import { usePanelCollapsed } from '@/stores/panel-store';
+import { usePaneHidden } from '@/stores/panel-store';
 
 interface ScoreRingProps {
   label: string;
@@ -60,10 +60,10 @@ function ScoreRing({ label, score, maxScore = 5, color }: ScoreRingProps) {
 
 export function ScoreRings() {
   const { scores } = useAnalysisStore();
-  const collapsed = usePanelCollapsed('scores');
+  const hidden = usePaneHidden('scores');
 
   return (
-    <section className={`score-rings-panel${collapsed ? ' is-collapsed' : ''}`} aria-label="Performance Scores">
+    <section className="score-rings-panel" hidden={hidden} aria-label="Performance Scores">
       <div className="score-rings-panel__header panel-header">
         <PanelTitle id="scores">Scores</PanelTitle>
       </div>

@@ -19,7 +19,7 @@ import {
 import { useSessionStore, getAllPlanQuestions } from '@/stores/session-store';
 import { usePlanStore } from '@/stores/plan-store';
 import { PanelTitle } from './PanelTitle';
-import { usePanelCollapsed } from '@/stores/panel-store';
+import { usePaneHidden } from '@/stores/panel-store';
 
 /** Cards whose primary action is relaying something to the candidate. */
 const RELAY_KINDS: ReadonlySet<CopilotCardKind> = new Set(['probe', 'clarification', 'claim_check', 'edge_cases']);
@@ -31,7 +31,7 @@ interface CopilotPanelProps {
 }
 
 export function CopilotPanel({ onUseCard, onAddNote, onAsk }: CopilotPanelProps) {
-  const collapsed = usePanelCollapsed('copilot');
+  const hidden = usePaneHidden('copilot');
   const cards = useCopilotStore((s) => s.cards);
   const mutedKinds = useCopilotStore((s) => s.mutedKinds);
   const dismissCard = useCopilotStore((s) => s.dismissCard);
@@ -42,7 +42,7 @@ export function CopilotPanel({ onUseCard, onAddNote, onAsk }: CopilotPanelProps)
   const visible = cards.filter((c) => !mutedKinds.has(c.kind));
 
   return (
-    <section className={`copilot-panel${collapsed ? ' is-collapsed' : ''}`} aria-label="Copilot">
+    <section className="copilot-panel" hidden={hidden} aria-label="Copilot">
       <div className="copilot-panel__header panel-header">
         <PanelTitle id="copilot">Copilot</PanelTitle>
         <div className="copilot-panel__header-right">
